@@ -66,7 +66,7 @@ export function AddProductModal({ isOpen, onClose, type, initialItem, catalogPro
     };
   }, [catalogProduct, stockItems]);
   const modalRef = useRef<HTMLDivElement>(null);
-  const firstInputRef = useRef<HTMLInputElement | HTMLTextAreaElement | null>(null);
+  const firstInputRef = useRef<HTMLInputElement>(null);
   const previousActiveElementRef = useRef<HTMLElement | null>(null);
 
   // Modal açıldığında focus yönetimi
@@ -547,7 +547,7 @@ export function AddProductModal({ isOpen, onClose, type, initialItem, catalogPro
                   Ürün İsmi
                 </label>
                 <input
-                  ref={firstInputRef}
+                  ref={firstInputRef as React.RefObject<HTMLInputElement>}
                   id="add-product-name"
                   type="text"
                   value={name}
@@ -608,7 +608,7 @@ export function AddProductModal({ isOpen, onClose, type, initialItem, catalogPro
                   <div className="relative mb-2">
                     <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-zinc-400" aria-hidden />
                     <input
-                      ref={!isEditMode ? firstInputRef : undefined}
+                      ref={!isEditMode ? (firstInputRef as React.RefObject<HTMLInputElement>) : undefined}
                       type="text"
                       value={catalogSearch}
                       onChange={(e) => setCatalogSearch(e.target.value)}
@@ -671,7 +671,7 @@ export function AddProductModal({ isOpen, onClose, type, initialItem, catalogPro
               Miktar
             </label>
             <input
-              ref={showFormFromCatalog ? firstInputRef : undefined}
+              ref={showFormFromCatalog ? (firstInputRef as React.RefObject<HTMLInputElement>) : undefined}
               id="add-product-quantity"
               type="number"
               min={0}
