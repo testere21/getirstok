@@ -370,75 +370,22 @@ export default function Home() {
         />
       )}
 
-      {/* Alt bölüm: sekmeli listeler — tek kart içinde sekme + liste, net ayrım */}
-      {/* Liste bölümü her zaman gösterilir (arama yapıldığında katalog sonuçları için) */}
+      {/* Alt bölüm: Arama sonuçları veya sekmeli listeler */}
       {(!isPageEmpty || searchQuery.trim()) && (
         <section aria-label="Ürün listeleri" className="flex flex-col gap-4">
-        <div className="overflow-hidden rounded-xl border border-zinc-200 dark:border-zinc-700">
-          <div
-            role="tablist"
-            aria-label="Eksik ve fazla ürün listeleri"
-            className="flex gap-0 border-b border-zinc-200 bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-800"
-          >
-            <button
-              type="button"
-              role="tab"
-              aria-selected={activeTab === "missing"}
-              aria-controls="panel-missing"
-              id="tab-missing"
-              onClick={() => setActiveTab("missing")}
-              className={`relative px-4 py-4 text-sm font-medium transition min-h-[44px] sm:px-6 sm:py-4 sm:text-base ${
-                activeTab === "missing"
-                  ? "text-[var(--color-missing)]"
-                  : "text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200"
-              }`}
-            >
-              Eksik Ürünler
-              {activeTab === "missing" && (
-                <span
-                  className="absolute bottom-0 left-0 right-0 h-0.5 bg-[var(--color-missing)]"
-                  aria-hidden
-                />
-              )}
-            </button>
-            <button
-              type="button"
-              role="tab"
-              aria-selected={activeTab === "extra"}
-              aria-controls="panel-extra"
-              id="tab-extra"
-              onClick={() => setActiveTab("extra")}
-              className={`relative px-4 py-4 text-sm font-medium transition min-h-[44px] sm:px-6 sm:py-4 sm:text-base ${
-                activeTab === "extra"
-                  ? "text-[var(--color-extra)]"
-                  : "text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200"
-              }`}
-            >
-              Fazla Ürünler
-              {activeTab === "extra" && (
-                <span
-                  className="absolute bottom-0 left-0 right-0 h-0.5 bg-[var(--color-extra)]"
-                  aria-hidden
-                />
-              )}
-            </button>
-          </div>
-          <div
-            role="tabpanel"
-            id={activeTab === "missing" ? "panel-missing" : "panel-extra"}
-            aria-labelledby={activeTab === "missing" ? "tab-missing" : "tab-extra"}
-            className="min-h-[120px]"
-          >
-            {isLoading || catalogLoading ? (
-              <ListSkeleton />
-            ) : searchQuery.trim() ? (
-              filteredCatalogProducts.length > 0 ? (
-                // Arama sonuçları: Katalog ürünleri
-                <div
-                  className="max-h-[55vh] min-h-[8rem] overflow-auto"
-                  aria-label="Arama sonuçları"
-                >
-                  <div className="divide-y divide-zinc-200 dark:divide-zinc-700">
+          {/* Arama yapıldığında: Sadece arama sonuçları göster */}
+          {searchQuery.trim() ? (
+            <div className="overflow-hidden rounded-xl border border-zinc-200 dark:border-zinc-700">
+              <div className="min-h-[120px]">
+                {isLoading || catalogLoading ? (
+                  <ListSkeleton />
+                ) : filteredCatalogProducts.length > 0 ? (
+                  // Arama sonuçları: Katalog ürünleri
+                  <div
+                    className="max-h-[55vh] min-h-[8rem] overflow-auto"
+                    aria-label="Arama sonuçları"
+                  >
+                    <div className="divide-y divide-zinc-200 dark:divide-zinc-700">
                     {filteredCatalogProducts.map((product) => {
                       // Bu ürün için Firestore'daki eksik/fazla kayıtlarını bul
                       const productItems = items.filter((item) => item.barcode === product.barcode);
@@ -452,45 +399,92 @@ export default function Home() {
                           key={product.barcode}
                           type="button"
                           onClick={() => setSelectedCatalogProduct(product)}
-                          className="w-full grid gap-2 px-3 py-3 text-left text-sm transition-colors duration-150 hover:bg-zinc-50 dark:hover:bg-zinc-800/50 sm:gap-4 sm:px-4 sm:py-4"
-                          style={{ 
-                            gridTemplateColumns: "3rem minmax(0,1fr) minmax(8rem,10rem) minmax(6rem,8rem) minmax(6rem,8rem)",
-                          }}
+                          className="w-full text-left transition-colors duration-150 hover:bg-zinc-50 dark:hover:bg-zinc-800/50"
                         >
-                          <span className="flex items-center justify-center">
-                            {product.imageUrl ? (
-                              <img
-                                src={product.imageUrl}
-                                alt={product.name}
-                                className="size-10 rounded object-cover"
-                                width={40}
-                                height={40}
-                                loading="lazy"
-                              />
-                            ) : (
-                              <div className="size-10 rounded bg-zinc-200 dark:bg-zinc-700 flex items-center justify-center">
-                                <PackageX className="size-5 text-zinc-400 dark:text-zinc-500" />
+                          {/* Mobil görünüm: Kart layout */}
+                          <div className="flex gap-3 px-4 py-3 sm:hidden">
+                            <div className="shrink-0">
+                              {product.imageUrl ? (
+                                <img
+                                  src={product.imageUrl}
+                                  alt={product.name}
+                                  className="size-16 rounded-lg object-cover"
+                                  width={64}
+                                  height={64}
+                                  loading="lazy"
+                                />
+                              ) : (
+                                <div className="size-16 rounded-lg bg-zinc-200 dark:bg-zinc-700 flex items-center justify-center">
+                                  <PackageX className="size-7 text-zinc-400 dark:text-zinc-500" />
+                                </div>
+                              )}
+                            </div>
+                            <div className="min-w-0 flex-1 flex flex-col gap-2">
+                              <div className="font-medium text-zinc-900 dark:text-zinc-100 text-sm leading-snug line-clamp-2">
+                                {product.name}
                               </div>
-                            )}
-                          </span>
-                          <span className="min-w-0 font-medium text-zinc-900 dark:text-zinc-100 text-left">
-                            {product.name}
-                          </span>
-                          <span className="tabular-nums text-zinc-600 dark:text-zinc-300 break-all text-left">
-                            {product.barcode}
-                          </span>
-                          <span className="text-left">
-                            <span className="text-xs text-zinc-500 dark:text-zinc-400">Eksik: </span>
-                            <span className="font-semibold tabular-nums" style={{ color: "var(--color-missing)" }}>
-                              {totalMissing}
+                              <div className="text-xs text-zinc-500 dark:text-zinc-400 break-all">
+                                <span className="font-medium">Barkod:</span> {product.barcode}
+                              </div>
+                              <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
+                                <span>
+                                  <span className="text-zinc-500 dark:text-zinc-400">Eksik: </span>
+                                  <span className="font-semibold tabular-nums text-base" style={{ color: "var(--color-missing)" }}>
+                                    {totalMissing}
+                                  </span>
+                                </span>
+                                <span>
+                                  <span className="text-zinc-500 dark:text-zinc-400">Fazla: </span>
+                                  <span className="font-semibold tabular-nums text-base" style={{ color: "var(--color-extra)" }}>
+                                    {totalExtra}
+                                  </span>
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                          
+                          {/* Desktop görünüm: Grid layout */}
+                          <div
+                            className="hidden sm:grid gap-4 px-4 py-4 text-sm"
+                            style={{ 
+                              gridTemplateColumns: "3rem minmax(0,1fr) minmax(8rem,10rem) minmax(6rem,8rem) minmax(6rem,8rem)",
+                            }}
+                          >
+                            <span className="flex items-center justify-center">
+                              {product.imageUrl ? (
+                                <img
+                                  src={product.imageUrl}
+                                  alt={product.name}
+                                  className="size-10 rounded object-cover"
+                                  width={40}
+                                  height={40}
+                                  loading="lazy"
+                                />
+                              ) : (
+                                <div className="size-10 rounded bg-zinc-200 dark:bg-zinc-700 flex items-center justify-center">
+                                  <PackageX className="size-5 text-zinc-400 dark:text-zinc-500" />
+                                </div>
+                              )}
                             </span>
-                          </span>
-                          <span className="text-left">
-                            <span className="text-xs text-zinc-500 dark:text-zinc-400">Fazla: </span>
-                            <span className="font-semibold tabular-nums" style={{ color: "var(--color-extra)" }}>
-                              {totalExtra}
+                            <span className="min-w-0 font-medium text-zinc-900 dark:text-zinc-100 text-left">
+                              {product.name}
                             </span>
-                          </span>
+                            <span className="tabular-nums text-zinc-600 dark:text-zinc-300 break-all text-left">
+                              {product.barcode}
+                            </span>
+                            <span className="text-left">
+                              <span className="text-xs text-zinc-500 dark:text-zinc-400">Eksik: </span>
+                              <span className="font-semibold tabular-nums" style={{ color: "var(--color-missing)" }}>
+                                {totalMissing}
+                              </span>
+                            </span>
+                            <span className="text-left">
+                              <span className="text-xs text-zinc-500 dark:text-zinc-400">Fazla: </span>
+                              <span className="font-semibold tabular-nums" style={{ color: "var(--color-extra)" }}>
+                                {totalExtra}
+                              </span>
+                            </span>
+                          </div>
                         </button>
                       );
                     })}
@@ -502,15 +496,76 @@ export default function Home() {
                   message={`"${searchQuery}" için sonuç bulunamadı. Farklı bir arama terimi deneyin.`}
                   icon={PackageSearch}
                 />
-              )
-            ) : (
+                )}
+              </div>
+            </div>
+          ) : (
+            /* Arama yapılmadığında: Sekmeli listeler göster */
+            <div className="overflow-hidden rounded-xl border border-zinc-200 dark:border-zinc-700">
               <div
-                className="max-h-[55vh] min-h-[8rem] overflow-auto"
-                aria-label={activeTab === "missing" ? "Eksik ürünler listesi" : "Fazla ürünler listesi"}
+                role="tablist"
+                aria-label="Eksik ve fazla ürün listeleri"
+                className="flex gap-0 border-b border-zinc-200 bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-800"
               >
-                {/* Başlık satırı — kaydırmada üstte sabit */}
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={activeTab === "missing"}
+                  aria-controls="panel-missing"
+                  id="tab-missing"
+                  onClick={() => setActiveTab("missing")}
+                  className={`relative px-4 py-4 text-sm font-medium transition min-h-[44px] sm:px-6 sm:py-4 sm:text-base ${
+                    activeTab === "missing"
+                      ? "text-[var(--color-missing)]"
+                      : "text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200"
+                  }`}
+                >
+                  Eksik Ürünler
+                  {activeTab === "missing" && (
+                    <span
+                      className="absolute bottom-0 left-0 right-0 h-0.5 bg-[var(--color-missing)]"
+                      aria-hidden
+                    />
+                  )}
+                </button>
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={activeTab === "extra"}
+                  aria-controls="panel-extra"
+                  id="tab-extra"
+                  onClick={() => setActiveTab("extra")}
+                  className={`relative px-4 py-4 text-sm font-medium transition min-h-[44px] sm:px-6 sm:py-4 sm:text-base ${
+                    activeTab === "extra"
+                      ? "text-[var(--color-extra)]"
+                      : "text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200"
+                  }`}
+                >
+                  Fazla Ürünler
+                  {activeTab === "extra" && (
+                    <span
+                      className="absolute bottom-0 left-0 right-0 h-0.5 bg-[var(--color-extra)]"
+                      aria-hidden
+                    />
+                  )}
+                </button>
+              </div>
+              <div
+                role="tabpanel"
+                id={activeTab === "missing" ? "panel-missing" : "panel-extra"}
+                aria-labelledby={activeTab === "missing" ? "tab-missing" : "tab-extra"}
+                className="min-h-[120px]"
+              >
+                {isLoading || catalogLoading ? (
+                  <ListSkeleton />
+                ) : (
+                  <div
+                    className="max-h-[55vh] min-h-[8rem] overflow-auto"
+                    aria-label={activeTab === "missing" ? "Eksik ürünler listesi" : "Fazla ürünler listesi"}
+                  >
+                {/* Başlık satırı — sadece desktop'ta göster */}
                 <div
-                  className="sticky top-0 z-10 grid gap-2 border-b border-zinc-200 bg-zinc-50 px-3 py-2.5 text-left text-xs font-medium uppercase tracking-wide text-zinc-500 dark:border-zinc-700 dark:bg-zinc-800/50 dark:text-zinc-400 sm:gap-4 sm:px-4 sm:py-3 sm:text-sm"
+                  className="hidden sm:grid sticky top-0 z-10 gap-4 border-b border-zinc-200 bg-zinc-50 px-4 py-3 text-left text-sm font-medium uppercase tracking-wide text-zinc-500 dark:border-zinc-700 dark:bg-zinc-800/50 dark:text-zinc-400"
                   style={{ 
                     gridTemplateColumns: "3rem minmax(0,1fr) minmax(8rem,10rem) minmax(3rem,4rem) minmax(0,1fr) minmax(5rem,6rem)",
                   }}
@@ -543,84 +598,160 @@ export default function Home() {
                       <li
                         key={item.id}
                         onClick={() => handleItemClick(item)}
-                        className="grid gap-2 px-3 py-2.5 text-sm transition-colors duration-150 hover:bg-zinc-50 dark:hover:bg-zinc-800/50 cursor-pointer sm:gap-4 sm:px-4 sm:py-3"
-                        style={{ 
-                          gridTemplateColumns: "3rem minmax(0,1fr) minmax(8rem,10rem) minmax(3rem,4rem) minmax(0,1fr) minmax(5rem,6rem)",
-                        }}
+                        className="transition-colors duration-150 hover:bg-zinc-50 dark:hover:bg-zinc-800/50 cursor-pointer"
                       >
-                        <span className="flex items-center justify-center">
-                          {item.imageUrl ? (
-                            <img
-                              src={item.imageUrl}
-                              alt={item.name}
-                              className="size-10 rounded object-cover"
-                              width={40}
-                              height={40}
-                              loading="lazy"
-                            />
-                          ) : (
-                            <div className="size-10 rounded bg-zinc-200 dark:bg-zinc-700 flex items-center justify-center">
-                              <PackageX className="size-5 text-zinc-400 dark:text-zinc-500" />
+                        {/* Mobil görünüm: Kart layout */}
+                        <div className="flex gap-3 px-4 py-3 sm:hidden">
+                          <div className="shrink-0">
+                            {item.imageUrl ? (
+                              <img
+                                src={item.imageUrl}
+                                alt={item.name}
+                                className="size-16 rounded-lg object-cover"
+                                width={64}
+                                height={64}
+                                loading="lazy"
+                              />
+                            ) : (
+                              <div className="size-16 rounded-lg bg-zinc-200 dark:bg-zinc-700 flex items-center justify-center">
+                                <PackageX className="size-7 text-zinc-400 dark:text-zinc-500" />
+                              </div>
+                            )}
+                          </div>
+                          <div className="min-w-0 flex-1 flex flex-col gap-2">
+                            <div className="font-medium text-zinc-900 dark:text-zinc-100 text-sm leading-snug line-clamp-2">
+                              {item.name}
                             </div>
-                          )}
-                        </span>
-                        <span className="min-w-0 font-medium text-zinc-900 dark:text-zinc-100">
-                          {item.name}
-                        </span>
-                        <span className="tabular-nums text-zinc-600 dark:text-zinc-300 break-all">
-                          {item.barcode}
-                        </span>
-                        <span className="tabular-nums text-zinc-600 dark:text-zinc-300">
-                          {item.quantity}
-                        </span>
-                        <span className="min-w-0 truncate text-zinc-500 dark:text-zinc-400">
-                          {item.notes || "—"}
-                        </span>
-                        <span className="flex items-center justify-end gap-1">
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleEdit(item);
-                            }}
-                            className="rounded-lg p-2.5 min-h-[44px] min-w-[44px] flex items-center justify-center text-zinc-500 transition hover:bg-zinc-200 hover:text-zinc-700 dark:hover:bg-zinc-700 dark:hover:text-zinc-300 sm:p-1.5 sm:min-h-0 sm:min-w-0"
-                            aria-label="Ürünü düzenle"
-                            title="Düzenle"
-                          >
-                            <Pencil className="size-4 sm:size-4" />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleDelete(item);
-                            }}
-                            disabled={deletingId === item.id}
-                            className="rounded-lg p-2.5 min-h-[44px] min-w-[44px] flex items-center justify-center text-red-600 transition hover:bg-red-50 hover:text-red-700 disabled:opacity-50 dark:text-red-400 dark:hover:text-red-300 sm:p-1.5 sm:min-h-0 sm:min-w-0"
-                            aria-label="Ürünü sil"
-                            title="Sil"
-                          >
-                            <Trash2 className="size-4 sm:size-4" />
-                          </button>
-                        </span>
-                        {item.createdAt && (
-                          <span
-                            className="col-span-5 mt-0.5 text-xs text-zinc-400 dark:text-zinc-500"
-                            style={{ gridColumn: "span 5" }}
-                            aria-hidden
-                          >
-                            Eklenme: {new Date(item.createdAt).toLocaleDateString("tr-TR")}
+                            <div className="text-xs text-zinc-500 dark:text-zinc-400 break-all">
+                              <span className="font-medium">Barkod:</span> {item.barcode}
+                            </div>
+                            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
+                              <span className="text-zinc-600 dark:text-zinc-300">
+                                <span className="font-medium">Miktar:</span> <span className="tabular-nums font-semibold text-base">{item.quantity}</span>
+                              </span>
+                              {item.notes && (
+                                <span className="text-zinc-500 dark:text-zinc-400">
+                                  <span className="font-medium">Not:</span> <span className="line-clamp-1">{item.notes}</span>
+                                </span>
+                              )}
+                            </div>
+                            {item.createdAt && (
+                              <div className="text-xs text-zinc-400 dark:text-zinc-500">
+                                Eklenme: {new Date(item.createdAt).toLocaleDateString("tr-TR")}
+                              </div>
+                            )}
+                            <div className="flex items-center justify-end gap-2 mt-auto pt-1">
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleEdit(item);
+                                }}
+                                className="rounded-lg p-2.5 min-h-[40px] min-w-[40px] flex items-center justify-center text-zinc-500 transition hover:bg-zinc-200 hover:text-zinc-700 dark:hover:bg-zinc-700 dark:hover:text-zinc-300"
+                                aria-label="Ürünü düzenle"
+                                title="Düzenle"
+                              >
+                                <Pencil className="size-4.5" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleDelete(item);
+                                }}
+                                disabled={deletingId === item.id}
+                                className="rounded-lg p-2.5 min-h-[40px] min-w-[40px] flex items-center justify-center text-red-600 transition hover:bg-red-50 hover:text-red-700 disabled:opacity-50 dark:text-red-400 dark:hover:text-red-300"
+                                aria-label="Ürünü sil"
+                                title="Sil"
+                              >
+                                <Trash2 className="size-4.5" />
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                        
+                        {/* Desktop görünüm: Grid layout */}
+                        <div
+                          className="hidden sm:grid gap-4 px-4 py-3 text-sm"
+                          style={{ 
+                            gridTemplateColumns: "3rem minmax(0,1fr) minmax(8rem,10rem) minmax(3rem,4rem) minmax(0,1fr) minmax(5rem,6rem)",
+                          }}
+                        >
+                          <span className="flex items-center justify-center">
+                            {item.imageUrl ? (
+                              <img
+                                src={item.imageUrl}
+                                alt={item.name}
+                                className="size-10 rounded object-cover"
+                                width={40}
+                                height={40}
+                                loading="lazy"
+                              />
+                            ) : (
+                              <div className="size-10 rounded bg-zinc-200 dark:bg-zinc-700 flex items-center justify-center">
+                                <PackageX className="size-5 text-zinc-400 dark:text-zinc-500" />
+                              </div>
+                            )}
                           </span>
-                        )}
+                          <span className="min-w-0 font-medium text-zinc-900 dark:text-zinc-100">
+                            {item.name}
+                          </span>
+                          <span className="tabular-nums text-zinc-600 dark:text-zinc-300 break-all">
+                            {item.barcode}
+                          </span>
+                          <span className="tabular-nums text-zinc-600 dark:text-zinc-300">
+                            {item.quantity}
+                          </span>
+                          <span className="min-w-0 truncate text-zinc-500 dark:text-zinc-400">
+                            {item.notes || "—"}
+                          </span>
+                          <span className="flex items-center justify-end gap-1">
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleEdit(item);
+                              }}
+                              className="rounded-lg p-1.5 text-zinc-500 transition hover:bg-zinc-200 hover:text-zinc-700 dark:hover:bg-zinc-700 dark:hover:text-zinc-300"
+                              aria-label="Ürünü düzenle"
+                              title="Düzenle"
+                            >
+                              <Pencil className="size-4" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleDelete(item);
+                              }}
+                              disabled={deletingId === item.id}
+                              className="rounded-lg p-1.5 text-red-600 transition hover:bg-red-50 hover:text-red-700 disabled:opacity-50 dark:text-red-400 dark:hover:text-red-300"
+                              aria-label="Ürünü sil"
+                              title="Sil"
+                            >
+                              <Trash2 className="size-4" />
+                            </button>
+                          </span>
+                          {item.createdAt && (
+                            <span
+                              className="col-span-5 mt-0.5 text-xs text-zinc-400 dark:text-zinc-500"
+                              style={{ gridColumn: "span 5" }}
+                              aria-hidden
+                            >
+                              Eklenme: {new Date(item.createdAt).toLocaleDateString("tr-TR")}
+                            </span>
+                          )}
+                        </div>
                       </li>
                     ))}
                   </ul>
                 )}
+                  </div>
+                )}
               </div>
-            )}
-          </div>
-        </div>
-      </section>
+            </div>
+          )}
+        </section>
       )}
     </div>
   );
