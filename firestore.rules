@@ -1,0 +1,21 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // stock_items koleksiyonu için kurallar
+    match /stock_items/{itemId} {
+      // Herkes okuyabilir (public read)
+      allow read: if true;
+      
+      // Herkes yazabilir (public write) - Auth yok, açık erişimli panel
+      allow create: if true;
+      allow update: if true;
+      allow delete: if true;
+    }
+    
+    // Diğer koleksiyonlar için varsayılan: erişim yok
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
+

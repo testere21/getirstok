@@ -1,0 +1,15 @@
+# Netlify — Stok Takip Paneli (Next.js)
+# https://docs.netlify.com/configure-builds/file-based-configuration/
+# Next.js App Router için Netlify otomatik olarak tespit eder ve build yapar.
+
+[build]
+  command = "npm run build"
+  # Next.js App Router için publish directory boş bırakılabilir (Netlify otomatik algılar)
+  # publish = ".next"
+
+[build.environment]
+  NODE_VERSION = "20"
+
+# Next.js App Router için Netlify eklentisi (otomatik tespit edilir, manuel eklemeye gerek yok)
+# [[plugins]]
+#   package = "@netlify/plugin-nextjs"
