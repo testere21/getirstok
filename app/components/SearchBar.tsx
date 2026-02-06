@@ -1,11 +1,12 @@
 "use client";
 
-import { Search, X } from "lucide-react";
+import { Search, X, Camera } from "lucide-react";
 
 interface SearchBarProps {
   value: string;
   onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
   onClear?: () => void;
+  onScanClick?: () => void;
   placeholder?: string;
 }
 
@@ -13,6 +14,7 @@ export function SearchBar({
   value,
   onChange,
   onClear,
+  onScanClick,
   placeholder = "Ürün ismi veya barkod ile ara",
 }: SearchBarProps) {
   return (
@@ -41,6 +43,20 @@ export function SearchBar({
           title="Temizle"
         >
           <X className="size-4" />
+        </button>
+      )}
+      {onScanClick && (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onScanClick();
+          }}
+          className="shrink-0 rounded-lg p-1 text-zinc-400 transition hover:bg-zinc-200 hover:text-zinc-600 dark:hover:bg-zinc-700 dark:hover:text-zinc-300 min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0 flex items-center justify-center"
+          aria-label="Barkod tara"
+          title="Barkod Tara"
+        >
+          <Camera className="size-5" />
         </button>
       )}
     </label>

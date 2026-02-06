@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { PackageMinus, PackagePlus, Pencil, Trash2 } from "lucide-react";
 import { AddProductModal } from "./components/AddProductModal";
 import { SearchBar } from "./components/SearchBar";
+import { BarcodeScanner } from "./components/BarcodeScanner";
 import { StatCardSkeleton } from "./components/StatCardSkeleton";
 import { ListSkeleton } from "./components/ListSkeleton";
 import { EmptyState } from "./components/EmptyState";
@@ -32,6 +33,7 @@ interface ToastState {
 export default function Home() {
   const [modalType, setModalType] = useState<ModalType>(null);
   const [searchQuery, setSearchQuery] = useState("");
+  const [isScannerOpen, setIsScannerOpen] = useState(false);
   const [items, setItems] = useState<StockItemWithId[]>([]);
   const [catalogProducts, setCatalogProducts] = useState<CatalogProduct[]>([]);
   const [catalogLoading, setCatalogLoading] = useState(true);
@@ -283,9 +285,19 @@ export default function Home() {
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             onClear={() => setSearchQuery("")}
+            onScanClick={() => setIsScannerOpen(true)}
           />
         </div>
       </section>
+
+      <BarcodeScanner
+        isOpen={isScannerOpen}
+        onClose={() => setIsScannerOpen(false)}
+        onScanSuccess={(barcode) => {
+          setSearchQuery(barcode);
+          setIsScannerOpen(false);
+        }}
+      />
 
       <AddProductModal
         isOpen={modalType !== null || editingItem !== null || selectedCatalogProduct !== null}
