@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { PackageMinus, PackagePlus, Pencil, Trash2 } from "lucide-react";
+import { PackageMinus, PackagePlus, Pencil, Trash2, ArrowUp, ArrowDown } from "lucide-react";
 import { AddProductModal } from "./components/AddProductModal";
 import { SearchBar } from "./components/SearchBar";
 import { BarcodeScanner } from "./components/BarcodeScanner";
@@ -13,6 +13,7 @@ import { Toast, type ToastType } from "./components/Toast";
 import { PackageSearch, PackageX } from "lucide-react";
 import { deleteStockItem, subscribeStockItems } from "@/app/lib/stockService";
 import type { StockItemWithId } from "@/app/lib/types";
+import { formatDateTime } from "@/app/lib/utils";
 
 /** Katalog ürünü (api/products) */
 interface CatalogProduct {
@@ -44,6 +45,9 @@ export default function Home() {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [firestoreError, setFirestoreError] = useState<string | null>(null);
   const [toast, setToast] = useState<ToastState | null>(null);
+  // Sıralama state'leri
+  const [sortField, setSortField] = useState<"name" | "barcode" | "quantity" | null>(null);
+  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
 
   // Katalog ürünlerini yükle
   useEffect(() => {
@@ -115,15 +119,27 @@ export default function Home() {
   /**
    * Filtrelenmiş katalog ürünleri — arama filtresi products.json'dan ürünleri filtreler.
    * Kullanıcı arama yaptığında katalog ürünleri gösterilir.
+   * Duplicate'leri temizler (aynı barcode veya productId'ye sahip ürünleri birleştirir).
    */
   const filteredCatalogProducts = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
     if (!q) return [];
-    return catalogProducts.filter(
+    const filtered = catalogProducts.filter(
       (product) =>
-        product.name.toLowerCase().includes(q) ||
-        product.barcode.toLowerCase().includes(q)
+        (product.name || "").toLowerCase().includes(q) ||
+        (product.barcode || "").toLowerCase().includes(q)
     );
+    
+    // Duplicate'leri temizle: productId varsa ona göre, yoksa barcode'a göre
+    const seen = new Map<string, boolean>();
+    return filtered.filter((product) => {
+      const uniqueKey = product.productId || product.barcode || `index-${product.name}`;
+      if (seen.has(uniqueKey)) {
+        return false; // Duplicate, atla
+      }
+      seen.set(uniqueKey, true);
+      return true;
+    });
   }, [catalogProducts, searchQuery]);
 
   /**
@@ -190,8 +206,54 @@ export default function Home() {
   /**
    * Aktif sekmede gösterilecek liste — missingItems veya extraItems.
    * Her ikisi de filteredItems'tan türetildiği için arama ile senkron çalışır.
+   * Sıralama uygulanır.
    */
-  const displayItems = activeTab === "missing" ? missingItems : extraItems;
+  const displayItems = useMemo(() => {
+    const items = activeTab === "missing" ? missingItems : extraItems;
+    
+    if (!sortField) return items;
+    
+    // Sıralama yap
+    const sorted = [...items].sort((a, b) => {
+      let aValue: string | number;
+      let bValue: string | number;
+      
+      switch (sortField) {
+        case "name":
+          aValue = a.name.toLowerCase();
+          bValue = b.name.toLowerCase();
+          break;
+        case "barcode":
+          aValue = a.barcode;
+          bValue = b.barcode;
+          break;
+        case "quantity":
+          aValue = a.quantity;
+          bValue = b.quantity;
+          break;
+        default:
+          return 0;
+      }
+      
+      if (aValue < bValue) return sortDirection === "asc" ? -1 : 1;
+      if (aValue > bValue) return sortDirection === "asc" ? 1 : -1;
+      return 0;
+    });
+    
+    return sorted;
+  }, [activeTab, missingItems, extraItems, sortField, sortDirection]);
+  
+  // Sıralama fonksiyonu
+  const handleSort = useCallback((field: "name" | "barcode" | "quantity") => {
+    if (sortField === field) {
+      // Aynı alana tekrar tıklandıysa yönü değiştir
+      setSortDirection(sortDirection === "asc" ? "desc" : "asc");
+    } else {
+      // Yeni alana tıklandıysa o alanı seç ve varsayılan olarak artan sırala
+      setSortField(field);
+      setSortDirection("asc");
+    }
+  }, [sortField, sortDirection]);
 
   const handleDelete = useCallback(async (item: StockItemWithId) => {
     if (!confirm("Bu ürünü silmek istediğinize emin misiniz?")) return;
@@ -316,6 +378,8 @@ export default function Home() {
         }}
         onEditItem={(item) => {
           setEditingItem(item);
+          // Katalog görünümünden çık ve düzenleme moduna geç
+          setSelectedCatalogProduct(null);
         }}
         onSuccess={(message) => {
           setToast({ message, type: "success" });
@@ -398,23 +462,58 @@ export default function Home() {
                     aria-label="Arama sonuçları"
                   >
                     <div className="divide-y divide-zinc-200 dark:divide-zinc-700">
-                    {filteredCatalogProducts.map((product) => {
+                    {filteredCatalogProducts.map((product, index) => {
                       // Bu ürün için Firestore'daki eksik/fazla kayıtlarını bul
                       const productItems = items.filter((item) => item.barcode === product.barcode);
                       const missingItems = productItems.filter((item) => item.type === "missing");
                       const extraItems = productItems.filter((item) => item.type === "extra");
                       const totalMissing = missingItems.reduce((sum, item) => sum + item.quantity, 0);
                       const totalExtra = extraItems.reduce((sum, item) => sum + item.quantity, 0);
+                      
+                      // Ürün durumu: eksik/fazla kontrolü (renk kodlaması için)
+                      const hasMissing = missingItems.length > 0;
+                      const hasExtra = extraItems.length > 0;
+                      
+                      // Renk kodlaması mantığı
+                      let cardColorClass = ""; // Varsayılan: neutral/gri
+                      let cardBorderColor = "";
+                      let hoverColorClass = "hover:bg-zinc-50 dark:hover:bg-zinc-800/50"; // Varsayılan hover
+                      if (hasExtra && !hasMissing) {
+                        // Sadece fazla eklenmişse: Yeşil
+                        cardColorClass = "bg-green-50 dark:bg-green-900/20";
+                        cardBorderColor = "border-green-500";
+                        hoverColorClass = "hover:bg-green-100 dark:hover:bg-green-900/30";
+                      } else if (hasMissing && !hasExtra) {
+                        // Sadece eksik eklenmişse: Kırmızı
+                        cardColorClass = "bg-red-50 dark:bg-red-900/20";
+                        cardBorderColor = "border-red-500";
+                        hoverColorClass = "hover:bg-red-100 dark:hover:bg-red-900/30";
+                      }
+                      // Hem eksik hem fazla varsa veya hiçbiri yoksa: Varsayılan renk (cardColorClass boş kalır)
+                      
+                      // En son eklenme veya güncellenme tarihini bul
+                      const latestDate = productItems.length > 0
+                        ? productItems.reduce((latest, item) => {
+                            const itemDate = item.updatedAt || item.createdAt;
+                            if (!itemDate) return latest;
+                            const itemTime = new Date(itemDate).getTime();
+                            const latestTime = latest ? new Date(latest).getTime() : 0;
+                            return itemTime > latestTime ? itemDate : latest;
+                          }, null as string | null)
+                        : null;
+
+                      // Unique key oluştur: productId varsa onu kullan, yoksa barcode, o da yoksa index
+                      const uniqueKey = product.productId || product.barcode || `product-${index}`;
 
                       return (
                         <button
-                          key={product.barcode}
+                          key={uniqueKey}
                           type="button"
                           onClick={() => setSelectedCatalogProduct(product)}
-                          className="w-full text-left transition-colors duration-150 hover:bg-zinc-50 dark:hover:bg-zinc-800/50"
+                          className={`w-full text-left transition-colors duration-150 border-l-4 ${cardBorderColor || "border-transparent"} ${cardColorClass || ""} ${hoverColorClass}`}
                         >
                           {/* Mobil görünüm: Kart layout */}
-                          <div className="flex gap-3 px-4 py-3 sm:hidden">
+                          <div className={`flex gap-3 px-4 py-3 sm:hidden ${cardColorClass || ""}`}>
                             <div className="shrink-0">
                               {product.imageUrl ? (
                                 <img
@@ -457,7 +556,7 @@ export default function Home() {
                           
                           {/* Desktop görünüm: Grid layout */}
                           <div
-                            className="hidden sm:grid gap-4 px-4 py-4 text-sm"
+                            className={`hidden sm:grid gap-4 px-4 py-4 text-sm ${cardColorClass || ""}`}
                             style={{ 
                               gridTemplateColumns: "3rem minmax(0,1fr) minmax(8rem,10rem) minmax(6rem,8rem) minmax(6rem,8rem)",
                             }}
@@ -497,6 +596,17 @@ export default function Home() {
                               </span>
                             </span>
                           </div>
+                          {latestDate && (
+                            <div
+                              className="col-span-5 mt-1 text-xs text-zinc-400 dark:text-zinc-500"
+                              style={{ gridColumn: "span 5" }}
+                            >
+                              {productItems.some(item => item.updatedAt && item.updatedAt === latestDate)
+                                ? <>Son Güncelleme: {formatDateTime(latestDate)}</>
+                                : <>Son Eklenme: {formatDateTime(latestDate)}</>
+                              }
+                            </div>
+                          )}
                         </button>
                       );
                     })}
@@ -583,9 +693,42 @@ export default function Home() {
                   }}
                 >
                   <span></span>
-                  <span>Ürün</span>
-                  <span>Barkod</span>
-                  <span>Miktar</span>
+                  <button
+                    type="button"
+                    onClick={() => handleSort("name")}
+                    className={`flex items-center gap-1 hover:text-zinc-700 dark:hover:text-zinc-200 transition-colors text-left ${
+                      sortField === "name" ? "text-zinc-900 dark:text-zinc-100" : ""
+                    }`}
+                  >
+                    <span>Ürün</span>
+                    {sortField === "name" && (
+                      sortDirection === "asc" ? <ArrowUp className="size-3" /> : <ArrowDown className="size-3" />
+                    )}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleSort("barcode")}
+                    className={`flex items-center gap-1 hover:text-zinc-700 dark:hover:text-zinc-200 transition-colors text-left ${
+                      sortField === "barcode" ? "text-zinc-900 dark:text-zinc-100" : ""
+                    }`}
+                  >
+                    <span>Barkod</span>
+                    {sortField === "barcode" && (
+                      sortDirection === "asc" ? <ArrowUp className="size-3" /> : <ArrowDown className="size-3" />
+                    )}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleSort("quantity")}
+                    className={`flex items-center gap-1 hover:text-zinc-700 dark:hover:text-zinc-200 transition-colors text-left ${
+                      sortField === "quantity" ? "text-zinc-900 dark:text-zinc-100" : ""
+                    }`}
+                  >
+                    <span>Miktar</span>
+                    {sortField === "quantity" && (
+                      sortDirection === "asc" ? <ArrowUp className="size-3" /> : <ArrowDown className="size-3" />
+                    )}
+                  </button>
                   <span>Notlar</span>
                   <span className="text-right">İşlem</span>
                 </div>
@@ -647,9 +790,13 @@ export default function Home() {
                                 </span>
                               )}
                             </div>
-                            {item.createdAt && (
+                            {(item.createdAt || item.updatedAt) && (
                               <div className="text-xs text-zinc-400 dark:text-zinc-500">
-                                Eklenme: {new Date(item.createdAt).toLocaleDateString("tr-TR")}
+                                {item.updatedAt ? (
+                                  <>Son Güncelleme: {formatDateTime(item.updatedAt)}</>
+                                ) : (
+                                  <>Eklenme: {formatDateTime(item.createdAt)}</>
+                                )}
                               </div>
                             )}
                             <div className="flex items-center justify-end gap-2 mt-auto pt-1">
@@ -744,13 +891,17 @@ export default function Home() {
                               <Trash2 className="size-4" />
                             </button>
                           </span>
-                          {item.createdAt && (
+                          {(item.createdAt || item.updatedAt) && (
                             <span
                               className="col-span-5 mt-0.5 text-xs text-zinc-400 dark:text-zinc-500"
                               style={{ gridColumn: "span 5" }}
                               aria-hidden
                             >
-                              Eklenme: {new Date(item.createdAt).toLocaleDateString("tr-TR")}
+                              {item.updatedAt ? (
+                                <>Son Güncelleme: {formatDateTime(item.updatedAt)}</>
+                              ) : (
+                                <>Eklenme: {formatDateTime(item.createdAt)}</>
+                              )}
                             </span>
                           )}
                         </div>

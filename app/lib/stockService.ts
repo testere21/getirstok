@@ -68,17 +68,25 @@ export async function deleteStockItem(id: string): Promise<void> {
 
 /**
  * Stok kalemini doküman ID ile günceller (sadece verilen alanlar değişir).
+ * Not: `type` alanı güvenlik nedeniyle güncellenemez (eksik/fazla tipi değiştirilemez).
+ * `updatedAt` alanı otomatik olarak serverTimestamp() ile set edilir.
  */
 export async function updateStockItem(
   id: string,
   fields: UpdateStockItemParams
 ): Promise<void> {
   const docRef = doc(db, STOCK_ITEMS_COLLECTION, id);
-  await updateDoc(docRef, fields as Record<string, unknown>);
+  // type alanını filtrele - güvenlik: eksik/fazla tipi değiştirilemez
+  const { type, ...updateFields } = fields;
+  // updatedAt alanını otomatik olarak ekle
+  await updateDoc(docRef, {
+    ...updateFields,
+    updatedAt: serverTimestamp(),
+  } as Record<string, unknown>);
 }
 
-/** createdAt alanını Firestore Timestamp'ten ISO string'e çevirir */
-function createdAtToString(value: unknown): string {
+/** Timestamp alanını Firestore Timestamp'ten ISO string'e çevirir */
+function timestampToString(value: unknown): string {
   if (value && typeof (value as Timestamp).toDate === "function") {
     return (value as Timestamp).toDate().toISOString();
   }
@@ -108,7 +116,8 @@ export function subscribeStockItems(
         quantity: typeof data.quantity === "number" ? data.quantity : 0,
         notes: data.notes ?? "",
         type: data.type === "extra" ? "extra" : "missing",
-        createdAt: createdAtToString(data.createdAt),
+        createdAt: timestampToString(data.createdAt),
+        updatedAt: data.updatedAt ? timestampToString(data.updatedAt) : undefined,
         imageUrl: data.imageUrl ?? undefined,
       };
       });

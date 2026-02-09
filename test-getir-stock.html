@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Getir Stok Test</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: #f5f5f5;
+            padding: 20px;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            margin-bottom: 20px;
+        }
+        .test-section {
+            margin-bottom: 30px;
+            padding: 20px;
+            background: #f9f9f9;
+            border-radius: 8px;
+        }
+        .test-section h2 {
+            color: #666;
+            margin-bottom: 15px;
+            font-size: 18px;
+        }
+        button {
+            background: #8b5cf6;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            margin: 5px;
+            transition: background 0.2s;
+        }
+        button:hover {
+            background: #7c3aed;
+        }
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        .result {
+            margin-top: 10px;
+            padding: 10px;
+            border-radius: 6px;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            white-space: pre-wrap;
+            word-break: break-all;
+        }
+        .result.success {
+            background: #d1fae5;
+            color: #065f46;
+            border: 1px solid #10b981;
+        }
+        .result.error {
+            background: #fee2e2;
+            color: #991b1b;
+            border: 1px solid #ef4444;
+        }
+        .result.info {
+            background: #dbeafe;
+            color: #1e40af;
+            border: 1px solid #3b82f6;
+        }
+        .product-list {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 15px;
+            margin-top: 15px;
+        }
+        .product-card {
+            background: white;
+            border: 1px solid #e5e7eb;
+            border-radius: 6px;
+            padding: 15px;
+        }
+        .product-card h3 {
+            font-size: 14px;
+            color: #333;
+            margin-bottom: 10px;
+        }
+        .product-card .info {
+            font-size: 12px;
+            color: #666;
+            margin: 5px 0;
+        }
+        .product-card .barcode {
+            font-family: 'Courier New', monospace;
+            font-weight: bold;
+            color: #8b5cf6;
+        }
+        .loading {
+            display: inline-block;
+            width: 16px;
+            height: 16px;
+            border: 2px solid #f3f3f3;
+            border-top: 2px solid #8b5cf6;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-left: 10px;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🧪 Getir Stok Test Senaryosu</h1>
+
+        <!-- Test 1: Ürün ID ile Stok Sorgulama -->
+        <div class="test-section">
+            <h2>Test 1: Ürün ID ile Stok Sorgulama (Hızlı Yöntem)</h2>
+            <p style="margin-bottom: 10px; color: #666;">İlk ürünün ID'si ile stok sorgulama yapın:</p>
+            <button onclick="testProductId()">Test Et (Product ID: 559823ceb1dc700c006a7098)</button>
+            <div id="result1" class="result" style="display: none;"></div>
+        </div>
+
+        <!-- Test 2: Mapping Kaydetme -->
+        <div class="test-section">
+            <h2>Test 2: Mapping Kaydetme (Tek Ürün)</h2>
+            <p style="margin-bottom: 10px; color: #666;">İlk ürünün mapping'ini kaydedin:</p>
+            <button onclick="testSaveMapping()">Mapping Kaydet</button>
+            <div id="result2" class="result" style="display: none;"></div>
+        </div>
+
+        <!-- Test 3: Barkod ile Stok Sorgulama (Mapping Sonrası) -->
+        <div class="test-section">
+            <h2>Test 3: Barkod ile Stok Sorgulama (Mapping Sonrası - Hızlı)</h2>
+            <p style="margin-bottom: 10px; color: #666;">Mapping kaydettikten sonra barkod ile hızlı stok sorgulama:</p>
+            <button onclick="testBarcode()">Test Et (Barcode: 8696368011332)</button>
+            <div id="result3" class="result" style="display: none;"></div>
+        </div>
+
+        <!-- Test 4: Toplu Mapping Kaydetme -->
+        <div class="test-section">
+            <h2>Test 4: Toplu Mapping Kaydetme (9 Ürün)</h2>
+            <p style="margin-bottom: 10px; color: #666;">Resimdeki 9 ürünün mapping'lerini toplu kaydedin:</p>
+            <button onclick="testBatchMapping()">Toplu Kaydet</button>
+            <div id="result4" class="result" style="display: none;"></div>
+        </div>
+
+        <!-- Ürün Listesi -->
+        <div class="test-section">
+            <h2>📦 Test Ürünleri</h2>
+            <div class="product-list" id="productList"></div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = 'http://localhost:3000';
+        
+        // Test ürünleri (resimden alınan)
+        const testProducts = [
+            { barcode: '8696368011332', productId: '559823ceb1dc700c006a7098', name: 'Activia Probiyotik Sade Yoğurt (4 x 100 g)' },
+            { barcode: '8696368011349', productId: '559823f7b1dc700c006a709c', name: 'Activia Probiyotik Çilekli Yoğurt (4 x 100 g)' },
+            { barcode: '8696368011493', productId: '55982415b1dc700c006a70a0', name: 'Activia Probiyotik Ananaslı Yoğurt (4 x 100 g)' },
+            { barcode: '8690709040005', productId: '55982541b1dc700c006a70b0', name: 'Cook Alüminyum Folyo (10 M)' },
+            { barcode: '8690709260090', productId: '55982584b1dc700c006a70bc', name: 'Cook Kesilmiş Pişirme Kağıdı (16 Yaprak)' },
+            { barcode: '8690632020297', productId: '559825dcb1dc700c006a70c4', name: 'Nesfit Karışık Meyveli Tam Tahıl ve Pirinç Gevreği (400 g)' },
+            { barcode: '8690632760391', productId: '55982606b1dc700c006a70cc', name: 'Nestlé Nesfit Kırmızı Meyveli Tam Tahıl, Pirinç Gevreği (400 g)' },
+            { barcode: '8690632704685', productId: '55982655b1dc700c006a70d8', name: 'Nestlé Nesfit Çikolatalı Tam Tahıl ve Pirinç Gevreği (400 g)' }
+        ];
+
+        // Ürün listesini göster
+        function renderProducts() {
+            const list = document.getElementById('productList');
+            list.innerHTML = testProducts.map(p => `
+                <div class="product-card">
+                    <h3>${p.name}</h3>
+                    <div class="info"><span class="barcode">Barkod:</span> ${p.barcode}</div>
+                    <div class="info"><span class="barcode">ID:</span> ${p.productId}</div>
+                </div>
+            `).join('');
+        }
+
+        // Test 1: Ürün ID ile stok sorgulama
+        async function testProductId() {
+            const resultDiv = document.getElementById('result1');
+            resultDiv.style.display = 'block';
+            resultDiv.className = 'result info';
+            resultDiv.textContent = '⏳ Test ediliyor...';
+
+            try {
+                const productId = testProducts[0].productId;
+                const response = await fetch(`${API_BASE}/api/getir-stock-by-product-id?productId=${productId}`);
+                const data = await response.json();
+
+                if (data.stock !== null && data.stock !== undefined) {
+                    resultDiv.className = 'result success';
+                    resultDiv.textContent = `✅ BAŞARILI!\n\nÜrün ID: ${productId}\nStok: ${data.stock}\n\nResponse: ${JSON.stringify(data, null, 2)}`;
+                } else {
+                    resultDiv.className = 'result error';
+                    resultDiv.textContent = `❌ HATA!\n\nÜrün bulunamadı veya stok bilgisi yok.\n\nResponse: ${JSON.stringify(data, null, 2)}`;
+                }
+            } catch (error) {
+                resultDiv.className = 'result error';
+                resultDiv.textContent = `❌ HATA!\n\n${error.message}\n\nDetay: ${error.stack}`;
+            }
+        }
+
+        // Test 2: Mapping kaydetme
+        async function testSaveMapping() {
+            const resultDiv = document.getElementById('result2');
+            resultDiv.style.display = 'block';
+            resultDiv.className = 'result info';
+            resultDiv.textContent = '⏳ Mapping kaydediliyor...';
+
+            try {
+                const product = testProducts[0];
+                const response = await fetch(`${API_BASE}/api/barcode-mapping/save`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        barcode: product.barcode,
+                        productId: product.productId,
+                        productName: product.name
+                    })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    resultDiv.className = 'result success';
+                    resultDiv.textContent = `✅ BAŞARILI!\n\nMapping kaydedildi:\nBarkod: ${product.barcode}\nÜrün ID: ${product.productId}\n\nResponse: ${JSON.stringify(data, null, 2)}`;
+                } else {
+                    resultDiv.className = 'result error';
+                    resultDiv.textContent = `❌ HATA!\n\n${data.error || 'Bilinmeyen hata'}\n\nResponse: ${JSON.stringify(data, null, 2)}`;
+                }
+            } catch (error) {
+                resultDiv.className = 'result error';
+                resultDiv.textContent = `❌ HATA!\n\n${error.message}\n\nDetay: ${error.stack}`;
+            }
+        }
+
+        // Test 3: Barkod ile stok sorgulama (mapping sonrası)
+        async function testBarcode() {
+            const resultDiv = document.getElementById('result3');
+            resultDiv.style.display = 'block';
+            resultDiv.className = 'result info';
+            resultDiv.textContent = '⏳ Test ediliyor...';
+
+            try {
+                const barcode = testProducts[0].barcode;
+                const response = await fetch(`${API_BASE}/api/getir-stock?barcode=${barcode}`);
+                const data = await response.json();
+
+                if (data.stock !== null && data.stock !== undefined) {
+                    resultDiv.className = 'result success';
+                    resultDiv.textContent = `✅ BAŞARILI!\n\nBarkod: ${barcode}\nStok: ${data.stock}\n\nResponse: ${JSON.stringify(data, null, 2)}`;
+                } else {
+                    resultDiv.className = 'result error';
+                    resultDiv.textContent = `❌ HATA!\n\nÜrün bulunamadı veya stok bilgisi yok.\n\nResponse: ${JSON.stringify(data, null, 2)}`;
+                }
+            } catch (error) {
+                resultDiv.className = 'result error';
+                resultDiv.textContent = `❌ HATA!\n\n${error.message}\n\nDetay: ${error.stack}`;
+            }
+        }
+
+        // Test 4: Toplu mapping kaydetme
+        async function testBatchMapping() {
+            const resultDiv = document.getElementById('result4');
+            resultDiv.style.display = 'block';
+            resultDiv.className = 'result info';
+            resultDiv.textContent = '⏳ Toplu mapping kaydediliyor... (Bu biraz zaman alabilir)';
+
+            try {
+                const mappings = testProducts.map(p => ({
+                    barcode: p.barcode,
+                    productId: p.productId,
+                    productName: p.name
+                }));
+
+                const response = await fetch(`${API_BASE}/api/barcode-mapping/batch-save`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ mappings })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    resultDiv.className = 'result success';
+                    resultDiv.textContent = `✅ BAŞARILI!\n\n${data.count} mapping kaydedildi!\n\nResponse: ${JSON.stringify(data, null, 2)}`;
+                } else {
+                    resultDiv.className = 'result error';
+                    resultDiv.textContent = `❌ HATA!\n\n${data.error || 'Bilinmeyen hata'}\n\nResponse: ${JSON.stringify(data, null, 2)}`;
+                }
+            } catch (error) {
+                resultDiv.className = 'result error';
+                resultDiv.textContent = `❌ HATA!\n\n${error.message}\n\nDetay: ${error.stack}`;
+            }
+        }
+
+        // Sayfa yüklendiğinde ürün listesini göster
+        renderProducts();
+    </script>
+</body>
+</html>
+

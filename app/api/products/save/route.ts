@@ -34,11 +34,12 @@ export async function POST(request: Request) {
           p.name !== "Ürün Görseli" &&
           p.barcode !== "Barkodlar"
       )
-      .map((p: { name?: string; barcode?: string; imageUrl?: string }) => ({
+      .map((p: { name?: string; barcode?: string; productId?: string; imageUrl?: string }) => ({
         name: p.name ?? "",
         barcode: typeof p.barcode === "string" && p.barcode.length > 13
           ? p.barcode.slice(0, 13)
           : (p.barcode ?? ""),
+        productId: p.productId, // Ürün ID'sini de kaydet
         imageUrl: p.imageUrl,
       }));
 

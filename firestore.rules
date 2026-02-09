@@ -12,6 +12,36 @@ service cloud.firestore {
       allow delete: if true;
     }
     
+    // getir_tokens koleksiyonu için kurallar
+    match /getir_tokens/{tokenId} {
+      // Herkes okuyabilir (public read) - Token'ı kullanmak için
+      allow read: if true;
+      
+      // Herkes oluşturabilir (Chrome eklentisi token ekleyebilir)
+      allow create: if true;
+      
+      // Herkes güncelleyebilir (yeni token geldiğinde güncelleme)
+      allow update: if true;
+      
+      // Silme yok (güvenlik - token'lar silinemesin)
+      allow delete: if false;
+    }
+    
+    // barcode_product_mappings koleksiyonu için kurallar
+    match /barcode_product_mappings/{mappingId} {
+      // Herkes okuyabilir (public read) - Mapping'leri kullanmak için
+      allow read: if true;
+      
+      // Herkes oluşturabilir (toplu mapping ekleme için)
+      allow create: if true;
+      
+      // Herkes güncelleyebilir (mapping güncelleme için)
+      allow update: if true;
+      
+      // Silme yok (güvenlik - mapping'ler silinemesin)
+      allow delete: if false;
+    }
+    
     // Diğer koleksiyonlar için varsayılan: erişim yok
     match /{document=**} {
       allow read, write: if false;
