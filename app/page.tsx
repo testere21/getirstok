@@ -569,7 +569,17 @@ export default function Home() {
           setEditingItem(null);
           setSelectedCatalogProduct(null);
         }}
-        type={editingItem ? editingItem.type : selectedCatalogProduct ? activeTab : modalType === "extra" ? "extra" : "missing"}
+        type={
+          editingItem
+            ? editingItem.type
+            : selectedCatalogProduct
+            ? activeTab === "extra"
+              ? "extra"
+              : "missing"
+            : modalType === "extra"
+            ? "extra"
+            : "missing"
+        }
         initialItem={editingItem ?? undefined}
         catalogProduct={selectedCatalogProduct ?? undefined}
         stockItems={items}
