@@ -1,10 +1,10 @@
 // Background Service Worker - Token yakalama ve API'ye gönderme
 // Hem Getir Bayi Paneli hem de Getir Depo Paneli token'larını yakalar
 
-// API endpoint - Development için localhost, Production için netlify.app
-// Not: Production'a deploy ederken bu URL'i güncelleyin
-const API_ENDPOINT = "http://localhost:3000/api/token/save";
-// Production URL: "https://getirstok.netlify.app/api/token/save"
+// API endpoint - Production URL (farklı bilgisayarlarda çalışması için)
+// Development için localhost kullanmak isterseniz bu satırı değiştirin:
+// const API_ENDPOINT = "http://localhost:3000/api/token/save";
+const API_ENDPOINT = "https://getirstok.netlify.app/api/token/save";
 
 // Token yakalama - webRequest API kullanarak
 chrome.webRequest.onBeforeSendHeaders.addListener(

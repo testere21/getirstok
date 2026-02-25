@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import Image from "next/image";
 import { PackageMinus, PackagePlus, Pencil, Trash2, ArrowUp, ArrowDown } from "lucide-react";
 import { AddProductModal } from "./components/AddProductModal";
 import { SearchBar } from "./components/SearchBar";
@@ -10,9 +11,11 @@ import { ListSkeleton } from "./components/ListSkeleton";
 import { EmptyState } from "./components/EmptyState";
 import { ErrorMessage } from "./components/ErrorMessage";
 import { Toast, type ToastType } from "./components/Toast";
-import { PackageSearch, PackageX } from "lucide-react";
+import { PackageSearch, PackageX, Calendar, AlertTriangle } from "lucide-react";
 import { deleteStockItem, subscribeStockItems } from "@/app/lib/stockService";
-import type { StockItemWithId } from "@/app/lib/types";
+import { ExpiringProductNotification } from "./components/ExpiringProductNotification";
+import { ExpiringProductModal } from "./components/ExpiringProductModal";
+import type { StockItemWithId, ExpiringProductWithId } from "@/app/lib/types";
 import { formatDateTime } from "@/app/lib/utils";
 
 /** Katalog ürünü (api/products) */
@@ -24,11 +27,28 @@ interface CatalogProduct {
 }
 
 export type ModalType = null | "missing" | "extra";
-export type TabType = "missing" | "extra";
+export type TabType = "missing" | "extra" | "expiring";
 
 interface ToastState {
   message: string;
   type: ToastType;
+}
+
+// Basit debounce hook'u — verilen değeri belirli bir gecikmeden sonra günceller
+function useDebounce<T>(value: T, delay: number): T {
+  const [debouncedValue, setDebouncedValue] = useState(value);
+
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedValue(value);
+    }, delay);
+
+    return () => {
+      clearTimeout(handler);
+    };
+  }, [value, delay]);
+
+  return debouncedValue;
 }
 
 export default function Home() {
@@ -48,6 +68,23 @@ export default function Home() {
   // Sıralama state'leri
   const [sortField, setSortField] = useState<"name" | "barcode" | "quantity" | null>(null);
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
+  // Yaklaşan SKT bildirimi
+  const [expiringProductsToday, setExpiringProductsToday] = useState<ExpiringProductWithId[]>([]);
+  const [showExpiringNotification, setShowExpiringNotification] = useState(false);
+  const [isExpiringNotificationOpen, setIsExpiringNotificationOpen] = useState(false);
+  // Yaklaşan SKT listesi (sekme için)
+  const [expiringProducts, setExpiringProducts] = useState<ExpiringProductWithId[]>([]);
+  const [expiringProductsLoading, setExpiringProductsLoading] = useState(false);
+  const [editingExpiringProduct, setEditingExpiringProduct] = useState<ExpiringProductWithId | null>(null);
+
+  // Arama için minimum karakter sayısı
+  const MIN_SEARCH_LENGTH = 2;
+
+  // Arama için debounce süresi (ms cinsinden)
+  const DEBOUNCE_DELAY = 300;
+
+  // Debounce edilmiş arama sorgusu — ağır işlemler bu değer üzerinden çalışır
+  const debouncedSearchQuery = useDebounce(searchQuery, DEBOUNCE_DELAY);
 
   // Katalog ürünlerini yükle
   useEffect(() => {
@@ -116,14 +153,173 @@ export default function Home() {
     };
   }, []);
 
+  // Bugün çıkılması gereken yaklaşan SKT ürünlerini kontrol et
+  useEffect(() => {
+    const checkExpiringProducts = async () => {
+      try {
+        // Bugünün tarihini al (YYYY-MM-DD formatında)
+        const today = new Date().toISOString().split("T")[0];
+        
+        const response = await fetch(`/api/expiring-products?removalDate=${today}`);
+        const data = await response.json();
+
+        if (data.success && Array.isArray(data.products)) {
+          setExpiringProductsToday(data.products);
+          // Eğer ürün varsa bildirimi göster (ürün silinene kadar her sayfa yenilendiğinde gösterilecek)
+          if (data.products.length > 0) {
+            setShowExpiringNotification(true);
+          } else {
+            setShowExpiringNotification(false);
+          }
+        }
+      } catch (error) {
+        console.error("Yaklaşan SKT kontrolü başarısız:", error);
+      }
+    };
+
+    // İlk yüklemede kontrol et
+    checkExpiringProducts();
+
+    // Her 5 dakikada bir kontrol et (300000 ms = 5 dakika)
+    const interval = setInterval(checkExpiringProducts, 300000);
+
+    return () => clearInterval(interval);
+  }, []);
+
+  // Küçük uyarı rozetini tamamen kapat
+  const handleCloseExpiringAlertBadge = () => {
+    setShowExpiringNotification(false);
+    setIsExpiringNotificationOpen(false);
+  };
+
+  // Bildirim penceresi kapatıldığında sadece pencereyi gizle
+  const handleCloseExpiringNotification = () => {
+    setIsExpiringNotificationOpen(false);
+  };
+
+  // Yaklaşan SKT listesini yükle (sekme için)
+  useEffect(() => {
+    if (activeTab === "expiring") {
+      setExpiringProductsLoading(true);
+      fetch("/api/expiring-products")
+        .then((res) => res.json())
+        .then((data) => {
+          if (data.success && Array.isArray(data.products)) {
+            setExpiringProducts(sortExpiringProductsByRemovalDate(data.products));
+          }
+        })
+        .catch(console.error)
+        .finally(() => setExpiringProductsLoading(false));
+    }
+  }, [activeTab]);
+
+  // Yaklaşan SKT kaydını sil
+  const handleDeleteExpiringProduct = async (id: string) => {
+    if (!confirm("Bu kaydı silmek istediğinize emin misiniz?")) return;
+
+    try {
+      const response = await fetch(`/api/expiring-products/${id}`, {
+        method: "DELETE",
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        setExpiringProducts((prev) =>
+          sortExpiringProductsByRemovalDate(prev.filter((p) => p.id !== id))
+        );
+        setToast({ message: "Kayıt başarıyla silindi.", type: "success" });
+      } else {
+        throw new Error(data.error || "Silme başarısız");
+      }
+    } catch (err) {
+      console.error("Kayıt silinirken hata:", err);
+      setToast({
+        message: err instanceof Error ? err.message : "Kayıt silinirken bir hata oluştu.",
+        type: "error",
+      });
+    }
+  };
+
+  // Yaklaşan SKT durum / kalan gün bilgisi
+  const getExpiringStatus = (
+    removalDate: string
+  ): { label: string; color: string } => {
+    const todayStr = new Date().toISOString().split("T")[0];
+
+    // Geçersiz tarih gelirse varsayılan
+    if (!removalDate || removalDate.length !== 10) {
+      return { label: "Bilinmiyor", color: "text-zinc-500" };
+    }
+
+    const today = new Date(todayStr + "T00:00:00");
+    const target = new Date(removalDate + "T00:00:00");
+
+    const diffMs = target.getTime() - today.getTime();
+    const diffDays = Math.round(diffMs / (1000 * 60 * 60 * 24));
+
+    // Metin
+    let label: string;
+    if (diffDays === 0) {
+      label = "Bugün";
+    } else if (diffDays === 1) {
+      label = "Yarın";
+    } else if (diffDays > 1) {
+      label = `${diffDays} gün sonra`;
+    } else if (diffDays === -1) {
+      label = "Dün";
+    } else {
+      label = `${Math.abs(diffDays)} gün önce`;
+    }
+
+    // Renk
+    let color = "text-green-600 dark:text-green-400";
+    if (diffDays === 0) {
+      color = "text-orange-600 dark:text-orange-400";
+    } else if (diffDays < 0) {
+      color = "text-red-600 dark:text-red-400";
+    }
+
+    return { label, color };
+  };
+
+  // Yaklaşan SKT listesini "Çıkılması Gereken" en yakın -> en uzak sıralar (ISO YYYY-MM-DD)
+  function sortExpiringProductsByRemovalDate(products: ExpiringProductWithId[]) {
+    return [...products].sort((a, b) => {
+      const d = (a.removalDate || "").localeCompare(b.removalDate || "");
+      if (d !== 0) return d;
+      const n = (a.productName || "").localeCompare(b.productName || "", "tr");
+      if (n !== 0) return n;
+      return (a.barcode || "").localeCompare(b.barcode || "");
+    });
+  }
+
+  // Getir görsel URL'ini normalize et (http -> https)
+  const normalizeImageUrl = (url?: string): string | undefined => {
+    if (!url) return undefined;
+    if (url.startsWith("http://")) {
+      return url.replace("http://", "https://");
+    }
+    return url;
+  };
+
+  // Katalogdan ürün görselini bul (barkoda göre)
+  const getCatalogProductImage = useCallback(
+    (barcode: string): string | undefined => {
+      const match = catalogProducts.find((p) => p.barcode === barcode);
+      return normalizeImageUrl(match?.imageUrl);
+    },
+    [catalogProducts]
+  );
+
   /**
    * Filtrelenmiş katalog ürünleri — arama filtresi products.json'dan ürünleri filtreler.
    * Kullanıcı arama yaptığında katalog ürünleri gösterilir.
    * Duplicate'leri temizler (aynı barcode veya productId'ye sahip ürünleri birleştirir).
    */
   const filteredCatalogProducts = useMemo(() => {
-    const q = searchQuery.trim().toLowerCase();
-    if (!q) return [];
+    const q = debouncedSearchQuery.trim().toLowerCase();
+    if (!q || q.length < MIN_SEARCH_LENGTH) return [];
     const filtered = catalogProducts.filter(
       (product) =>
         (product.name || "").toLowerCase().includes(q) ||
@@ -140,7 +336,7 @@ export default function Home() {
       seen.set(uniqueKey, true);
       return true;
     });
-  }, [catalogProducts, searchQuery]);
+  }, [catalogProducts, debouncedSearchQuery]);
 
   /**
    * Filtrelenmiş Firestore kayıtları — istatistikler için kullanılır.
@@ -149,8 +345,8 @@ export default function Home() {
    * Eğer katalog ürünü seçilmişse, o ürüne ait kayıtları gösterir.
    */
   const filteredItems = useMemo(() => {
-    const q = searchQuery.trim().toLowerCase();
-    if (!q) return items;
+    const q = debouncedSearchQuery.trim().toLowerCase();
+    if (!q || q.length < MIN_SEARCH_LENGTH) return items;
     
     // Eğer katalog ürünü seçilmişse, sadece o ürüne ait kayıtları göster
     if (selectedCatalogProduct) {
@@ -165,7 +361,7 @@ export default function Home() {
         item.name.toLowerCase().includes(q) ||
         item.barcode.toLowerCase().includes(q)
     );
-  }, [items, searchQuery, selectedCatalogProduct]);
+  }, [items, debouncedSearchQuery, selectedCatalogProduct]);
 
   /**
    * İstatistik kartları — filteredItems'ı kullanır (tek kaynak).
@@ -242,6 +438,11 @@ export default function Home() {
     
     return sorted;
   }, [activeTab, missingItems, extraItems, sortField, sortDirection]);
+
+  // Kısa arama kontrolü (örneğin tek karakter yazıldığında)
+  const trimmedSearchQuery = debouncedSearchQuery.trim();
+  const isShortSearchQuery =
+    trimmedSearchQuery.length > 0 && trimmedSearchQuery.length < MIN_SEARCH_LENGTH;
   
   // Sıralama fonksiyonu
   const handleSort = useCallback((field: "name" | "barcode" | "quantity") => {
@@ -381,6 +582,10 @@ export default function Home() {
           // Katalog görünümünden çık ve düzenleme moduna geç
           setSelectedCatalogProduct(null);
         }}
+        onDeleteItem={(item) => {
+          // Ürün kartı içindeki eksik/fazla kayıtları silmek için ortak silme handler'ı
+          void handleDelete(item);
+        }}
         onSuccess={(message) => {
           setToast({ message, type: "success" });
           setSelectedCatalogProduct(null);
@@ -453,7 +658,13 @@ export default function Home() {
           {searchQuery.trim() ? (
             <div className="overflow-hidden rounded-xl border border-zinc-200 dark:border-zinc-700">
               <div className="min-h-[120px]">
-                {isLoading || catalogLoading ? (
+                {isShortSearchQuery ? (
+                  <EmptyState
+                    title="Arama için daha fazla karakter yazın"
+                    message={`En az ${MIN_SEARCH_LENGTH} karakter yazmalısın.`}
+                    icon={PackageSearch}
+                  />
+                ) : isLoading || catalogLoading ? (
                   <ListSkeleton />
                 ) : filteredCatalogProducts.length > 0 ? (
                   // Arama sonuçları: Katalog ürünleri
@@ -623,68 +834,241 @@ export default function Home() {
             </div>
           ) : (
             /* Arama yapılmadığında: Sekmeli listeler göster */
-            <div className="overflow-hidden rounded-xl border border-zinc-200 dark:border-zinc-700">
-              <div
-                role="tablist"
-                aria-label="Eksik ve fazla ürün listeleri"
-                className="flex gap-0 border-b border-zinc-200 bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-800"
-              >
-                <button
-                  type="button"
-                  role="tab"
-                  aria-selected={activeTab === "missing"}
-                  aria-controls="panel-missing"
-                  id="tab-missing"
-                  onClick={() => setActiveTab("missing")}
-                  className={`relative px-4 py-4 text-sm font-medium transition min-h-[44px] sm:px-6 sm:py-4 sm:text-base ${
-                    activeTab === "missing"
-                      ? "text-[var(--color-missing)]"
-                      : "text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200"
-                  }`}
-                >
-                  Eksik Ürünler
-                  {activeTab === "missing" && (
-                    <span
-                      className="absolute bottom-0 left-0 right-0 h-0.5 bg-[var(--color-missing)]"
-                      aria-hidden
-                    />
-                  )}
-                </button>
-                <button
-                  type="button"
-                  role="tab"
-                  aria-selected={activeTab === "extra"}
-                  aria-controls="panel-extra"
-                  id="tab-extra"
-                  onClick={() => setActiveTab("extra")}
-                  className={`relative px-4 py-4 text-sm font-medium transition min-h-[44px] sm:px-6 sm:py-4 sm:text-base ${
-                    activeTab === "extra"
-                      ? "text-[var(--color-extra)]"
-                      : "text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200"
-                  }`}
-                >
-                  Fazla Ürünler
-                  {activeTab === "extra" && (
-                    <span
-                      className="absolute bottom-0 left-0 right-0 h-0.5 bg-[var(--color-extra)]"
-                      aria-hidden
-                    />
-                  )}
-                </button>
-              </div>
-              <div
-                role="tabpanel"
-                id={activeTab === "missing" ? "panel-missing" : "panel-extra"}
-                aria-labelledby={activeTab === "missing" ? "tab-missing" : "tab-extra"}
-                className="min-h-[120px]"
-              >
-                {isLoading || catalogLoading ? (
+        <div className="overflow-hidden rounded-xl border border-zinc-200 dark:border-zinc-700">
+          <div
+            role="tablist"
+            aria-label="Eksik ve fazla ürün listeleri"
+            className="flex gap-0 border-b border-zinc-200 bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-800"
+          >
+            <button
+              type="button"
+              role="tab"
+              aria-selected={activeTab === "missing"}
+              aria-controls="panel-missing"
+              id="tab-missing"
+              onClick={() => setActiveTab("missing")}
+              className={`relative px-4 py-4 text-sm font-medium transition min-h-[44px] sm:px-6 sm:py-4 sm:text-base ${
+                activeTab === "missing"
+                  ? "text-[var(--color-missing)]"
+                  : "text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200"
+              }`}
+            >
+              Eksik Ürünler
+              {activeTab === "missing" && (
+                <span
+                  className="absolute bottom-0 left-0 right-0 h-0.5 bg-[var(--color-missing)]"
+                  aria-hidden
+                />
+              )}
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={activeTab === "extra"}
+              aria-controls="panel-extra"
+              id="tab-extra"
+              onClick={() => setActiveTab("extra")}
+              className={`relative px-4 py-4 text-sm font-medium transition min-h-[44px] sm:px-6 sm:py-4 sm:text-base ${
+                activeTab === "extra"
+                  ? "text-[var(--color-extra)]"
+                  : "text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200"
+              }`}
+            >
+              Fazla Ürünler
+              {activeTab === "extra" && (
+                <span
+                  className="absolute bottom-0 left-0 right-0 h-0.5 bg-[var(--color-extra)]"
+                  aria-hidden
+                />
+              )}
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={activeTab === "expiring"}
+              aria-controls="panel-expiring"
+              id="tab-expiring"
+              onClick={() => setActiveTab("expiring")}
+              className={`relative px-4 py-4 text-sm font-medium transition min-h-[44px] sm:px-6 sm:py-4 sm:text-base ${
+                activeTab === "expiring"
+                  ? "text-orange-600 dark:text-orange-400"
+                  : "text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200"
+              }`}
+            >
+              Yaklaşan SKT
+              {activeTab === "expiring" && (
+                <span
+                  className="absolute bottom-0 left-0 right-0 h-0.5 bg-orange-600 dark:bg-orange-400"
+                  aria-hidden
+                />
+              )}
+            </button>
+          </div>
+          <div
+            role="tabpanel"
+            id={activeTab === "missing" ? "panel-missing" : activeTab === "extra" ? "panel-extra" : "panel-expiring"}
+            aria-labelledby={activeTab === "missing" ? "tab-missing" : activeTab === "extra" ? "tab-extra" : "tab-expiring"}
+            className="min-h-[120px]"
+          >
+            {activeTab === "expiring" ? (
+              // Yaklaşan SKT sekmesi
+              <div className="max-h-[55vh] min-h-[8rem] overflow-auto">
+                {expiringProductsLoading ? (
                   <ListSkeleton />
+                ) : expiringProducts.length === 0 ? (
+                  <EmptyState
+                    title="Yaklaşan SKT kaydı yok"
+                    message="Henüz yaklaşan SKT kaydı eklenmemiş. Ürün kartından 'Yaklaşan SKT Olarak İşaretle' butonunu kullanarak kayıt ekleyebilirsiniz."
+                    icon={Calendar}
+                  />
                 ) : (
-                  <div
-                    className="max-h-[55vh] min-h-[8rem] overflow-auto"
-                    aria-label={activeTab === "missing" ? "Eksik ürünler listesi" : "Fazla ürünler listesi"}
-                  >
+                  <div className="divide-y divide-zinc-200 dark:divide-zinc-700">
+                    {/* Başlık satırı — sadece desktop'ta göster */}
+                    <div className="hidden sm:grid sticky top-0 z-10 gap-4 border-b border-zinc-200 bg-zinc-50 px-4 py-3 text-left text-sm font-medium uppercase tracking-wide text-zinc-500 dark:border-zinc-700 dark:bg-zinc-800/50 dark:text-zinc-400"
+                      style={{ gridTemplateColumns: "minmax(0,1fr) minmax(8rem,10rem) minmax(8rem,10rem) minmax(8rem,10rem) minmax(6rem,8rem) minmax(5rem,6rem)" }}
+                    >
+                      <span>Ürün Adı</span>
+                      <span>Barkod</span>
+                      <span>SKT Tarihi</span>
+                      <span>Çıkılması Gereken</span>
+                      <span>Durum</span>
+                      <span className="text-right">İşlem</span>
+                    </div>
+                    {/* Liste */}
+                    <ul role="list">
+                      {expiringProducts.map((product) => {
+                        const status = getExpiringStatus(product.removalDate);
+                        const imageUrl = getCatalogProductImage(product.barcode);
+                        return (
+                          <li
+                            key={product.id}
+                            className="transition-colors duration-150 hover:bg-zinc-50 dark:hover:bg-zinc-800/50"
+                          >
+                            {/* Mobil görünüm: Kart layout */}
+                            <div className="flex gap-3 px-4 py-3 sm:hidden">
+                              {/* Ürün görseli */}
+                              <div className="shrink-0">
+                                {imageUrl ? (
+                                  <div className="relative h-12 w-12 rounded-lg overflow-hidden border border-zinc-200 bg-white dark:border-zinc-700 dark:bg-zinc-900">
+                                    <Image
+                                      src={imageUrl}
+                                      alt={product.productName}
+                                      fill
+                                      className="object-contain p-1"
+                                      sizes="48px"
+                                    />
+                                  </div>
+                                ) : (
+                                  <div className="flex h-12 w-12 items-center justify-center rounded-lg border border-zinc-200 bg-zinc-50 text-zinc-400 dark:border-zinc-700 dark:bg-zinc-900/60 dark:text-zinc-500">
+                                    <PackageSearch className="size-5" />
+                                  </div>
+                                )}
+                              </div>
+                              <div className="flex-1">
+                                <p className="font-medium text-zinc-900 dark:text-zinc-50">
+                                  {product.productName}
+                                </p>
+                                <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
+                                  Barkod: {product.barcode}
+                                </p>
+                                <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
+                                  SKT: {product.expiryDate}
+                                </p>
+                                <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
+                                  Çıkılması Gereken: {product.removalDate}
+                                </p>
+                                <p className="mt-1 text-sm">
+                                  <span className={`font-medium ${status.color}`}>{status.label}</span>
+                                </p>
+                              </div>
+                              <div className="flex gap-2">
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setEditingExpiringProduct(product);
+                                  }}
+                                  className="rounded-lg p-1.5 text-zinc-500 transition hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-700 dark:hover:text-zinc-300"
+                                  aria-label="Düzenle"
+                                >
+                                  <Pencil className="size-4" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleDeleteExpiringProduct(product.id);
+                                  }}
+                                  className="rounded-lg p-1.5 text-red-600 transition hover:bg-red-50 hover:text-red-700 dark:text-red-400 dark:hover:bg-red-900/30 dark:hover:text-red-200"
+                                  aria-label="Sil"
+                                >
+                                  <Trash2 className="size-4" />
+                                </button>
+                              </div>
+                            </div>
+                            {/* Desktop görünüm: Tablo satırı */}
+                            <div
+                              className="hidden sm:grid gap-4 px-4 py-3 text-sm"
+                              style={{
+                                gridTemplateColumns:
+                                  "minmax(0,1.4fr) minmax(8rem,10rem) minmax(8rem,10rem) minmax(8rem,10rem) minmax(6rem,8rem) minmax(5rem,6rem)",
+                              }}
+                            >
+                              <span className="flex items-center gap-3 font-medium text-zinc-900 dark:text-zinc-50">
+                                {imageUrl ? (
+                                  <span className="relative h-10 w-10 shrink-0 overflow-hidden rounded-lg border border-zinc-200 bg-white dark:border-zinc-700 dark:bg-zinc-900">
+                                    <Image
+                                      src={imageUrl}
+                                      alt={product.productName}
+                                      fill
+                                      className="object-contain p-1"
+                                      sizes="40px"
+                                    />
+                                  </span>
+                                ) : (
+                                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-zinc-200 bg-zinc-50 text-zinc-400 dark:border-zinc-700 dark:bg-zinc-900/60 dark:text-zinc-500">
+                                    <PackageSearch className="size-5" />
+                                  </span>
+                                )}
+                                <span className="line-clamp-2">{product.productName}</span>
+                              </span>
+                              <span className="text-zinc-600 dark:text-zinc-400">{product.barcode}</span>
+                              <span className="text-zinc-600 dark:text-zinc-400">{product.expiryDate}</span>
+                              <span className="text-zinc-600 dark:text-zinc-400">{product.removalDate}</span>
+                              <span className={`font-medium ${status.color}`}>{status.label}</span>
+                              <div className="flex items-center justify-end gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => setEditingExpiringProduct(product)}
+                                  className="rounded-lg p-1.5 text-zinc-500 transition hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-700 dark:hover:text-zinc-300"
+                                  aria-label="Düzenle"
+                                >
+                                  <Pencil className="size-4" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteExpiringProduct(product.id)}
+                                  className="rounded-lg p-1.5 text-red-600 transition hover:bg-red-50 hover:text-red-700 dark:text-red-400 dark:hover:bg-red-900/30 dark:hover:text-red-200"
+                                  aria-label="Sil"
+                                >
+                                  <Trash2 className="size-4" />
+                                </button>
+                              </div>
+                            </div>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            ) : isLoading || catalogLoading ? (
+              <ListSkeleton />
+            ) : (
+              <div
+                className="max-h-[55vh] min-h-[8rem] overflow-auto"
+                aria-label={activeTab === "missing" ? "Eksik ürünler listesi" : "Fazla ürünler listesi"}
+              >
                 {/* Başlık satırı — sadece desktop'ta göster */}
                 <div
                   className="hidden sm:grid sticky top-0 z-10 gap-4 border-b border-zinc-200 bg-zinc-50 px-4 py-3 text-left text-sm font-medium uppercase tracking-wide text-zinc-500 dark:border-zinc-700 dark:bg-zinc-800/50 dark:text-zinc-400"
@@ -700,7 +1084,7 @@ export default function Home() {
                       sortField === "name" ? "text-zinc-900 dark:text-zinc-100" : ""
                     }`}
                   >
-                    <span>Ürün</span>
+                  <span>Ürün</span>
                     {sortField === "name" && (
                       sortDirection === "asc" ? <ArrowUp className="size-3" /> : <ArrowDown className="size-3" />
                     )}
@@ -712,7 +1096,7 @@ export default function Home() {
                       sortField === "barcode" ? "text-zinc-900 dark:text-zinc-100" : ""
                     }`}
                   >
-                    <span>Barkod</span>
+                  <span>Barkod</span>
                     {sortField === "barcode" && (
                       sortDirection === "asc" ? <ArrowUp className="size-3" /> : <ArrowDown className="size-3" />
                     )}
@@ -724,7 +1108,7 @@ export default function Home() {
                       sortField === "quantity" ? "text-zinc-900 dark:text-zinc-100" : ""
                     }`}
                   >
-                    <span>Miktar</span>
+                  <span>Miktar</span>
                     {sortField === "quantity" && (
                       sortDirection === "asc" ? <ArrowUp className="size-3" /> : <ArrowDown className="size-3" />
                     )}
@@ -832,89 +1216,154 @@ export default function Home() {
                         {/* Desktop görünüm: Grid layout */}
                         <div
                           className="hidden sm:grid gap-4 px-4 py-3 text-sm"
-                          style={{ 
-                            gridTemplateColumns: "3rem minmax(0,1fr) minmax(8rem,10rem) minmax(3rem,4rem) minmax(0,1fr) minmax(5rem,6rem)",
-                          }}
-                        >
-                          <span className="flex items-center justify-center">
-                            {item.imageUrl ? (
-                              <img
-                                src={item.imageUrl}
-                                alt={item.name}
-                                className="size-10 rounded object-cover"
-                                width={40}
-                                height={40}
-                                loading="lazy"
-                              />
-                            ) : (
-                              <div className="size-10 rounded bg-zinc-200 dark:bg-zinc-700 flex items-center justify-center">
-                                <PackageX className="size-5 text-zinc-400 dark:text-zinc-500" />
-                              </div>
-                            )}
-                          </span>
-                          <span className="min-w-0 font-medium text-zinc-900 dark:text-zinc-100">
-                            {item.name}
-                          </span>
-                          <span className="tabular-nums text-zinc-600 dark:text-zinc-300 break-all">
-                            {item.barcode}
-                          </span>
-                          <span className="tabular-nums text-zinc-600 dark:text-zinc-300">
-                            {item.quantity}
-                          </span>
-                          <span className="min-w-0 truncate text-zinc-500 dark:text-zinc-400">
-                            {item.notes || "—"}
-                          </span>
-                          <span className="flex items-center justify-end gap-1">
-                            <button
-                              type="button"
+                        style={{ 
+                          gridTemplateColumns: "3rem minmax(0,1fr) minmax(8rem,10rem) minmax(3rem,4rem) minmax(0,1fr) minmax(5rem,6rem)",
+                        }}
+                      >
+                        <span className="flex items-center justify-center">
+                          {item.imageUrl ? (
+                            <img
+                              src={item.imageUrl}
+                              alt={item.name}
+                              className="size-10 rounded object-cover"
+                              width={40}
+                              height={40}
+                              loading="lazy"
+                            />
+                          ) : (
+                            <div className="size-10 rounded bg-zinc-200 dark:bg-zinc-700 flex items-center justify-center">
+                              <PackageX className="size-5 text-zinc-400 dark:text-zinc-500" />
+                            </div>
+                          )}
+                        </span>
+                        <span className="min-w-0 font-medium text-zinc-900 dark:text-zinc-100">
+                          {item.name}
+                        </span>
+                        <span className="tabular-nums text-zinc-600 dark:text-zinc-300 break-all">
+                          {item.barcode}
+                        </span>
+                        <span className="tabular-nums text-zinc-600 dark:text-zinc-300">
+                          {item.quantity}
+                        </span>
+                        <span className="min-w-0 truncate text-zinc-500 dark:text-zinc-400">
+                          {item.notes || "—"}
+                        </span>
+                        <span className="flex items-center justify-end gap-1">
+                          <button
+                            type="button"
                               onClick={(e) => {
                                 e.stopPropagation();
                                 handleEdit(item);
                               }}
                               className="rounded-lg p-1.5 text-zinc-500 transition hover:bg-zinc-200 hover:text-zinc-700 dark:hover:bg-zinc-700 dark:hover:text-zinc-300"
-                              aria-label="Ürünü düzenle"
-                              title="Düzenle"
-                            >
+                            aria-label="Ürünü düzenle"
+                            title="Düzenle"
+                          >
                               <Pencil className="size-4" />
-                            </button>
-                            <button
-                              type="button"
+                          </button>
+                          <button
+                            type="button"
                               onClick={(e) => {
                                 e.stopPropagation();
                                 handleDelete(item);
                               }}
-                              disabled={deletingId === item.id}
+                            disabled={deletingId === item.id}
                               className="rounded-lg p-1.5 text-red-600 transition hover:bg-red-50 hover:text-red-700 disabled:opacity-50 dark:text-red-400 dark:hover:text-red-300"
-                              aria-label="Ürünü sil"
-                              title="Sil"
-                            >
+                            aria-label="Ürünü sil"
+                            title="Sil"
+                          >
                               <Trash2 className="size-4" />
-                            </button>
-                          </span>
+                          </button>
+                        </span>
                           {(item.createdAt || item.updatedAt) && (
-                            <span
-                              className="col-span-5 mt-0.5 text-xs text-zinc-400 dark:text-zinc-500"
-                              style={{ gridColumn: "span 5" }}
-                              aria-hidden
-                            >
+                          <span
+                            className="col-span-5 mt-0.5 text-xs text-zinc-400 dark:text-zinc-500"
+                            style={{ gridColumn: "span 5" }}
+                            aria-hidden
+                          >
                               {item.updatedAt ? (
                                 <>Son Güncelleme: {formatDateTime(item.updatedAt)}</>
                               ) : (
                                 <>Eklenme: {formatDateTime(item.createdAt)}</>
                               )}
-                            </span>
-                          )}
+                          </span>
+                        )}
                         </div>
                       </li>
                     ))}
                   </ul>
                 )}
-                  </div>
-                )}
               </div>
-            </div>
+            )}
+          </div>
+        </div>
           )}
-        </section>
+      </section>
+      )}
+
+      {/* Yaklaşan SKT uyarı simgesi (sabit, küçük buton) */}
+      {showExpiringNotification && expiringProductsToday.length > 0 && (
+        <div className="fixed right-3 top-4 sm:top-6 z-40 flex items-center gap-1.5">
+          {/* Açma butonu */}
+          <button
+            type="button"
+            onClick={() => setIsExpiringNotificationOpen(true)}
+            className="flex items-center gap-2 rounded-full bg-orange-600 px-3 py-2 text-xs sm:text-sm font-medium text-white shadow-lg transition hover:bg-orange-700 active:scale-95 motion-safe:animate-[skt-alert-blink_1.4s_ease-in-out_infinite]"
+          >
+            <AlertTriangle className="size-4" />
+            <span className="hidden sm:inline">
+              Bugün çıkılacak ürünler var! Lütfen kontrol ediniz...
+            </span>
+            <span className="sm:hidden">Bugün SKT uyarısı</span>
+          </button>
+          {/* Kapatma butonu */}
+          <button
+            type="button"
+            onClick={handleCloseExpiringAlertBadge}
+            className="flex items-center justify-center rounded-full bg-zinc-800/90 px-2 py-1 text-[11px] text-zinc-100 shadow-md ring-1 ring-zinc-700/70 hover:bg-zinc-700 active:scale-95"
+            aria-label="SKT uyarısını kapat"
+            title="Uyarıyı kapat"
+          >
+            ×
+          </button>
+        </div>
+      )}
+
+      {/* Yaklaşan SKT Bildirim Penceresi */}
+      {showExpiringNotification &&
+        isExpiringNotificationOpen &&
+        expiringProductsToday.length > 0 && (
+          <ExpiringProductNotification
+            products={expiringProductsToday}
+            onClose={handleCloseExpiringNotification}
+            catalogProducts={catalogProducts}
+          />
+        )}
+
+      {/* Yaklaşan SKT Düzenleme Modal */}
+      {editingExpiringProduct && (
+        <ExpiringProductModal
+          isOpen={true}
+          onClose={() => setEditingExpiringProduct(null)}
+          product={{
+            barcode: editingExpiringProduct.barcode,
+            name: editingExpiringProduct.productName,
+          }}
+          existingProduct={editingExpiringProduct}
+          onSuccess={(message) => {
+            setToast({ message, type: "success" });
+            setEditingExpiringProduct(null);
+            // Listeyi yeniden yükle
+            fetch("/api/expiring-products")
+              .then((res) => res.json())
+              .then((data) => {
+                if (data.success && Array.isArray(data.products)) {
+                  setExpiringProducts(sortExpiringProductsByRemovalDate(data.products));
+                }
+              })
+              .catch(console.error);
+          }}
+        />
       )}
     </div>
   );

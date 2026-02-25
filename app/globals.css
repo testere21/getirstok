@@ -1,5 +1,35 @@
 @import "tailwindcss";
 
+@keyframes skt-alert-blink {
+  0% {
+    transform: translateY(0) scale(1);
+    box-shadow: 0 8px 20px rgba(248, 113, 113, 0.4);
+  }
+  50% {
+    transform: translateY(-1px) scale(1.03);
+    box-shadow: 0 12px 28px rgba(248, 113, 113, 0.65);
+  }
+  100% {
+    transform: translateY(0) scale(1);
+    box-shadow: 0 8px 20px rgba(248, 113, 113, 0.4);
+  }
+}
+
+@keyframes expiring-pop {
+  0% {
+    opacity: 0;
+    transform: translateY(-8px) scale(0.96);
+  }
+  60% {
+    opacity: 1;
+    transform: translateY(0) scale(1.02);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
 :root {
   --background: #ffffff;
   --foreground: #171717;

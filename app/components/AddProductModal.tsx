@@ -1,11 +1,13 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Search, X, Pencil, PackageMinus, PackagePlus, RefreshCw } from "lucide-react";
+import { Search, X, Pencil, PackageMinus, PackagePlus, RefreshCw, Trash2, Calendar, AlertTriangle } from "lucide-react";
 import { addStockItem, updateStockItem } from "@/app/lib/stockService";
 import { ErrorMessage } from "./ErrorMessage";
 import { BarcodeImage } from "./BarcodeImage";
-import type { StockItemWithId } from "@/app/lib/types";
+import { ExpiringProductModal } from "./ExpiringProductModal";
+import { ProductIssueReportModal } from "./ProductIssueReportModal";
+import type { StockItemWithId, ExpiringProductWithId, ProductIssueType } from "@/app/lib/types";
 import { formatDateTime } from "@/app/lib/utils";
 
 export type AddProductModalType = "missing" | "extra";
@@ -32,13 +34,26 @@ interface AddProductModalProps {
   onAddFromCatalog?: (product: CatalogProduct, type: AddProductModalType) => void;
   /** Kayıt düzenleme için callback */
   onEditItem?: (item: StockItemWithId) => void;
+  /** Kayıt silme için callback (sadece ilgili eksik/fazla kaydı siler, ürünü değil) */
+  onDeleteItem?: (item: StockItemWithId) => void;
   /** Başarılı işlem sonrası çağrılır (toast göstermek için) */
   onSuccess?: (message: string) => void;
 }
 
 const initialForm = { name: "", barcode: "", quantity: "", notes: "" };
 
-export function AddProductModal({ isOpen, onClose, type, initialItem, catalogProduct, stockItems = [], onAddFromCatalog, onEditItem, onSuccess }: AddProductModalProps) {
+export function AddProductModal({
+  isOpen,
+  onClose,
+  type,
+  initialItem,
+  catalogProduct,
+  stockItems = [],
+  onAddFromCatalog,
+  onEditItem,
+  onDeleteItem,
+  onSuccess,
+}: AddProductModalProps) {
   const [name, setName] = useState(initialForm.name);
   const [barcode, setBarcode] = useState(initialForm.barcode);
   const [quantity, setQuantity] = useState(initialForm.quantity);
@@ -61,6 +76,17 @@ export function AddProductModal({ isOpen, onClose, type, initialItem, catalogPro
   const [supplierReturnDate, setSupplierReturnDate] = useState<number | null>(null);
   const [supplierReturnDateLoading, setSupplierReturnDateLoading] = useState(false);
   const [supplierReturnDateError, setSupplierReturnDateError] = useState<string | null>(null);
+  /* Yaklaşan SKT */
+  const [expiringProductModalOpen, setExpiringProductModalOpen] = useState(false);
+  const [existingExpiringProduct, setExistingExpiringProduct] = useState<ExpiringProductWithId | null>(null);
+  /* Ürün/Stok sorunu bildirimi */
+  const [productIssueModalOpen, setProductIssueModalOpen] = useState(false);
+  const [productIssueData, setProductIssueData] = useState<{
+    type: ProductIssueType;
+    barcode: string;
+    productName?: string;
+    source?: string;
+  } | null>(null);
 
   const isEditMode = Boolean(initialItem?.id);
   const isCatalogViewMode = Boolean(catalogProduct && !isEditMode && !showFormFromCatalog);
@@ -223,6 +249,66 @@ export function AddProductModal({ isOpen, onClose, type, initialItem, catalogPro
     }
   }, [isOpen, initialItem, catalogProduct, type, showFormFromCatalog]);
 
+  // Ürün kartı açıldığında cache'ten tedarikçi iade tarihini otomatik yükle
+  useEffect(() => {
+    // Sadece modal açıkken ve barkod varsa çalış
+    if (!isOpen) return;
+    
+    const barcodeToCheck = catalogProduct?.barcode || initialItem?.barcode;
+    if (!barcodeToCheck) return;
+
+    // Arka planda sessizce cache kontrolü yap (loading/error state kullanma)
+    const loadCachedSupplierReturnDate = async () => {
+      try {
+        const response = await fetch(
+          `/api/getir-supplier-return-date-cache?barcode=${encodeURIComponent(barcodeToCheck)}`
+        );
+        const data = await response.json();
+
+        if (data.success && data.days !== null) {
+          // Cache'te değer varsa otomatik olarak göster
+          setSupplierReturnDate(data.days);
+          setSupplierReturnDateError(null);
+          console.log("[AddProductModal] Cache'ten tedarikçi iade tarihi yüklendi:", data.days, "gün");
+        }
+        // Cache'te yoksa sessizce devam et (hata gösterme)
+      } catch (error) {
+        // Hata durumunda sessizce devam et (kullanıcıya hata gösterme)
+        console.log("[AddProductModal] Cache kontrolü başarısız (normal, cache yok olabilir):", error);
+      }
+    };
+
+    loadCachedSupplierReturnDate();
+  }, [isOpen, catalogProduct?.barcode, initialItem?.barcode]);
+
+  // Ürün kartı açıldığında mevcut yaklaşan SKT kaydını kontrol et
+  useEffect(() => {
+    if (!isOpen) return;
+    
+    const barcodeToCheck = catalogProduct?.barcode || initialItem?.barcode;
+    if (!barcodeToCheck) return;
+
+    const checkExistingExpiringProduct = async () => {
+      try {
+        const response = await fetch(
+          `/api/expiring-products?barcode=${encodeURIComponent(barcodeToCheck)}`
+        );
+        const data = await response.json();
+
+        if (data.success && data.product) {
+          setExistingExpiringProduct(data.product);
+        } else {
+          setExistingExpiringProduct(null);
+        }
+      } catch (error) {
+        console.log("[AddProductModal] Yaklaşan SKT kontrolü başarısız:", error);
+        setExistingExpiringProduct(null);
+      }
+    };
+
+    checkExistingExpiringProduct();
+  }, [isOpen, catalogProduct?.barcode, initialItem?.barcode]);
+
   const filteredCatalog = useMemo(() => {
     const q = catalogSearch.trim().toLowerCase();
     if (!q) return catalog;
@@ -232,6 +318,28 @@ export function AddProductModal({ isOpen, onClose, type, initialItem, catalogPro
         p.barcode.toLowerCase().includes(q)
     );
   }, [catalog, catalogSearch]);
+
+  const openProductIssueModal = (
+    issueType: ProductIssueType,
+    source: string,
+    override?: { barcode?: string; productName?: string }
+  ) => {
+    const baseBarcode = override?.barcode || catalogProduct?.barcode || initialItem?.barcode || "";
+    const baseName = override?.productName || catalogProduct?.name || initialItem?.name || "";
+
+    if (!baseBarcode.trim()) {
+      setSubmitError("Bildirim için barkod bulunamadı.");
+      return;
+    }
+
+    setProductIssueData({
+      type: issueType,
+      barcode: baseBarcode.trim(),
+      productName: baseName || undefined,
+      source,
+    });
+    setProductIssueModalOpen(true);
+  };
 
   // Getir stok bilgisini çekme fonksiyonu
   const handleGetGetirStock = async () => {
@@ -449,9 +557,9 @@ export function AddProductModal({ isOpen, onClose, type, initialItem, catalogPro
                 </svg>
               </button>
             )}
-            <h2 id="modal-title" className="text-lg font-semibold text-zinc-900 dark:text-zinc-50">
-              {title}
-            </h2>
+          <h2 id="modal-title" className="text-lg font-semibold text-zinc-900 dark:text-zinc-50">
+            {title}
+          </h2>
           </div>
           <button
             type="button"
@@ -535,25 +643,27 @@ export function AddProductModal({ isOpen, onClose, type, initialItem, catalogPro
                   </div>
                 )}
 
-                {/* Kaç Gün Önceden Çıkılacak Butonu */}
-                <button
-                  type="button"
-                  onClick={handleGetSupplierReturnDate}
-                  disabled={supplierReturnDateLoading}
-                  className="flex items-center justify-center gap-2 rounded-lg border border-zinc-300 bg-white px-4 py-2 text-sm font-medium text-zinc-700 transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700"
-                >
-                  {supplierReturnDateLoading ? (
-                    <>
-                      <RefreshCw className="size-4 animate-spin" />
-                      <span>Yükleniyor...</span>
-                    </>
-                  ) : (
-                    <>
-                      <RefreshCw className="size-4" />
-                      <span>Kaç Gün Önceden Çıkılacak</span>
-                    </>
-                  )}
-                </button>
+                {/* Kaç Gün Önceden Çıkılacak Butonu - Sadece değer yoksa göster */}
+                {supplierReturnDate === null && (
+                  <button
+                    type="button"
+                    onClick={handleGetSupplierReturnDate}
+                    disabled={supplierReturnDateLoading}
+                    className="flex items-center justify-center gap-2 rounded-lg border border-zinc-300 bg-white px-4 py-2 text-sm font-medium text-zinc-700 transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700"
+                  >
+                    {supplierReturnDateLoading ? (
+                      <>
+                        <RefreshCw className="size-4 animate-spin" />
+                        <span>Yükleniyor...</span>
+                      </>
+                    ) : (
+                      <>
+                        <RefreshCw className="size-4" />
+                        <span>Kaç Gün Önceden Çıkılacak</span>
+                      </>
+                    )}
+                  </button>
+                )}
 
                 {/* Tedarikçi İade Tarihi Gösterimi */}
                 {supplierReturnDate !== null && !supplierReturnDateError && (
@@ -577,6 +687,59 @@ export function AddProductModal({ isOpen, onClose, type, initialItem, catalogPro
                     )}
                   </div>
                 )}
+
+                {/* Yaklaşan SKT Olarak İşaretle Butonu */}
+                {(catalogProduct || initialItem) && (
+                <div className="flex flex-col gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setExpiringProductModalOpen(true)}
+                    className="flex items-center justify-center gap-2 rounded-lg border border-zinc-300 bg-white px-4 py-2 text-sm font-medium text-zinc-700 transition hover:bg-zinc-50 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700"
+                  >
+                    <Calendar className="size-4" />
+                    <span>
+                      {existingExpiringProduct
+                        ? "Yaklaşan SKT'yi Düzenle"
+                        : "Yaklaşan SKT Olarak İşaretle"}
+                    </span>
+                  </button>
+                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        openProductIssueModal("product_missing", type === "missing" ? "missing_tab" : "extra_tab")
+                      }
+                      className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-xs font-medium text-red-700 transition hover:bg-red-100 dark:border-red-700 dark:bg-red-900/30 dark:text-red-200 dark:hover:bg-red-900/50"
+                    >
+                      <AlertTriangle className="size-3.5" />
+                      Ürün Yok Bildir
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        openProductIssueModal("stock_missing", type === "missing" ? "missing_tab" : "extra_tab")
+                      }
+                      className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-700 transition hover:bg-amber-100 dark:border-amber-700 dark:bg-amber-900/30 dark:text-amber-200 dark:hover:bg-amber-900/50"
+                    >
+                      <AlertTriangle className="size-3.5" />
+                      Stok Yok Bildir
+                    </button>
+                  </div>
+                </div>
+                )}
+
+                {/* Mevcut Yaklaşan SKT Bilgisi */}
+                {existingExpiringProduct && (
+                  <div className="rounded-lg border border-orange-200 bg-orange-50 p-3 dark:border-orange-800 dark:bg-orange-900/20">
+                    <p className="text-sm font-medium text-orange-800 dark:text-orange-300">
+                      <span className="font-semibold">SKT:</span> {existingExpiringProduct.expiryDate}
+                    </p>
+                    <p className="mt-1 text-sm font-medium text-orange-800 dark:text-orange-300">
+                      <span className="font-semibold">Çıkılması Gereken Tarih:</span>{" "}
+                      {existingExpiringProduct.removalDate}
+                    </p>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -584,32 +747,32 @@ export function AddProductModal({ isOpen, onClose, type, initialItem, catalogPro
             {(productStatus.hasMissing || productStatus.hasExtra) && (
               <div className={`grid gap-4 ${productStatus.isOnlyMissing || productStatus.isOnlyExtra ? "grid-cols-1" : "grid-cols-2"}`}>
                 {productStatus.hasMissing && (
-                  <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-4 dark:border-zinc-700 dark:bg-zinc-800/50">
-                    <p className="text-sm font-medium text-zinc-500 dark:text-zinc-400">
-                      Toplam Eksik
-                    </p>
-                    <p className="mt-1 text-2xl font-semibold tabular-nums" style={{ color: "var(--color-missing)" }}>
-                      {catalogProductItems.missing.reduce((sum, item) => sum + item.quantity, 0)}
-                    </p>
-                    <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
-                      {catalogProductItems.missing.length} kayıt
-                    </p>
-                  </div>
+              <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-4 dark:border-zinc-700 dark:bg-zinc-800/50">
+                <p className="text-sm font-medium text-zinc-500 dark:text-zinc-400">
+                  Toplam Eksik
+                </p>
+                <p className="mt-1 text-2xl font-semibold tabular-nums" style={{ color: "var(--color-missing)" }}>
+                  {catalogProductItems.missing.reduce((sum, item) => sum + item.quantity, 0)}
+                </p>
+                <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
+                  {catalogProductItems.missing.length} kayıt
+                </p>
+              </div>
                 )}
                 {productStatus.hasExtra && (
-                  <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-4 dark:border-zinc-700 dark:bg-zinc-800/50">
-                    <p className="text-sm font-medium text-zinc-500 dark:text-zinc-400">
-                      Toplam Fazla
-                    </p>
-                    <p className="mt-1 text-2xl font-semibold tabular-nums" style={{ color: "var(--color-extra)" }}>
-                      {catalogProductItems.extra.reduce((sum, item) => sum + item.quantity, 0)}
-                    </p>
-                    <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
-                      {catalogProductItems.extra.length} kayıt
-                    </p>
-                  </div>
-                )}
+              <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-4 dark:border-zinc-700 dark:bg-zinc-800/50">
+                <p className="text-sm font-medium text-zinc-500 dark:text-zinc-400">
+                  Toplam Fazla
+                </p>
+                <p className="mt-1 text-2xl font-semibold tabular-nums" style={{ color: "var(--color-extra)" }}>
+                  {catalogProductItems.extra.reduce((sum, item) => sum + item.quantity, 0)}
+                </p>
+                <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
+                  {catalogProductItems.extra.length} kayıt
+                </p>
               </div>
+                )}
+            </div>
             )}
 
             {/* Kayıt listesi */}
@@ -661,6 +824,25 @@ export function AddProductModal({ isOpen, onClose, type, initialItem, catalogPro
                               >
                                 <Pencil className="size-4" />
                               </button>
+                              {onDeleteItem && (
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    if (
+                                      confirm(
+                                        "Bu eksik kaydı silmek istediğinize emin misiniz?"
+                                      )
+                                    ) {
+                                      onDeleteItem(item);
+                                    }
+                                  }}
+                                  className="rounded-lg p-1.5 text-red-600 transition hover:bg-red-50 hover:text-red-700 dark:text-red-400 dark:hover:bg-red-900/30 dark:hover:text-red-200"
+                                  aria-label="Eksik kaydı sil"
+                                >
+                                  <Trash2 className="size-4" />
+                                </button>
+                              )}
                             </div>
                           </div>
                         </div>
@@ -704,9 +886,8 @@ export function AddProductModal({ isOpen, onClose, type, initialItem, catalogPro
                                 type="button"
                                 onClick={() => {
                                   if (onEditItem) {
+                                    // Fazla kayıt için de düzenleme moduna geç
                                     onEditItem(item);
-                                    // Modal'ı kapat ve düzenleme moduna geç
-                                    onClose();
                                   }
                                 }}
                                 className="rounded-lg p-1.5 text-zinc-500 transition hover:bg-zinc-200 hover:text-zinc-700 dark:hover:bg-zinc-700 dark:hover:text-zinc-300"
@@ -714,6 +895,25 @@ export function AddProductModal({ isOpen, onClose, type, initialItem, catalogPro
                               >
                                 <Pencil className="size-4" />
                               </button>
+                              {onDeleteItem && (
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    if (
+                                      confirm(
+                                        "Bu fazla kaydı silmek istediğinize emin misiniz?"
+                                      )
+                                    ) {
+                                      onDeleteItem(item);
+                                    }
+                                  }}
+                                  className="rounded-lg p-1.5 text-red-600 transition hover:bg-red-50 hover:text-red-700 dark:text-red-400 dark:hover:bg-red-900/30 dark:hover:text-red-200"
+                                  aria-label="Fazla kaydı sil"
+                                >
+                                  <Trash2 className="size-4" />
+                                </button>
+                              )}
                             </div>
                           </div>
                         </div>
@@ -726,36 +926,36 @@ export function AddProductModal({ isOpen, onClose, type, initialItem, catalogPro
 
             {/* Ekleme butonları - Sadece ürün hiç eklenmemişse göster */}
             {!productStatus.hasMissing && !productStatus.hasExtra && (
-              <div className="grid grid-cols-2 gap-3">
-                <button
-                  type="button"
-                  onClick={() => {
+            <div className="grid grid-cols-2 gap-3">
+              <button
+                type="button"
+                onClick={() => {
                     if (catalogProduct) {
                       setFormTypeFromCatalog("missing");
                       setShowFormFromCatalog(true);
-                    }
-                  }}
-                  className="flex items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-medium text-white transition-all duration-200 hover:opacity-90 hover:scale-[1.02] active:scale-[0.98]"
-                  style={{ backgroundColor: "var(--color-missing)" }}
-                >
-                  <PackageMinus className="size-5" />
-                  Eksik Ekle
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
+                  }
+                }}
+                className="flex items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-medium text-white transition-all duration-200 hover:opacity-90 hover:scale-[1.02] active:scale-[0.98]"
+                style={{ backgroundColor: "var(--color-missing)" }}
+              >
+                <PackageMinus className="size-5" />
+                Eksik Ekle
+              </button>
+              <button
+                type="button"
+                onClick={() => {
                     if (catalogProduct) {
                       setFormTypeFromCatalog("extra");
                       setShowFormFromCatalog(true);
-                    }
-                  }}
-                  className="flex items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-medium text-white transition-all duration-200 hover:opacity-90 hover:scale-[1.02] active:scale-[0.98]"
-                  style={{ backgroundColor: "var(--color-extra)" }}
-                >
-                  <PackagePlus className="size-5" />
-                  Fazla Ekle
-                </button>
-              </div>
+                  }
+                }}
+                className="flex items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-medium text-white transition-all duration-200 hover:opacity-90 hover:scale-[1.02] active:scale-[0.98]"
+                style={{ backgroundColor: "var(--color-extra)" }}
+              >
+                <PackagePlus className="size-5" />
+                Fazla Ekle
+              </button>
+            </div>
             )}
             {/* Eğer ürün hem eksik hem fazla eklenmişse uyarı göster */}
             {productStatus.hasMissing && productStatus.hasExtra && (
@@ -859,25 +1059,27 @@ export function AddProductModal({ isOpen, onClose, type, initialItem, catalogPro
                     </div>
                   )}
 
-                  {/* Kaç Gün Önceden Çıkılacak Butonu */}
-                  <button
-                    type="button"
-                    onClick={handleGetSupplierReturnDate}
-                    disabled={supplierReturnDateLoading}
-                    className="flex items-center justify-center gap-2 rounded-lg border border-zinc-300 bg-white px-4 py-2 text-sm font-medium text-zinc-700 transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700"
-                  >
-                    {supplierReturnDateLoading ? (
-                      <>
-                        <RefreshCw className="size-4 animate-spin" />
-                        <span>Yükleniyor...</span>
-                      </>
-                    ) : (
-                      <>
-                        <RefreshCw className="size-4" />
-                        <span>Kaç Gün Önceden Çıkılacak</span>
-                      </>
-                    )}
-                  </button>
+                  {/* Kaç Gün Önceden Çıkılacak Butonu - Sadece değer yoksa göster */}
+                  {supplierReturnDate === null && (
+                    <button
+                      type="button"
+                      onClick={handleGetSupplierReturnDate}
+                      disabled={supplierReturnDateLoading}
+                      className="flex items-center justify-center gap-2 rounded-lg border border-zinc-300 bg-white px-4 py-2 text-sm font-medium text-zinc-700 transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700"
+                    >
+                      {supplierReturnDateLoading ? (
+                        <>
+                          <RefreshCw className="size-4 animate-spin" />
+                          <span>Yükleniyor...</span>
+                        </>
+                      ) : (
+                        <>
+                          <RefreshCw className="size-4" />
+                          <span>Kaç Gün Önceden Çıkılacak</span>
+                        </>
+                      )}
+                    </button>
+                  )}
 
                   {/* Tedarikçi İade Tarihi Gösterimi */}
                   {supplierReturnDate !== null && !supplierReturnDateError && (
@@ -898,6 +1100,60 @@ export function AddProductModal({ isOpen, onClose, type, initialItem, catalogPro
                         <p className="mt-1 text-xs text-red-600 dark:text-red-400">
                           Lütfen Chrome eklentisini kullanarak warehouse.getir.com'da yeni token ekleyin.
                         </p>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Yaklaşan SKT Olarak İşaretle & Ürün/Stok Yok Bildir Butonları */}
+                  {initialItem && (
+                    <div className="space-y-2">
+                      <button
+                        type="button"
+                        onClick={() => setExpiringProductModalOpen(true)}
+                        className="flex items-center justify-center gap-2 rounded-lg border border-zinc-300 bg-white px-4 py-2 text-sm font-medium text-zinc-700 transition hover:bg-zinc-50 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700"
+                      >
+                        <Calendar className="size-4" />
+                        <span>
+                          {existingExpiringProduct
+                            ? "Yaklaşan SKT'yi Düzenle"
+                            : "Yaklaşan SKT Olarak İşaretle"}
+                        </span>
+                      </button>
+
+                      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            openProductIssueModal("product_missing", type === "missing" ? "missing_tab" : "extra_tab")
+                          }
+                          className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-xs font-medium text-red-700 transition hover:bg-red-100 dark:border-red-700 dark:bg-red-900/30 dark:text-red-200 dark:hover:bg-red-900/50"
+                        >
+                          <AlertTriangle className="size-3.5" />
+                          Ürün Yok Bildir
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            openProductIssueModal("stock_missing", type === "missing" ? "missing_tab" : "extra_tab")
+                          }
+                          className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-700 transition hover:bg-amber-100 dark:border-amber-700 dark:bg-amber-900/30 dark:text-amber-200 dark:hover:bg-amber-900/50"
+                        >
+                          <AlertTriangle className="size-3.5" />
+                          Stok Yok Bildir
+                        </button>
+                      </div>
+
+                      {/* Mevcut Yaklaşan SKT Bilgisi */}
+                      {existingExpiringProduct && (
+                        <div className="rounded-lg border border-orange-200 bg-orange-50 p-3 dark:border-orange-800 dark:bg-orange-900/20">
+                          <p className="text-sm font-medium text-orange-800 dark:text-orange-300">
+                            <span className="font-semibold">SKT:</span> {existingExpiringProduct.expiryDate}
+                          </p>
+                          <p className="mt-1 text-sm font-medium text-orange-800 dark:text-orange-300">
+                            <span className="font-semibold">Çıkılması Gereken Tarih:</span>{" "}
+                            {existingExpiringProduct.removalDate}
+                          </p>
+                        </div>
                       )}
                     </div>
                   )}
@@ -967,7 +1223,23 @@ export function AddProductModal({ isOpen, onClose, type, initialItem, catalogPro
                   </div>
                   <div className="max-h-44 overflow-y-auto rounded-lg border border-zinc-200 dark:border-zinc-700">
                     {filteredCatalog.length === 0 ? (
-                      <p className="px-3 py-4 text-center text-sm text-zinc-500 dark:text-zinc-400">Eşleşen ürün yok.</p>
+                      <div className="px-3 py-4 text-center text-sm text-zinc-500 dark:text-zinc-400 space-y-2">
+                        <p>Eşleşen ürün yok.</p>
+                        {catalogSearch.trim().length >= 6 && (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              openProductIssueModal("product_missing", "search_catalog", {
+                                barcode: catalogSearch.trim(),
+                              })
+                            }
+                            className="inline-flex items-center justify-center gap-1.5 rounded-full border border-red-300 bg-red-50 px-3 py-1.5 text-xs font-medium text-red-700 transition hover:bg-red-100 dark:border-red-700 dark:bg-red-900/30 dark:text-red-200 dark:hover:bg-red-900/50"
+                          >
+                            <AlertTriangle className="size-3.5" />
+                            Ürün Yok Bildir
+                          </button>
+                        )}
+                      </div>
                     ) : (
                       <ul role="list" className="divide-y divide-zinc-100 dark:divide-zinc-700">
                         {filteredCatalog.map((p) => (
@@ -1053,6 +1325,51 @@ export function AddProductModal({ isOpen, onClose, type, initialItem, catalogPro
           </>
         )}
       </div>
+
+      {/* Yaklaşan SKT Modal */}
+      {(catalogProduct || initialItem) && (
+        <ExpiringProductModal
+          isOpen={expiringProductModalOpen}
+          onClose={() => setExpiringProductModalOpen(false)}
+          product={{
+            barcode: catalogProduct?.barcode || initialItem?.barcode || "",
+            name: catalogProduct?.name || initialItem?.name || "",
+          }}
+          existingProduct={existingExpiringProduct}
+          onSuccess={(message) => {
+            onSuccess?.(message);
+            // Mevcut kaydı yeniden yükle
+            const barcodeToCheck = catalogProduct?.barcode || initialItem?.barcode;
+            if (barcodeToCheck) {
+              fetch(`/api/expiring-products?barcode=${encodeURIComponent(barcodeToCheck)}`)
+                .then((res) => res.json())
+                .then((data) => {
+                  if (data.success && data.product) {
+                    setExistingExpiringProduct(data.product);
+                  } else {
+                    setExistingExpiringProduct(null);
+                  }
+                })
+                .catch(() => setExistingExpiringProduct(null));
+            }
+          }}
+        />
+      )}
+
+      {/* Ürün Yok / Stok Yok Bildirim Modalı */}
+      {productIssueModalOpen && productIssueData && (
+        <ProductIssueReportModal
+          isOpen={productIssueModalOpen}
+          onClose={() => setProductIssueModalOpen(false)}
+          type={productIssueData.type}
+          barcode={productIssueData.barcode}
+          productName={productIssueData.productName}
+          source={productIssueData.source}
+          onSuccess={(message) => {
+            onSuccess?.(message);
+          }}
+        />
+      )}
     </div>
   );
 }

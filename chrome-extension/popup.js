@@ -10,9 +10,10 @@ const warehouseTokenInfoDiv = document.getElementById("warehouseTokenInfo");
 const warehouseLastCapturedDiv = document.getElementById("warehouseLastCaptured");
 const warehouseTestButton = document.getElementById("warehouseTestButton");
 
-// API endpoint
-const API_ENDPOINT = "http://localhost:3000/api/token/save";
-// Production URL: "https://getirstok.netlify.app/api/token/save"
+// API endpoint - Production URL (farklı bilgisayarlarda çalışması için)
+// Development için localhost kullanmak isterseniz bu satırı değiştirin:
+// const API_ENDPOINT = "http://localhost:3000/api/token/save";
+const API_ENDPOINT = "https://getirstok.netlify.app/api/token/save";
 
 // Bayi Paneli (Franchise) token durumunu yükle
 function loadFranchiseTokenStatus() {

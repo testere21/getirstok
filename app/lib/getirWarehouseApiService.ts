@@ -1,6 +1,10 @@
 import { getGetirWarehouseToken } from "./getirTokenService";
 import { DEFAULT_WAREHOUSE_ID } from "./types";
 import { getProductIdByBarcode } from "./barcodeProductMappingService";
+import {
+  getCachedSupplierReturnDays,
+  saveSupplierReturnDays,
+} from "./supplierReturnCacheService";
 
 /** Getir Depo Paneli API'den veri çekme hatası */
 export class GetirWarehouseApiError extends Error {
@@ -344,10 +348,36 @@ export async function getGetirSupplierReturnDate(barcode: string): Promise<numbe
   try {
     console.log("[Getir Warehouse API] Getting supplier return date for barcode:", barcode);
 
+    const trimmedBarcode = barcode.trim();
+
+    // 0. Adım: Cache kontrolü
+    try {
+      const cachedDays = await getCachedSupplierReturnDays(trimmedBarcode);
+      if (cachedDays !== null) {
+        console.log(
+          "[Getir Warehouse API] Supplier return date cache hit for barcode:",
+          trimmedBarcode,
+          "days:",
+          cachedDays
+        );
+        return cachedDays;
+      }
+      console.log(
+        "[Getir Warehouse API] Supplier return date cache miss for barcode:",
+        trimmedBarcode
+      );
+    } catch (cacheError) {
+      console.warn(
+        "[Getir Warehouse API] Supplier return cache read error:",
+        cacheError
+      );
+      // Cache hatası, ana akışı bozmasın
+    }
+
     // 1. Adım: Barkod ile ürün ID'sini bul
     let productId: string | null;
     try {
-      productId = await searchProductByBarcode(barcode);
+      productId = await searchProductByBarcode(trimmedBarcode);
       console.log("[Getir Warehouse API] searchProductByBarcode result:", productId);
     } catch (error) {
       console.error("[Getir Warehouse API] Error in searchProductByBarcode:", error);
@@ -364,7 +394,7 @@ export async function getGetirSupplierReturnDate(barcode: string): Promise<numbe
     if (!productId) {
       console.log("[Getir Warehouse API] Product not found for barcode:", barcode);
       throw new GetirWarehouseApiError(
-        `Ürün bulunamadı. Barkod: ${barcode}`,
+        `Ürün bulunamadı. Barkod: ${trimmedBarcode}`,
         undefined,
         "PRODUCT_NOT_FOUND"
       );
@@ -398,7 +428,27 @@ export async function getGetirSupplierReturnDate(barcode: string): Promise<numbe
       );
     }
 
-    console.log("[Getir Warehouse API] Supplier return date retrieved successfully:", supplierReturnDate, "days");
+    console.log(
+      "[Getir Warehouse API] Supplier return date retrieved successfully:",
+      supplierReturnDate,
+      "days"
+    );
+
+    // 3. Adım: Cache'e yaz
+    try {
+      await saveSupplierReturnDays(trimmedBarcode, supplierReturnDate);
+      console.log(
+        "[Getir Warehouse API] Supplier return date cached for barcode:",
+        trimmedBarcode
+      );
+    } catch (cacheError) {
+      console.warn(
+        "[Getir Warehouse API] Supplier return cache write error:",
+        cacheError
+      );
+      // Cache hatası ana akışı bozmasın
+    }
+
     return supplierReturnDate;
   } catch (error) {
     if (error instanceof GetirWarehouseApiError) {

@@ -1,5 +1,8 @@
 import { NextResponse } from "next/server";
-import { getGetirSupplierReturnDate, GetirWarehouseApiError } from "@/app/lib/getirWarehouseApiService";
+import {
+  getGetirSupplierReturnDate,
+  GetirWarehouseApiError,
+} from "@/app/lib/getirWarehouseApiService";
 
 /** CORS header'ları */
 const CORS_HEADERS = {
@@ -33,10 +36,14 @@ export async function GET(request: Request) {
       );
     }
 
-    console.log("[Getir Supplier Return Date API] Fetching supplier return date for barcode:", barcode.trim());
+    const trimmedBarcode = barcode.trim();
+    console.log(
+      "[Getir Supplier Return Date API] Fetching supplier return date for barcode:",
+      trimmedBarcode
+    );
     
-    // Getir Warehouse API'den tedarikçi iade tarihini çek
-    const days = await getGetirSupplierReturnDate(barcode.trim());
+    // Getir Warehouse API'den tedarikçi iade tarihini (veya cache'ten) çek
+    const days = await getGetirSupplierReturnDate(trimmedBarcode);
     
     console.log("[Getir Supplier Return Date API] Supplier return date result:", days, "days");
 
