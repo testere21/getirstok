@@ -30,8 +30,8 @@ export async function createProductIssueReport(
 ): Promise<string> {
   const now = new Date().toISOString();
 
-  // Firestore undefined kabul etmez; sadece string/boolean/number ve tanımlı değerler
-  const data: Record<string, string | boolean> = {
+  // Firestore undefined kabul etmez; sadece tanımlı alanları ekliyoruz (tip ProductIssueReport ile uyumlu)
+  const data: ProductIssueReport = {
     barcode: params.barcode.trim(),
     type: params.type,
     createdAt: now,
