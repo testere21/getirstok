@@ -69,16 +69,27 @@ export async function POST(req: Request) {
         err instanceof Error ? err.message : "Telegram mesajı gönderilemedi.";
     }
 
-    // Firestore'a kayıt et (telegram başarılı olsun/olmasın)
-    await createProductIssueReport({
+    // Firestore'a kayıt et (telegram başarılı olsun/olmasın); undefined göndermiyoruz
+    const reportParams = {
       type,
       barcode: barcode.trim(),
-      productName: productName?.trim(),
-      note: note?.trim(),
-      source: source?.trim(),
       telegramSent,
-      telegramError,
-    });
+      telegramError: telegramError ?? undefined,
+    } as Parameters<typeof createProductIssueReport>[0];
+    if (productName != null && productName.trim() !== "") {
+      reportParams.productName = productName.trim();
+    }
+    if (note != null && note.trim() !== "") {
+      reportParams.note = note.trim();
+    }
+    if (source != null && source.trim() !== "") {
+      reportParams.source = source.trim();
+    }
+    try {
+      await createProductIssueReport(reportParams);
+    } catch (firestoreErr) {
+      console.error("[product-issue] Firestore kayıt hatası (bildirim yine de başarılı sayılır):", firestoreErr);
+    }
 
     return NextResponse.json(
       { success: true, telegramSent },

@@ -30,16 +30,33 @@ export async function createProductIssueReport(
 ): Promise<string> {
   const now = new Date().toISOString();
 
-  const docRef = await addDoc(productIssueCollection, {
+  // Firestore undefined kabul etmez; sadece string/boolean/number ve tanımlı değerler
+  const data: Record<string, string | boolean> = {
     barcode: params.barcode.trim(),
-    productName: params.productName?.trim() || undefined,
     type: params.type,
-    note: params.note?.trim() || undefined,
-    source: params.source?.trim() || undefined,
     createdAt: now,
     telegramSent: params.telegramSent,
-    telegramError: params.telegramError,
-  });
+  };
+  const optProductName =
+    params.productName != null && params.productName.trim() !== ""
+      ? params.productName.trim()
+      : null;
+  const optNote =
+    params.note != null && params.note.trim() !== "" ? params.note.trim() : null;
+  const optSource =
+    params.source != null && params.source.trim() !== ""
+      ? params.source.trim()
+      : null;
+  const optTelegramError =
+    params.telegramError != null && params.telegramError !== ""
+      ? params.telegramError
+      : null;
+  if (optProductName != null) data.productName = optProductName;
+  if (optNote != null) data.note = optNote;
+  if (optSource != null) data.source = optSource;
+  if (optTelegramError != null) data.telegramError = optTelegramError;
+
+  const docRef = await addDoc(productIssueCollection, data);
 
   return docRef.id;
 }

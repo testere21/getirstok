@@ -6,8 +6,8 @@ import { addStockItem, updateStockItem } from "@/app/lib/stockService";
 import { ErrorMessage } from "./ErrorMessage";
 import { BarcodeImage } from "./BarcodeImage";
 import { ExpiringProductModal } from "./ExpiringProductModal";
-import { ProductIssueReportModal } from "./ProductIssueReportModal";
-import type { StockItemWithId, ExpiringProductWithId, ProductIssueType } from "@/app/lib/types";
+import { ConfirmModal } from "./ConfirmModal";
+import type { StockItemWithId, ExpiringProductWithId } from "@/app/lib/types";
 import { formatDateTime } from "@/app/lib/utils";
 
 export type AddProductModalType = "missing" | "extra";
@@ -38,6 +38,10 @@ interface AddProductModalProps {
   onDeleteItem?: (item: StockItemWithId) => void;
   /** Başarılı işlem sonrası çağrılır (toast göstermek için) */
   onSuccess?: (message: string) => void;
+  /** "Stok Görünmüyor Bildir" başarılı olunca çağrılır (ortadaki bildirim penceresi) */
+  onBildirimSent?: () => void;
+  /** "Stok Görünmüyor Bildir" hata alınca çağrılır */
+  onBildirimError?: (message: string) => void;
 }
 
 const initialForm = { name: "", barcode: "", quantity: "", notes: "" };
@@ -53,6 +57,8 @@ export function AddProductModal({
   onEditItem,
   onDeleteItem,
   onSuccess,
+  onBildirimSent,
+  onBildirimError,
 }: AddProductModalProps) {
   const [name, setName] = useState(initialForm.name);
   const [barcode, setBarcode] = useState(initialForm.barcode);
@@ -79,14 +85,10 @@ export function AddProductModal({
   /* Yaklaşan SKT */
   const [expiringProductModalOpen, setExpiringProductModalOpen] = useState(false);
   const [existingExpiringProduct, setExistingExpiringProduct] = useState<ExpiringProductWithId | null>(null);
-  /* Ürün/Stok sorunu bildirimi */
-  const [productIssueModalOpen, setProductIssueModalOpen] = useState(false);
-  const [productIssueData, setProductIssueData] = useState<{
-    type: ProductIssueType;
-    barcode: string;
-    productName?: string;
-    source?: string;
-  } | null>(null);
+  /* "Stok Görünmüyor Bildir" gönderiminde kısa süre buton devre dışı */
+  const [stokBildirimSending, setStokBildirimSending] = useState(false);
+  /* Silme onayı: hangi kayıt silinecek (modal açık olunca) */
+  const [deleteConfirmItem, setDeleteConfirmItem] = useState<StockItemWithId | null>(null);
 
   const isEditMode = Boolean(initialItem?.id);
   const isCatalogViewMode = Boolean(catalogProduct && !isEditMode && !showFormFromCatalog);
@@ -319,26 +321,35 @@ export function AddProductModal({
     );
   }, [catalog, catalogSearch]);
 
-  const openProductIssueModal = (
-    issueType: ProductIssueType,
-    source: string,
-    override?: { barcode?: string; productName?: string }
-  ) => {
-    const baseBarcode = override?.barcode || catalogProduct?.barcode || initialItem?.barcode || "";
-    const baseName = override?.productName || catalogProduct?.name || initialItem?.name || "";
-
-    if (!baseBarcode.trim()) {
-      setSubmitError("Bildirim için barkod bulunamadı.");
+  const sendStokBildirim = async () => {
+    const baseBarcode = (catalogProduct?.barcode || initialItem?.barcode || "").trim();
+    if (baseBarcode.length < 6) {
+      onBildirimError?.("Bildirim için geçerli bir barkod gerekli.");
       return;
     }
-
-    setProductIssueData({
-      type: issueType,
-      barcode: baseBarcode.trim(),
-      productName: baseName || undefined,
-      source,
-    });
-    setProductIssueModalOpen(true);
+    setStokBildirimSending(true);
+    try {
+      const res = await fetch("/api/telegram/product-issue", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          type: "stock_missing",
+          barcode: baseBarcode,
+          productName: (catalogProduct?.name || initialItem?.name || "").trim() || undefined,
+          source: type === "missing" ? "missing_tab" : "extra_tab",
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data?.success) {
+        onBildirimSent?.();
+      } else {
+        onBildirimError?.(data?.error ?? "Bildirim gönderilemedi.");
+      }
+    } catch {
+      onBildirimError?.("Bildirim gönderilemedi.");
+    } finally {
+      setStokBildirimSending(false);
+    }
   };
 
   // Getir stok bilgisini çekme fonksiyonu
@@ -703,26 +714,15 @@ export function AddProductModal({
                         : "Yaklaşan SKT Olarak İşaretle"}
                     </span>
                   </button>
-                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  <div>
                     <button
                       type="button"
-                      onClick={() =>
-                        openProductIssueModal("product_missing", type === "missing" ? "missing_tab" : "extra_tab")
-                      }
-                      className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-xs font-medium text-red-700 transition hover:bg-red-100 dark:border-red-700 dark:bg-red-900/30 dark:text-red-200 dark:hover:bg-red-900/50"
+                      onClick={() => void sendStokBildirim()}
+                      disabled={stokBildirimSending}
+                      className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-700 transition hover:bg-amber-100 disabled:opacity-60 disabled:pointer-events-none dark:border-amber-700 dark:bg-amber-900/30 dark:text-amber-200 dark:hover:bg-amber-900/50"
                     >
                       <AlertTriangle className="size-3.5" />
-                      Ürün Yok Bildir
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() =>
-                        openProductIssueModal("stock_missing", type === "missing" ? "missing_tab" : "extra_tab")
-                      }
-                      className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-700 transition hover:bg-amber-100 dark:border-amber-700 dark:bg-amber-900/30 dark:text-amber-200 dark:hover:bg-amber-900/50"
-                    >
-                      <AlertTriangle className="size-3.5" />
-                      Stok Yok Bildir
+                      {stokBildirimSending ? "Gönderiliyor…" : "Stok Görünmüyor Bildir"}
                     </button>
                   </div>
                 </div>
@@ -829,13 +829,7 @@ export function AddProductModal({
                                   type="button"
                                   onClick={(e) => {
                                     e.stopPropagation();
-                                    if (
-                                      confirm(
-                                        "Bu eksik kaydı silmek istediğinize emin misiniz?"
-                                      )
-                                    ) {
-                                      onDeleteItem(item);
-                                    }
+                                    setDeleteConfirmItem(item);
                                   }}
                                   className="rounded-lg p-1.5 text-red-600 transition hover:bg-red-50 hover:text-red-700 dark:text-red-400 dark:hover:bg-red-900/30 dark:hover:text-red-200"
                                   aria-label="Eksik kaydı sil"
@@ -900,13 +894,7 @@ export function AddProductModal({
                                   type="button"
                                   onClick={(e) => {
                                     e.stopPropagation();
-                                    if (
-                                      confirm(
-                                        "Bu fazla kaydı silmek istediğinize emin misiniz?"
-                                      )
-                                    ) {
-                                      onDeleteItem(item);
-                                    }
+                                    setDeleteConfirmItem(item);
                                   }}
                                   className="rounded-lg p-1.5 text-red-600 transition hover:bg-red-50 hover:text-red-700 dark:text-red-400 dark:hover:bg-red-900/30 dark:hover:text-red-200"
                                   aria-label="Fazla kaydı sil"
@@ -1104,7 +1092,7 @@ export function AddProductModal({
                     </div>
                   )}
 
-                  {/* Yaklaşan SKT Olarak İşaretle & Ürün/Stok Yok Bildir Butonları */}
+                  {/* Yaklaşan SKT Olarak İşaretle & Ürün/Stok Görünmüyor Bildir Butonları */}
                   {initialItem && (
                     <div className="space-y-2">
                       <button
@@ -1120,26 +1108,15 @@ export function AddProductModal({
                         </span>
                       </button>
 
-                      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                      <div>
                         <button
                           type="button"
-                          onClick={() =>
-                            openProductIssueModal("product_missing", type === "missing" ? "missing_tab" : "extra_tab")
-                          }
-                          className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-xs font-medium text-red-700 transition hover:bg-red-100 dark:border-red-700 dark:bg-red-900/30 dark:text-red-200 dark:hover:bg-red-900/50"
+                          onClick={() => void sendStokBildirim()}
+                          disabled={stokBildirimSending}
+                          className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-700 transition hover:bg-amber-100 disabled:opacity-60 disabled:pointer-events-none dark:border-amber-700 dark:bg-amber-900/30 dark:text-amber-200 dark:hover:bg-amber-900/50"
                         >
                           <AlertTriangle className="size-3.5" />
-                          Ürün Yok Bildir
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() =>
-                            openProductIssueModal("stock_missing", type === "missing" ? "missing_tab" : "extra_tab")
-                          }
-                          className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-700 transition hover:bg-amber-100 dark:border-amber-700 dark:bg-amber-900/30 dark:text-amber-200 dark:hover:bg-amber-900/50"
-                        >
-                          <AlertTriangle className="size-3.5" />
-                          Stok Yok Bildir
+                          {stokBildirimSending ? "Gönderiliyor…" : "Stok Görünmüyor Bildir"}
                         </button>
                       </div>
 
@@ -1223,22 +1200,8 @@ export function AddProductModal({
                   </div>
                   <div className="max-h-44 overflow-y-auto rounded-lg border border-zinc-200 dark:border-zinc-700">
                     {filteredCatalog.length === 0 ? (
-                      <div className="px-3 py-4 text-center text-sm text-zinc-500 dark:text-zinc-400 space-y-2">
+                      <div className="px-3 py-4 text-center text-sm text-zinc-500 dark:text-zinc-400">
                         <p>Eşleşen ürün yok.</p>
-                        {catalogSearch.trim().length >= 6 && (
-                          <button
-                            type="button"
-                            onClick={() =>
-                              openProductIssueModal("product_missing", "search_catalog", {
-                                barcode: catalogSearch.trim(),
-                              })
-                            }
-                            className="inline-flex items-center justify-center gap-1.5 rounded-full border border-red-300 bg-red-50 px-3 py-1.5 text-xs font-medium text-red-700 transition hover:bg-red-100 dark:border-red-700 dark:bg-red-900/30 dark:text-red-200 dark:hover:bg-red-900/50"
-                          >
-                            <AlertTriangle className="size-3.5" />
-                            Ürün Yok Bildir
-                          </button>
-                        )}
                       </div>
                     ) : (
                       <ul role="list" className="divide-y divide-zinc-100 dark:divide-zinc-700">
@@ -1356,20 +1319,25 @@ export function AddProductModal({
         />
       )}
 
-      {/* Ürün Yok / Stok Yok Bildirim Modalı */}
-      {productIssueModalOpen && productIssueData && (
-        <ProductIssueReportModal
-          isOpen={productIssueModalOpen}
-          onClose={() => setProductIssueModalOpen(false)}
-          type={productIssueData.type}
-          barcode={productIssueData.barcode}
-          productName={productIssueData.productName}
-          source={productIssueData.source}
-          onSuccess={(message) => {
-            onSuccess?.(message);
-          }}
-        />
-      )}
+      {/* Silme onay modalı (eksik/fazla kayıt) */}
+      <ConfirmModal
+        isOpen={!!deleteConfirmItem}
+        onClose={() => setDeleteConfirmItem(null)}
+        title="Kaydı sil"
+        message={
+          deleteConfirmItem?.type === "extra"
+            ? "Bu fazla kaydı silmek istediğinize emin misiniz?"
+            : "Bu eksik kaydı silmek istediğinize emin misiniz?"
+        }
+        confirmLabel="Sil"
+        cancelLabel="İptal"
+        variant="danger"
+        onConfirm={() => {
+          if (deleteConfirmItem && onDeleteItem) {
+            onDeleteItem(deleteConfirmItem);
+          }
+        }}
+      />
     </div>
   );
 }

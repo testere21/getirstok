@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Image from "next/image";
-import { PackageMinus, PackagePlus, Pencil, Trash2, ArrowUp, ArrowDown } from "lucide-react";
+import { Barcode, Pencil, Trash2, ArrowUp, ArrowDown } from "lucide-react";
 import { AddProductModal } from "./components/AddProductModal";
 import { SearchBar } from "./components/SearchBar";
 import { BarcodeScanner } from "./components/BarcodeScanner";
@@ -11,10 +11,12 @@ import { ListSkeleton } from "./components/ListSkeleton";
 import { EmptyState } from "./components/EmptyState";
 import { ErrorMessage } from "./components/ErrorMessage";
 import { Toast, type ToastType } from "./components/Toast";
-import { PackageSearch, PackageX, Calendar, AlertTriangle } from "lucide-react";
+import { PackageSearch, PackageX, Calendar, AlertTriangle, CheckCircle2 } from "lucide-react";
 import { deleteStockItem, subscribeStockItems } from "@/app/lib/stockService";
 import { ExpiringProductNotification } from "./components/ExpiringProductNotification";
 import { ExpiringProductModal } from "./components/ExpiringProductModal";
+import { ConfirmModal } from "./components/ConfirmModal";
+import { BarkodOlusturucuModal } from "./components/BarkodOlusturucuModal";
 import type { StockItemWithId, ExpiringProductWithId } from "@/app/lib/types";
 import { formatDateTime } from "@/app/lib/utils";
 
@@ -32,7 +34,22 @@ export type TabType = "missing" | "extra" | "expiring";
 interface ToastState {
   message: string;
   type: ToastType;
+  /** Otomatik kapanma süresi (ms). Verilmezse varsayılan: error 7s, success 5s */
+  autoClose?: number;
 }
+
+/** Eksik/Fazla listesi sütun tanımları — masaüstü başlık, satır ve mobil kart tek kaynaktan */
+const STOCK_LIST_COLUMNS: {
+  key: "name" | "barcode" | "quantity" | "notes";
+  title: string;
+  mobileLabel: string;
+  sortKey: "name" | "barcode" | "quantity" | null;
+}[] = [
+  { key: "name", title: "Ürün", mobileLabel: "Ürün", sortKey: "name" },
+  { key: "barcode", title: "Barkod", mobileLabel: "Barkod", sortKey: "barcode" },
+  { key: "quantity", title: "Miktar", mobileLabel: "Miktar", sortKey: "quantity" },
+  { key: "notes", title: "Notlar", mobileLabel: "Notlar", sortKey: null },
+];
 
 // Basit debounce hook'u — verilen değeri belirli bir gecikmeden sonra günceller
 function useDebounce<T>(value: T, delay: number): T {
@@ -76,6 +93,16 @@ export default function Home() {
   const [expiringProducts, setExpiringProducts] = useState<ExpiringProductWithId[]>([]);
   const [expiringProductsLoading, setExpiringProductsLoading] = useState(false);
   const [editingExpiringProduct, setEditingExpiringProduct] = useState<ExpiringProductWithId | null>(null);
+  // "Ürün Yok Bildir" gönderiminde kısa süre buton devre dışı
+  const [productIssueSending, setProductIssueSending] = useState(false);
+  // Ekran ortasında başarı penceresi (Bildirim gönderildi / Ürün silindi vb.) — 2 sn
+  const [successModalMessage, setSuccessModalMessage] = useState<string | null>(null);
+  // Eksik/Fazla sekmesindeki listeden silme onayı
+  const [listDeleteConfirmItem, setListDeleteConfirmItem] = useState<StockItemWithId | null>(null);
+  // Barkod Oluşturucu paneli/modalı açık mı (Faz 1.3)
+  const [barkodOlusturucuOpen, setBarkodOlusturucuOpen] = useState(false);
+  // Barkod Oluşturucu input değeri (Faz 2.3)
+  const [barkodOlusturucuValue, setBarkodOlusturucuValue] = useState("");
 
   // Arama için minimum karakter sayısı
   const MIN_SEARCH_LENGTH = 2;
@@ -85,6 +112,13 @@ export default function Home() {
 
   // Debounce edilmiş arama sorgusu — ağır işlemler bu değer üzerinden çalışır
   const debouncedSearchQuery = useDebounce(searchQuery, DEBOUNCE_DELAY);
+
+  // Başarı penceresini 2 saniye sonra kapat
+  useEffect(() => {
+    if (!successModalMessage) return;
+    const t = setTimeout(() => setSuccessModalMessage(null), 2000);
+    return () => clearTimeout(t);
+  }, [successModalMessage]);
 
   // Katalog ürünlerini yükle
   useEffect(() => {
@@ -456,12 +490,14 @@ export default function Home() {
     }
   }, [sortField, sortDirection]);
 
-  const handleDelete = useCallback(async (item: StockItemWithId) => {
-    if (!confirm("Bu ürünü silmek istediğinize emin misiniz?")) return;
-    try {
+  const handleDelete = useCallback(
+    async (item: StockItemWithId, options?: { skipConfirm?: boolean }) => {
+      if (!options?.skipConfirm && !confirm("Bu ürünü silmek istediğinize emin misiniz?"))
+        return;
+      try {
       setDeletingId(item.id);
       await deleteStockItem(item.id);
-      setToast({ message: "Ürün başarıyla silindi.", type: "success" });
+      setSuccessModalMessage("Ürün başarıyla silindi.");
     } catch (err) {
       const errorMessage =
         err instanceof Error ? err.message : "Ürün silinirken bir hata oluştu.";
@@ -469,7 +505,9 @@ export default function Home() {
     } finally {
       setDeletingId(null);
     }
-  }, []);
+  },
+    []
+  );
 
   const handleEdit = useCallback((item: StockItemWithId) => {
     setEditingItem(item);
@@ -510,33 +548,41 @@ export default function Home() {
             message={toast.message}
             type={toast.type}
             onDismiss={() => setToast(null)}
-            autoClose={toast.type === "error" ? 7000 : 5000}
+            autoClose={toast.autoClose ?? (toast.type === "error" ? 7000 : 5000)}
           />
         </div>
       )}
 
-      {/* Sıra: 1) Butonlar, 2) Sticky arama, 3) Altında içerik */}
+      {/* Ekran ortasında başarı penceresi (Bildirim gönderildi / Ürün silindi vb.) */}
+      {successModalMessage && (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4"
+          aria-modal="true"
+          aria-labelledby="success-modal-title"
+          role="dialog"
+        >
+          <div className="rounded-2xl border border-zinc-200 bg-white p-6 shadow-xl dark:border-zinc-600 dark:bg-zinc-800 sm:p-8">
+            <div className="flex flex-col items-center gap-4 text-center">
+              <CheckCircle2 className="size-12 text-green-600 dark:text-green-400" aria-hidden />
+              <p id="success-modal-title" className="text-lg font-medium text-zinc-900 dark:text-zinc-100">
+                {successModalMessage}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Sıra: 1) Barkod Oluşturucu butonu (Faz 1.1–1.3), 2) Sticky arama, 3) Altında içerik */}
       <section aria-label="Ekleme ve arama" className="flex flex-col gap-4">
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <div>
           <button
             type="button"
-            onClick={() => setModalType("missing")}
-            className="flex items-center justify-center gap-2 rounded-xl px-5 py-4 text-base font-medium text-white shadow-sm transition-all duration-200 hover:opacity-90 hover:scale-[1.02] active:scale-[0.98] sm:py-5 sm:text-lg min-h-[44px]"
-            style={{ backgroundColor: "var(--color-missing)" }}
-            aria-label="Eksik ürün ekle"
+            onClick={() => setBarkodOlusturucuOpen(true)}
+            className="flex w-full items-center justify-center gap-2 rounded-xl border-2 border-zinc-300 bg-white px-5 py-4 text-base font-medium text-zinc-800 shadow-sm transition-all duration-200 hover:border-zinc-400 hover:bg-zinc-50 hover:scale-[1.01] active:scale-[0.99] dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-100 dark:hover:border-zinc-500 dark:hover:bg-zinc-700 sm:py-5 sm:text-lg min-h-[44px]"
+            aria-label="Barkod oluşturucuyu aç"
           >
-            <PackageMinus className="size-6 shrink-0" aria-hidden />
-            Eksik Ürün Ekle
-          </button>
-          <button
-            type="button"
-            onClick={() => setModalType("extra")}
-            className="flex items-center justify-center gap-2 rounded-xl px-5 py-4 text-base font-medium text-white shadow-sm transition-all duration-200 hover:opacity-90 hover:scale-[1.02] active:scale-[0.98] sm:py-5 sm:text-lg min-h-[44px]"
-            style={{ backgroundColor: "var(--color-extra)" }}
-            aria-label="Fazla ürün ekle"
-          >
-            <PackagePlus className="size-6 shrink-0" aria-hidden />
-            Fazla Ürün Ekle
+            <Barcode className="size-6 shrink-0" aria-hidden />
+            Barkod Oluşturucu
           </button>
         </div>
         {/* Sticky arama: scroll'da üstte sabit kalır */}
@@ -559,6 +605,18 @@ export default function Home() {
         onScanSuccess={(barcode) => {
           setSearchQuery(barcode);
           setIsScannerOpen(false);
+        }}
+      />
+
+      {/* Barkod Oluşturucu — modal bileşeni (Faz 2.1–2.3) */}
+      <BarkodOlusturucuModal
+        isOpen={barkodOlusturucuOpen}
+        onClose={() => setBarkodOlusturucuOpen(false)}
+        value={barkodOlusturucuValue}
+        onChange={setBarkodOlusturucuValue}
+        onSendToSearch={(barcode) => {
+          setSearchQuery(barcode);
+          setBarkodOlusturucuOpen(false);
         }}
       />
 
@@ -593,13 +651,15 @@ export default function Home() {
           setSelectedCatalogProduct(null);
         }}
         onDeleteItem={(item) => {
-          // Ürün kartı içindeki eksik/fazla kayıtları silmek için ortak silme handler'ı
-          void handleDelete(item);
+          // Ürün kartında zaten "Kaydı sil" modalı ile onay alındı, tekrar confirm gösterme
+          void handleDelete(item, { skipConfirm: true });
         }}
         onSuccess={(message) => {
-          setToast({ message, type: "success" });
+          setSuccessModalMessage(message);
           setSelectedCatalogProduct(null);
         }}
+        onBildirimSent={() => setSuccessModalMessage("Bildirim gönderildi.")}
+        onBildirimError={(message) => setToast({ message, type: "error" })}
       />
 
       {/* Orta bölüm: istatistik kartları */}
@@ -834,11 +894,55 @@ export default function Home() {
                   </div>
                 </div>
               ) : (
-                <EmptyState
-                  title="Arama sonucu bulunamadı"
-                  message={`"${searchQuery}" için sonuç bulunamadı. Farklı bir arama terimi deneyin.`}
-                  icon={PackageSearch}
-                />
+                // Faz 1.1 / 1.2: Arama sonucu boş. Faz 1.4: "Ürün Yok Bildir" sadece barkod benzeri aramada (6+ karakter)
+                <div className="flex flex-col gap-4 p-4">
+                  <EmptyState
+                    title="Arama sonucu bulunamadı"
+                    message={`"${searchQuery}" için sonuç bulunamadı. Farklı bir arama terimi deneyin.`}
+                    icon={PackageSearch}
+                  />
+                  {searchQuery.trim().length >= 6 && (
+                    <button
+                      type="button"
+                      disabled={productIssueSending}
+                      onClick={async () => {
+                        const barcode = searchQuery.trim();
+                        if (!barcode || productIssueSending) return;
+                        setProductIssueSending(true);
+                        try {
+                          const res = await fetch("/api/telegram/product-issue", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({
+                              type: "product_missing",
+                              barcode,
+                              source: "search_no_results",
+                            }),
+                          });
+                          const data = await res.json().catch(() => ({}));
+                          if (res.ok && data?.success) {
+                            setSuccessModalMessage("Bildirim gönderildi.");
+                          } else {
+                            setToast({
+                              message: data?.error ?? "Bildirim gönderilemedi.",
+                              type: "error",
+                            });
+                          }
+                        } catch {
+                          setToast({ message: "Bildirim gönderilemedi.", type: "error" });
+                        } finally {
+                          setProductIssueSending(false);
+                        }
+                      }}
+                      className="flex items-center justify-center gap-2 rounded-lg border border-red-300 bg-red-50 px-4 py-3 text-sm font-medium text-red-800 transition hover:bg-red-100 disabled:opacity-60 disabled:pointer-events-none dark:border-red-700 dark:bg-red-900/30 dark:text-red-200 dark:hover:bg-red-900/50 min-h-[44px]"
+                      aria-label="Bu barkod için katalogda ürün bulunamadı. Bildirim göndermek için tıklayın."
+                      title="Bu barkod için katalogda ürün bulunamadı. Bildirim göndermek için tıklayın."
+                    >
+                      <AlertTriangle className="size-5 shrink-0" aria-hidden />
+                      {productIssueSending ? "Gönderiliyor…" : "Ürün Yok Bildir"}
+                    </button>
+                  )}
+                </div>
                 )}
               </div>
             </div>
@@ -1079,7 +1183,7 @@ export default function Home() {
                 className="max-h-[55vh] min-h-[8rem] overflow-auto"
                 aria-label={activeTab === "missing" ? "Eksik ürünler listesi" : "Fazla ürünler listesi"}
               >
-                {/* Başlık satırı — sadece desktop'ta göster */}
+                {/* Başlık satırı — sadece desktop'ta göster (STOCK_LIST_COLUMNS) */}
                 <div
                   className="hidden sm:grid sticky top-0 z-10 gap-4 border-b border-zinc-200 bg-zinc-50 px-4 py-3 text-left text-sm font-medium uppercase tracking-wide text-zinc-500 dark:border-zinc-700 dark:bg-zinc-800/50 dark:text-zinc-400"
                   style={{ 
@@ -1087,45 +1191,52 @@ export default function Home() {
                   }}
                 >
                   <span></span>
-                  <button
-                    type="button"
-                    onClick={() => handleSort("name")}
-                    className={`flex items-center gap-1 hover:text-zinc-700 dark:hover:text-zinc-200 transition-colors text-left ${
-                      sortField === "name" ? "text-zinc-900 dark:text-zinc-100" : ""
-                    }`}
-                  >
-                  <span>Ürün</span>
-                    {sortField === "name" && (
-                      sortDirection === "asc" ? <ArrowUp className="size-3" /> : <ArrowDown className="size-3" />
-                    )}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleSort("barcode")}
-                    className={`flex items-center gap-1 hover:text-zinc-700 dark:hover:text-zinc-200 transition-colors text-left ${
-                      sortField === "barcode" ? "text-zinc-900 dark:text-zinc-100" : ""
-                    }`}
-                  >
-                  <span>Barkod</span>
-                    {sortField === "barcode" && (
-                      sortDirection === "asc" ? <ArrowUp className="size-3" /> : <ArrowDown className="size-3" />
-                    )}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleSort("quantity")}
-                    className={`flex items-center gap-1 hover:text-zinc-700 dark:hover:text-zinc-200 transition-colors text-left ${
-                      sortField === "quantity" ? "text-zinc-900 dark:text-zinc-100" : ""
-                    }`}
-                  >
-                  <span>Miktar</span>
-                    {sortField === "quantity" && (
-                      sortDirection === "asc" ? <ArrowUp className="size-3" /> : <ArrowDown className="size-3" />
-                    )}
-                  </button>
-                  <span>Notlar</span>
+                  {STOCK_LIST_COLUMNS.map((col) =>
+                    col.sortKey ? (
+                      <button
+                        key={col.key}
+                        type="button"
+                        onClick={() => handleSort(col.sortKey!)}
+                        className={`flex items-center gap-1 hover:text-zinc-700 dark:hover:text-zinc-200 transition-colors text-left ${
+                          sortField === col.sortKey ? "text-zinc-900 dark:text-zinc-100" : ""
+                        }`}
+                      >
+                        <span>{col.title}</span>
+                        {sortField === col.sortKey && (
+                          sortDirection === "asc" ? <ArrowUp className="size-3" /> : <ArrowDown className="size-3" />
+                        )}
+                      </button>
+                    ) : (
+                      <span key={col.key}>{col.title}</span>
+                    )
+                  )}
                   <span className="text-right">İşlem</span>
                 </div>
+                {/* Mobil: sıralama kontrolleri (STOCK_LIST_COLUMNS sortKey alanları) */}
+                {displayItems.length > 0 && (
+                  <div
+                    className="flex sm:hidden sticky top-0 z-10 flex-wrap gap-2 border-b border-zinc-200 bg-zinc-50 px-4 py-2 dark:border-zinc-700 dark:bg-zinc-800/50"
+                    role="group"
+                    aria-label="Listeyi sırala"
+                  >
+                    <span className="sr-only">Sırala:</span>
+                    {STOCK_LIST_COLUMNS.filter((c) => c.sortKey).map((col) => (
+                      <button
+                        key={col.key}
+                        type="button"
+                        onClick={() => handleSort(col.sortKey!)}
+                        className={`inline-flex items-center gap-1 rounded-lg px-3 py-1.5 text-xs font-medium transition ${
+                          sortField === col.sortKey
+                            ? "bg-zinc-200 text-zinc-900 dark:bg-zinc-600 dark:text-zinc-100"
+                            : "text-zinc-600 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-700"
+                        }`}
+                      >
+                        {col.title}
+                        {sortField === col.sortKey && (sortDirection === "asc" ? <ArrowUp className="size-3" /> : <ArrowDown className="size-3" />)}
+                      </button>
+                    ))}
+                  </div>
+                )}
                 {/* Liste satırları */}
                 {displayItems.length === 0 ? (
                   <EmptyState
@@ -1168,24 +1279,33 @@ export default function Home() {
                             )}
                           </div>
                           <div className="min-w-0 flex-1 flex flex-col gap-2">
-                            <div className="font-medium text-zinc-900 dark:text-zinc-100 text-sm leading-snug line-clamp-2">
-                              {item.name}
-                            </div>
-                            <div className="text-xs text-zinc-500 dark:text-zinc-400 break-all">
-                              <span className="font-medium">Barkod:</span> {item.barcode}
-                            </div>
-                            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
-                              <span className="text-zinc-600 dark:text-zinc-300">
-                                <span className="font-medium">Miktar:</span> <span className="tabular-nums font-semibold text-base">{item.quantity}</span>
-                              </span>
-                              {item.notes && (
-                                <span className="text-zinc-500 dark:text-zinc-400">
-                                  <span className="font-medium">Not:</span> <span className="line-clamp-1">{item.notes}</span>
-                                </span>
-                              )}
-                            </div>
+                            {STOCK_LIST_COLUMNS.map((col) => {
+                              if (col.key === "notes" && !item.notes) return null;
+                              const value = col.key === "notes" ? item.notes! : String(item[col.key] ?? "");
+                              const isName = col.key === "name";
+                              const isNotes = col.key === "notes";
+                              const wrapperClass = isName
+                                ? "text-xs"
+                                : isNotes
+                                ? "min-w-0 text-xs text-zinc-500 dark:text-zinc-400"
+                                : "text-xs text-zinc-600 dark:text-zinc-300" + (col.key === "barcode" ? " break-all" : "");
+                              const valueClass = isName
+                                ? "text-sm font-semibold text-zinc-900 dark:text-zinc-100 leading-snug line-clamp-2"
+                                : isNotes
+                                ? "min-w-0 line-clamp-2 break-words"
+                                : col.key === "quantity"
+                                ? "tabular-nums font-medium"
+                                : "";
+                              return (
+                                <div key={col.key} role="group" aria-label={col.title} className={wrapperClass}>
+                                  <span className="font-medium text-zinc-500 dark:text-zinc-400">{col.mobileLabel}:</span>{" "}
+                                  <span className={valueClass}>{value}</span>
+                                </div>
+                              );
+                            })}
+                            {/* Tarih: daha soluk */}
                             {(item.createdAt || item.updatedAt) && (
-                              <div className="text-xs text-zinc-400 dark:text-zinc-500">
+                              <div role="group" aria-label={item.updatedAt ? "Son güncelleme tarihi" : "Eklenme tarihi"} className="text-xs text-zinc-400 dark:text-zinc-500">
                                 {item.updatedAt ? (
                                   <>Son Güncelleme: {formatDateTime(item.updatedAt)}</>
                                 ) : (
@@ -1210,7 +1330,7 @@ export default function Home() {
                                 type="button"
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  handleDelete(item);
+                                  setListDeleteConfirmItem(item);
                                 }}
                                 disabled={deletingId === item.id}
                                 className="rounded-lg p-2.5 min-h-[40px] min-w-[40px] flex items-center justify-center text-red-600 transition hover:bg-red-50 hover:text-red-700 disabled:opacity-50 dark:text-red-400 dark:hover:text-red-300"
@@ -1246,18 +1366,22 @@ export default function Home() {
                             </div>
                           )}
                         </span>
-                        <span className="min-w-0 font-medium text-zinc-900 dark:text-zinc-100">
-                          {item.name}
-                        </span>
-                        <span className="tabular-nums text-zinc-600 dark:text-zinc-300 break-all">
-                          {item.barcode}
-                        </span>
-                        <span className="tabular-nums text-zinc-600 dark:text-zinc-300">
-                          {item.quantity}
-                        </span>
-                        <span className="min-w-0 truncate text-zinc-500 dark:text-zinc-400">
-                          {item.notes || "—"}
-                        </span>
+                        {STOCK_LIST_COLUMNS.map((col) => {
+                          const value = col.key === "notes" ? (item.notes || "—") : String(item[col.key] ?? "");
+                          const cellClass =
+                            col.key === "name"
+                              ? "min-w-0 font-medium text-zinc-900 dark:text-zinc-100"
+                              : col.key === "notes"
+                              ? "min-w-0 truncate text-zinc-500 dark:text-zinc-400"
+                              : col.key === "barcode"
+                              ? "tabular-nums text-zinc-600 dark:text-zinc-300 break-all"
+                              : "tabular-nums text-zinc-600 dark:text-zinc-300";
+                          return (
+                            <span key={col.key} className={cellClass}>
+                              {value}
+                            </span>
+                          );
+                        })}
                         <span className="flex items-center justify-end gap-1">
                           <button
                             type="button"
@@ -1275,7 +1399,7 @@ export default function Home() {
                             type="button"
                               onClick={(e) => {
                                 e.stopPropagation();
-                                handleDelete(item);
+                                setListDeleteConfirmItem(item);
                               }}
                             disabled={deletingId === item.id}
                               className="rounded-lg p-1.5 text-red-600 transition hover:bg-red-50 hover:text-red-700 disabled:opacity-50 dark:text-red-400 dark:hover:text-red-300"
@@ -1375,6 +1499,27 @@ export default function Home() {
           }}
         />
       )}
+
+      {/* Eksik/Fazla sekmesi listeden silme onayı */}
+      <ConfirmModal
+        isOpen={!!listDeleteConfirmItem}
+        onClose={() => setListDeleteConfirmItem(null)}
+        title="Kaydı sil"
+        message={
+          listDeleteConfirmItem?.type === "extra"
+            ? "Bu fazla kaydı silmek istediğinize emin misiniz?"
+            : "Bu eksik kaydı silmek istediğinize emin misiniz?"
+        }
+        confirmLabel="Sil"
+        cancelLabel="İptal"
+        variant="danger"
+        onConfirm={() => {
+          if (listDeleteConfirmItem) {
+            void handleDelete(listDeleteConfirmItem, { skipConfirm: true });
+          }
+          setListDeleteConfirmItem(null);
+        }}
+      />
     </div>
   );
 }

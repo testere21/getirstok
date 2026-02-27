@@ -30,7 +30,7 @@ export function ProductIssueReportModal({
 
   if (!isOpen) return null;
 
-  const typeLabel = type === "product_missing" ? "Ürün Yok Bildir" : "Stok Yok Bildir";
+  const typeLabel = type === "product_missing" ? "Ürün Yok Bildir" : "Stok Görünmüyor Bildir";
   const typeBadge =
     type === "product_missing" ? "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-200" : "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-200";
 
