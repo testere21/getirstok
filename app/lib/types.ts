@@ -129,3 +129,28 @@ export interface ProductIssueReportWithId extends ProductIssueReport {
 
 export const PRODUCT_ISSUE_REPORTS_COLLECTION = "product_issue_reports";
 
+/** GET /api/products birleşik katalog satırı (`products.json` + Firestore ekleri) */
+export interface CatalogProduct {
+  name: string;
+  barcode: string;
+  imageUrl?: string;
+  productId?: string;
+}
+
+/**
+ * Depo / raf etiketinden eklenen katalog satırları (`products.json` ile birleştirilir).
+ * Doküman ID: barkodın normalize anahtarı.
+ */
+export interface SupplementalCatalogProduct {
+  name: string;
+  barcode: string;
+  imageUrl?: string;
+  productId?: string;
+  source: "warehouse_shelf_label";
+  createdAt: string;
+  updatedAt: string;
+}
+
+export const SUPPLEMENTAL_CATALOG_PRODUCTS_COLLECTION =
+  "supplemental_catalog_products";
+

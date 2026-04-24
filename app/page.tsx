@@ -1,6 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type CSSProperties,
+} from "react";
 import Image from "next/image";
 import { Barcode, Pencil, Trash2, ArrowUp, ArrowDown } from "lucide-react";
 import { AddProductModal } from "./components/AddProductModal";
@@ -11,14 +17,43 @@ import { ListSkeleton } from "./components/ListSkeleton";
 import { EmptyState } from "./components/EmptyState";
 import { ErrorMessage } from "./components/ErrorMessage";
 import { Toast, type ToastType } from "./components/Toast";
-import { PackageSearch, PackageX, Calendar, AlertTriangle, CheckCircle2 } from "lucide-react";
+import {
+  PackageSearch,
+  PackageX,
+  Calendar,
+  AlertTriangle,
+  CheckCircle2,
+  Droplets,
+} from "lucide-react";
 import { deleteStockItem, subscribeStockItems } from "@/app/lib/stockService";
 import { ExpiringProductNotification } from "./components/ExpiringProductNotification";
 import { ExpiringProductModal } from "./components/ExpiringProductModal";
 import { ConfirmModal } from "./components/ConfirmModal";
 import { BarkodOlusturucuModal } from "./components/BarkodOlusturucuModal";
+import { ReferenceWaterProductsPanel } from "./components/ReferenceWaterProductsPanel";
+import { ReferenceWaterProductsPanelContent } from "./components/ReferenceWaterProductsPanelContent";
 import type { StockItemWithId, ExpiringProductWithId } from "@/app/lib/types";
 import { formatDateTime } from "@/app/lib/utils";
+
+/** Buton merkezinden radyal — çok baloncuk, halkalar halinde mesafe çeşitliliği */
+const REF_WATER_AROUND_BUTTON_COUNT = 120;
+
+const REF_WATER_HOVER_BUBBLE_STYLES: CSSProperties[] = Array.from(
+  { length: REF_WATER_AROUND_BUTTON_COUNT },
+  (_, i) => {
+    const n = REF_WATER_AROUND_BUTTON_COUNT;
+    const angleDeg =
+      (i * 360) / n + ((i * 13) % 11) * 0.35 + ((i * 5) % 7) * 0.12;
+    const ring = i % 5;
+    const rPx = Math.min(78, 14 + ring * 11 + (i % 9) * 2 + (i % 4));
+    return {
+      "--bubble-a": `${angleDeg}deg`,
+      "--bubble-delay-chunk": i % 48,
+      "--bubble-r": `${rPx}px`,
+      "--bubble-scale-end": 0.42 + ((i % 21) / 30),
+    } as CSSProperties;
+  }
+);
 
 /** Katalog ürünü (api/products) */
 interface CatalogProduct {
@@ -103,6 +138,8 @@ export default function Home() {
   const [barkodOlusturucuOpen, setBarkodOlusturucuOpen] = useState(false);
   // Barkod Oluşturucu input değeri (Faz 2.3)
   const [barkodOlusturucuValue, setBarkodOlusturucuValue] = useState("");
+  // Referans su ürünleri slide paneli (Faz 2 tetikleyici, Faz 3+ içerik)
+  const [referencePanelOpen, setReferencePanelOpen] = useState(false);
 
   // Arama için minimum karakter sayısı
   const MIN_SEARCH_LENGTH = 2;
@@ -1520,6 +1557,52 @@ export default function Home() {
           setListDeleteConfirmItem(null);
         }}
       />
+
+      <ReferenceWaterProductsPanel
+        open={referencePanelOpen}
+        onClose={() => setReferencePanelOpen(false)}
+      >
+        <ReferenceWaterProductsPanelContent catalogProducts={catalogProducts} />
+      </ReferenceWaterProductsPanel>
+
+      {/* Referans su — sağ alt FAB; baloncuklar yalnızca buton merkezinden (yalnızca md+) */}
+      <div className="pointer-events-none fixed inset-x-0 bottom-6 z-[48] hidden md:flex justify-end pr-4 sm:pr-6">
+        <div className="ref-water-fab-wrap pointer-events-auto relative flex h-36 w-36 shrink-0 items-center justify-center overflow-visible">
+          {REF_WATER_HOVER_BUBBLE_STYLES.map((bubbleStyle, i) => (
+            <span
+              key={i}
+              aria-hidden
+              style={bubbleStyle}
+              className={`ref-water-fab-bubble motion-reduce:hidden pointer-events-none absolute left-1/2 top-1/2 z-[9] rounded-full bg-gradient-to-br from-white via-cyan-50 to-sky-200 shadow-[0_0_6px_rgba(186,230,253,0.85)] ring-1 ring-white/80 dark:from-white/45 dark:via-cyan-200/35 dark:to-sky-400/45 dark:shadow-cyan-400/35 dark:ring-cyan-200/50 ${
+                i % 3 === 0
+                  ? "h-2 w-2"
+                  : i % 3 === 1
+                    ? "h-1.5 w-1.5"
+                    : "h-2.5 w-2.5"
+              }`}
+            />
+          ))}
+          <span
+            aria-hidden
+            className="ref-water-fab-ripple motion-reduce:hidden pointer-events-none absolute left-1/2 top-1/2 block size-12 rounded-full bg-sky-400/45 dark:bg-sky-400/35"
+          />
+          <span
+            aria-hidden
+            className="ref-water-fab-ripple-delayed motion-reduce:hidden pointer-events-none absolute left-1/2 top-1/2 block size-12 rounded-full bg-cyan-300/40 dark:bg-cyan-300/30"
+          />
+          <button
+            type="button"
+            onClick={() => setReferencePanelOpen(true)}
+            className="ref-water-fab-float motion-reduce:animate-none motion-reduce:shadow-lg relative z-10 flex h-12 w-12 shrink-0 items-center justify-center rounded-full border border-sky-500/95 bg-gradient-to-br from-sky-500 to-sky-600 text-white ring-2 ring-white/25 transition hover:from-sky-400 hover:to-sky-500 hover:ring-white/40 active:scale-95 dark:border-sky-400/90 dark:from-sky-600 dark:to-sky-700 dark:hover:from-sky-500 dark:hover:to-sky-600"
+            aria-label="Referans ürün barkodları"
+          >
+            <Droplets
+              className="ref-water-fab-icon motion-reduce:animate-none size-6 drop-shadow-sm"
+              aria-hidden
+            />
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

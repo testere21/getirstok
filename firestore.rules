@@ -41,6 +41,13 @@ service cloud.firestore {
       // Silme yok (güvenlik - mapping'ler silinemesin)
       allow delete: if false;
     }
+
+    match /supplemental_catalog_products/{productDocId} {
+      allow read: if true;
+      allow create: if true;
+      allow update: if true;
+      allow delete: if false;
+    }
     
     // Diğer koleksiyonlar için varsayılan: erişim yok
     match /{document=**} {

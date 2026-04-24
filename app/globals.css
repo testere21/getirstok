@@ -30,6 +30,133 @@
   }
 }
 
+/* Referans su drawer — sağdan içeri (Faz 3); prefers-reduced-motion’da animasyon yok */
+@keyframes ref-water-slide-in {
+  from {
+    transform: translateX(100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .ref-water-drawer-panel {
+    animation: ref-water-slide-in 0.25s ease-out forwards;
+  }
+}
+
+/* Referans su FAB — yüzme + dalga (ripple) */
+@keyframes ref-water-fab-float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-5px);
+  }
+}
+
+@keyframes ref-water-ripple-out {
+  0% {
+    transform: translate(-50%, -50%) scale(1);
+    opacity: 0.48;
+  }
+  100% {
+    transform: translate(-50%, -50%) scale(2.35);
+    opacity: 0;
+  }
+}
+
+@keyframes ref-water-icon-glow {
+  0%,
+  100% {
+    opacity: 1;
+    filter: drop-shadow(0 0 4px rgba(255, 255, 255, 0.55));
+  }
+  50% {
+    opacity: 0.92;
+    filter: drop-shadow(0 0 10px rgba(186, 230, 253, 0.95));
+  }
+}
+
+/* FAB hover — çevreye baloncuk fışkırması */
+@keyframes ref-water-bubble-spurt {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -50%) translate(0, 0) scale(0.35);
+  }
+  14% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -50%)
+      translate(
+        calc(cos(var(--bubble-a, 0deg)) * var(--bubble-r, 34px)),
+        calc(sin(var(--bubble-a, 0deg)) * var(--bubble-r, 34px))
+      )
+      scale(var(--bubble-scale-end, 1));
+  }
+}
+
+.ref-water-fab-bubble {
+  opacity: 0;
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .ref-water-fab-float {
+    animation: ref-water-fab-float 2.8s ease-in-out infinite;
+    box-shadow:
+      0 10px 25px -5px rgba(14, 165, 233, 0.45),
+      0 0 0 1px rgba(255, 255, 255, 0.12) inset,
+      0 0 28px rgba(56, 189, 248, 0.35);
+  }
+
+  .ref-water-fab-ripple {
+    animation: ref-water-ripple-out 2.4s ease-out infinite;
+    will-change: transform, opacity;
+  }
+
+  .ref-water-fab-ripple-delayed {
+    animation: ref-water-ripple-out 2.4s ease-out 1.2s infinite;
+    will-change: transform, opacity;
+  }
+
+  .ref-water-fab-icon {
+    animation: ref-water-icon-glow 2.2s ease-in-out infinite;
+  }
+
+  /* :has — üst katman pointer-events-none iken yalnızca buton hover/focus ile baloncuk */
+  .ref-water-fab-wrap:has(button:hover) .ref-water-fab-bubble,
+  .ref-water-fab-wrap:has(button:focus-visible) .ref-water-fab-bubble {
+    animation: ref-water-bubble-spurt 1.15s ease-out infinite;
+    animation-delay: calc(var(--bubble-delay-chunk, 0) * 22ms);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ref-water-fab-float,
+  .ref-water-fab-ripple,
+  .ref-water-fab-ripple-delayed,
+  .ref-water-fab-icon {
+    animation: none !important;
+    box-shadow: none;
+  }
+
+  .ref-water-fab-wrap:has(button:hover) .ref-water-fab-bubble,
+  .ref-water-fab-wrap:has(button:focus-visible) .ref-water-fab-bubble {
+    animation: none !important;
+  }
+
+  .ref-water-fab-float {
+    box-shadow:
+      0 10px 15px -3px rgb(0 0 0 / 0.15),
+      0 4px 6px -4px rgb(0 0 0 / 0.12);
+  }
+}
+
 :root {
   --background: #ffffff;
   --foreground: #171717;
