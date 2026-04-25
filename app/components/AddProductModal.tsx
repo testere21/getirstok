@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
-import { Search, X, Pencil, PackageMinus, PackagePlus, RefreshCw, Trash2, Calendar, AlertTriangle } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Search, X, Pencil, PackageMinus, PackagePlus, RefreshCw, Trash2, Calendar } from "lucide-react";
 import { addStockItem, updateStockItem } from "@/app/lib/stockService";
 import { ErrorMessage } from "./ErrorMessage";
 import { BarcodeImage } from "./BarcodeImage";
@@ -18,6 +18,43 @@ export interface CatalogProduct {
   barcode: string;
   imageUrl?: string;
   productId?: string;
+  price?: number;
+}
+
+function formatTryPriceTRY(value: number) {
+  return new Intl.NumberFormat("tr-TR", {
+    style: "currency",
+    currency: "TRY",
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(value);
+}
+
+function CatalogProductPriceHighlight({
+  price,
+  align = "center",
+}: {
+  price: number;
+  align?: "center" | "start";
+}) {
+  return (
+    <div
+      className={
+        "mt-2 flex max-w-full flex-wrap items-baseline gap-x-2.5 gap-y-0.5 rounded-xl border-2 border-amber-400/95 bg-gradient-to-r from-amber-50 via-orange-50 to-amber-100 px-4 py-2.5 shadow-md ring-2 ring-amber-200/60 dark:border-amber-500 dark:from-amber-950/70 dark:via-orange-950/55 dark:to-amber-950/70 dark:ring-amber-700/45 " +
+        (align === "center"
+          ? "mx-auto justify-center text-center"
+          : "w-full justify-start sm:w-auto")
+      }
+      role="status"
+    >
+      <span className="shrink-0 text-xs font-extrabold uppercase tracking-wider text-amber-800 dark:text-amber-200">
+        Fiyat
+      </span>
+      <span className="min-w-0 break-all text-2xl font-black tabular-nums tracking-tight text-amber-950 drop-shadow-sm dark:text-amber-50">
+        {formatTryPriceTRY(price)}
+      </span>
+    </div>
+  );
 }
 
 interface AddProductModalProps {
@@ -38,10 +75,11 @@ interface AddProductModalProps {
   onDeleteItem?: (item: StockItemWithId) => void;
   /** Başarılı işlem sonrası çağrılır (toast göstermek için) */
   onSuccess?: (message: string) => void;
-  /** "Stok Görünmüyor Bildir" başarılı olunca çağrılır (ortadaki bildirim penceresi) */
-  onBildirimSent?: () => void;
-  /** "Stok Görünmüyor Bildir" hata alınca çağrılır */
-  onBildirimError?: (message: string) => void;
+  /**
+   * Fırın ürünleri sekmesinden açılan ürün kartı: fiyat, eksik/fazla ekle,
+   * tedarikçi iade günü ve yaklaşan SKT aksiyonları gösterilmez.
+   */
+  bakeryCatalogCard?: boolean;
 }
 
 const initialForm = { name: "", barcode: "", quantity: "", notes: "" };
@@ -57,8 +95,7 @@ export function AddProductModal({
   onEditItem,
   onDeleteItem,
   onSuccess,
-  onBildirimSent,
-  onBildirimError,
+  bakeryCatalogCard = false,
 }: AddProductModalProps) {
   const [name, setName] = useState(initialForm.name);
   const [barcode, setBarcode] = useState(initialForm.barcode);
@@ -78,6 +115,9 @@ export function AddProductModal({
   const [getirStock, setGetirStock] = useState<number | null>(null);
   const [getirStockLoading, setGetirStockLoading] = useState(false);
   const [getirStockError, setGetirStockError] = useState<string | null>(null);
+  /** Son getir-stok isteği tamamlandı mı (başlangıçta null mesajı göstermemek için) */
+  const [getirStockFetchComplete, setGetirStockFetchComplete] = useState(false);
+  const getirStockFetchAbortRef = useRef<AbortController | null>(null);
   /* Tedarikçi iade tarihi */
   const [supplierReturnDate, setSupplierReturnDate] = useState<number | null>(null);
   const [supplierReturnDateLoading, setSupplierReturnDateLoading] = useState(false);
@@ -85,8 +125,6 @@ export function AddProductModal({
   /* Yaklaşan SKT */
   const [expiringProductModalOpen, setExpiringProductModalOpen] = useState(false);
   const [existingExpiringProduct, setExistingExpiringProduct] = useState<ExpiringProductWithId | null>(null);
-  /* "Stok Görünmüyor Bildir" gönderiminde kısa süre buton devre dışı */
-  const [stokBildirimSending, setStokBildirimSending] = useState(false);
   /* Silme onayı: hangi kayıt silinecek (modal açık olunca) */
   const [deleteConfirmItem, setDeleteConfirmItem] = useState<StockItemWithId | null>(null);
 
@@ -241,9 +279,12 @@ export function AddProductModal({
       setNotes(initialForm.notes);
       setShowFormFromCatalog(false);
       // Getir stok state'lerini temizle
+      getirStockFetchAbortRef.current?.abort();
+      getirStockFetchAbortRef.current = null;
       setGetirStock(null);
       setGetirStockError(null);
       setGetirStockLoading(false);
+      setGetirStockFetchComplete(false);
       // Tedarikçi iade tarihi state'lerini temizle
       setSupplierReturnDate(null);
       setSupplierReturnDateError(null);
@@ -254,8 +295,8 @@ export function AddProductModal({
   // Ürün kartı açıldığında cache'ten tedarikçi iade tarihini otomatik yükle
   useEffect(() => {
     // Sadece modal açıkken ve barkod varsa çalış
-    if (!isOpen) return;
-    
+    if (!isOpen || bakeryCatalogCard) return;
+
     const barcodeToCheck = catalogProduct?.barcode || initialItem?.barcode;
     if (!barcodeToCheck) return;
 
@@ -281,12 +322,12 @@ export function AddProductModal({
     };
 
     loadCachedSupplierReturnDate();
-  }, [isOpen, catalogProduct?.barcode, initialItem?.barcode]);
+  }, [isOpen, bakeryCatalogCard, catalogProduct?.barcode, initialItem?.barcode]);
 
   // Ürün kartı açıldığında mevcut yaklaşan SKT kaydını kontrol et
   useEffect(() => {
-    if (!isOpen) return;
-    
+    if (!isOpen || bakeryCatalogCard) return;
+
     const barcodeToCheck = catalogProduct?.barcode || initialItem?.barcode;
     if (!barcodeToCheck) return;
 
@@ -309,7 +350,7 @@ export function AddProductModal({
     };
 
     checkExistingExpiringProduct();
-  }, [isOpen, catalogProduct?.barcode, initialItem?.barcode]);
+  }, [isOpen, bakeryCatalogCard, catalogProduct?.barcode, initialItem?.barcode]);
 
   const filteredCatalog = useMemo(() => {
     const q = catalogSearch.trim().toLowerCase();
@@ -321,69 +362,81 @@ export function AddProductModal({
     );
   }, [catalog, catalogSearch]);
 
-  const sendStokBildirim = async () => {
-    const baseBarcode = (catalogProduct?.barcode || initialItem?.barcode || "").trim();
-    if (baseBarcode.length < 6) {
-      onBildirimError?.("Bildirim için geçerli bir barkod gerekli.");
-      return;
-    }
-    setStokBildirimSending(true);
-    try {
-      const res = await fetch("/api/telegram/product-issue", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          type: "stock_missing",
-          barcode: baseBarcode,
-          productName: (catalogProduct?.name || initialItem?.name || "").trim() || undefined,
-          source: type === "missing" ? "missing_tab" : "extra_tab",
-        }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (res.ok && data?.success) {
-        onBildirimSent?.();
-      } else {
-        onBildirimError?.(data?.error ?? "Bildirim gönderilemedi.");
+  const loadGetirStockForBarcode = useCallback(
+    async (barcodeToCheck: string, signal?: AbortSignal) => {
+      const trimmed = barcodeToCheck?.trim();
+      if (!trimmed) {
+        setGetirStockError("Barkod bulunamadı");
+        return;
       }
-    } catch {
-      onBildirimError?.("Bildirim gönderilemedi.");
-    } finally {
-      setStokBildirimSending(false);
-    }
-  };
 
-  // Getir stok bilgisini çekme fonksiyonu
-  const handleGetGetirStock = async () => {
-    // Barkod değerini al
+      setGetirStock(null);
+      setGetirStockLoading(true);
+      setGetirStockError(null);
+      setGetirStockFetchComplete(false);
+
+      try {
+        const response = await fetch(
+          `/api/getir-stock?barcode=${encodeURIComponent(trimmed)}`,
+          { signal }
+        );
+        const data = await response.json();
+        if (signal?.aborted) return;
+
+        if (data.error) {
+          setGetirStockError(data.error);
+          setGetirStock(null);
+        } else {
+          setGetirStock(data.stock);
+          setGetirStockError(null);
+        }
+        setGetirStockFetchComplete(true);
+      } catch (error) {
+        if (error instanceof Error && error.name === "AbortError") return;
+        if (signal?.aborted) return;
+        console.error("Getir stok bilgisi çekilemedi:", error);
+        setGetirStockError("Bağlantı hatası. Lütfen tekrar deneyin.");
+        setGetirStock(null);
+        setGetirStockFetchComplete(true);
+      } finally {
+        if (!signal?.aborted) {
+          setGetirStockLoading(false);
+        }
+      }
+    },
+    []
+  );
+
+  /** Düzenleme modu: manuel "Getir Stoğunu Getir" */
+  const handleGetGetirStock = () => {
     const barcodeToCheck = catalogProduct?.barcode || initialItem?.barcode;
-    
-    if (!barcodeToCheck) {
+    if (!barcodeToCheck?.trim()) {
       setGetirStockError("Barkod bulunamadı");
       return;
     }
-
-    setGetirStockLoading(true);
-    setGetirStockError(null);
-
-    try {
-      const response = await fetch(`/api/getir-stock?barcode=${encodeURIComponent(barcodeToCheck)}`);
-      const data = await response.json();
-
-      if (data.error) {
-        setGetirStockError(data.error);
-        setGetirStock(null);
-      } else {
-        setGetirStock(data.stock);
-        setGetirStockError(null);
-      }
-    } catch (error) {
-      console.error("Getir stok bilgisi çekilemedi:", error);
-      setGetirStockError("Bağlantı hatası. Lütfen tekrar deneyin.");
-      setGetirStock(null);
-    } finally {
-      setGetirStockLoading(false);
-    }
+    getirStockFetchAbortRef.current?.abort();
+    const ac = new AbortController();
+    getirStockFetchAbortRef.current = ac;
+    void loadGetirStockForBarcode(barcodeToCheck, ac.signal);
   };
+
+  // Katalog ürün detayı açılınca Getir stok otomatik çek (düzenleme / form modunda yok)
+  useEffect(() => {
+    if (!isOpen || !isCatalogViewMode) {
+      return;
+    }
+    const bc = catalogProduct?.barcode?.trim();
+    if (!bc) return;
+
+    getirStockFetchAbortRef.current?.abort();
+    const ac = new AbortController();
+    getirStockFetchAbortRef.current = ac;
+    void loadGetirStockForBarcode(bc, ac.signal);
+
+    return () => {
+      ac.abort();
+    };
+  }, [isOpen, isCatalogViewMode, catalogProduct?.barcode, loadGetirStockForBarcode]);
 
   // Tedarikçi iade tarihini çekme fonksiyonu
   const handleGetSupplierReturnDate = async () => {
@@ -600,6 +653,14 @@ export function AddProductModal({
                 <h3 className="text-lg font-semibold text-zinc-900 dark:text-zinc-50">
                   {catalogProduct.name}
                 </h3>
+                {!bakeryCatalogCard &&
+                  typeof catalogProduct.price === "number" &&
+                  !Number.isNaN(catalogProduct.price) && (
+                    <CatalogProductPriceHighlight
+                      price={catalogProduct.price}
+                      align="center"
+                    />
+                  )}
                 <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
                   Barkod: {catalogProduct.barcode}
                 </p>
@@ -610,37 +671,36 @@ export function AddProductModal({
                 <BarcodeImage barcode={catalogProduct.barcode} width={2} height={80} />
               </div>
 
-              {/* Getir Stok Bilgisi */}
+              {/* Getir Stok Bilgisi (katalog: açılışta otomatik) */}
               <div className="flex flex-col gap-2">
-                <button
-                  type="button"
-                  onClick={handleGetGetirStock}
-                  disabled={getirStockLoading}
-                  className="flex items-center justify-center gap-2 rounded-lg border border-zinc-300 bg-white px-4 py-2 text-sm font-medium text-zinc-700 transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700"
-                >
-                  {getirStockLoading ? (
-                    <>
-                      <RefreshCw className="size-4 animate-spin" />
-                      <span>Stok Getiriliyor...</span>
-                    </>
-                  ) : (
-                    <>
-                      <RefreshCw className="size-4" />
-                      <span>Getir Stokunu Getir</span>
-                    </>
-                  )}
-                </button>
+                {getirStockLoading && (
+                  <div
+                    className="flex items-center justify-center gap-2 rounded-lg border border-zinc-200 bg-zinc-50 py-3 text-sm text-zinc-600 dark:border-zinc-600 dark:bg-zinc-800/50 dark:text-zinc-300"
+                    role="status"
+                    aria-live="polite"
+                  >
+                    <RefreshCw className="size-4 animate-spin shrink-0" />
+                    <span>Getir stoku yükleniyor…</span>
+                  </div>
+                )}
 
-                {/* Stok Bilgisi Gösterimi */}
-                {getirStock !== null && !getirStockError && (
+                {getirStock !== null && !getirStockError && !getirStockLoading && (
                   <div className="rounded-lg border border-green-200 bg-green-50 p-3 dark:border-green-800 dark:bg-green-900/20">
                     <p className="text-sm font-medium text-green-800 dark:text-green-300">
-                      Getir Stoku: <span className="text-lg font-semibold">{getirStock}</span> adet
+                      Stok: <span className="text-lg font-semibold">{getirStock}</span>
                     </p>
                   </div>
                 )}
 
-                {/* Hata Mesajı */}
+                {getirStockFetchComplete &&
+                  getirStock === null &&
+                  !getirStockError &&
+                  !getirStockLoading && (
+                    <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-3 text-sm text-zinc-600 dark:border-zinc-600 dark:bg-zinc-800/50 dark:text-zinc-400">
+                      Getir stoku şu an gösterilemiyor (eşleşme veya API yanıtı).
+                    </div>
+                  )}
+
                 {getirStockError && (
                   <div className="rounded-lg border border-red-200 bg-red-50 p-3 dark:border-red-800 dark:bg-red-900/20">
                     <p className="text-sm font-medium text-red-800 dark:text-red-300">
@@ -654,91 +714,84 @@ export function AddProductModal({
                   </div>
                 )}
 
-                {/* Kaç Gün Önceden Çıkılacak Butonu - Sadece değer yoksa göster */}
-                {supplierReturnDate === null && (
-                  <button
-                    type="button"
-                    onClick={handleGetSupplierReturnDate}
-                    disabled={supplierReturnDateLoading}
-                    className="flex items-center justify-center gap-2 rounded-lg border border-zinc-300 bg-white px-4 py-2 text-sm font-medium text-zinc-700 transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700"
-                  >
-                    {supplierReturnDateLoading ? (
-                      <>
-                        <RefreshCw className="size-4 animate-spin" />
-                        <span>Yükleniyor...</span>
-                      </>
-                    ) : (
-                      <>
-                        <RefreshCw className="size-4" />
-                        <span>Kaç Gün Önceden Çıkılacak</span>
-                      </>
+                {!bakeryCatalogCard && (
+                  <>
+                    {/* Kaç Gün Önceden Çıkılacak Butonu - Sadece değer yoksa göster */}
+                    {supplierReturnDate === null && (
+                      <button
+                        type="button"
+                        onClick={handleGetSupplierReturnDate}
+                        disabled={supplierReturnDateLoading}
+                        className="flex items-center justify-center gap-2 rounded-lg border border-zinc-300 bg-white px-4 py-2 text-sm font-medium text-zinc-700 transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700"
+                      >
+                        {supplierReturnDateLoading ? (
+                          <>
+                            <RefreshCw className="size-4 animate-spin" />
+                            <span>Yükleniyor...</span>
+                          </>
+                        ) : (
+                          <>
+                            <RefreshCw className="size-4" />
+                            <span>Kaç Gün Önceden Çıkılacak</span>
+                          </>
+                        )}
+                      </button>
                     )}
-                  </button>
-                )}
 
-                {/* Tedarikçi İade Tarihi Gösterimi */}
-                {supplierReturnDate !== null && !supplierReturnDateError && (
-                  <div className="rounded-lg border border-green-200 bg-green-50 p-3 dark:border-green-800 dark:bg-green-900/20">
-                    <p className="text-sm font-medium text-green-800 dark:text-green-300">
-                      Tedarikçi İade Tarihi: <span className="text-lg font-semibold">{supplierReturnDate}</span> gün önceden çıkılacak
-                    </p>
-                  </div>
-                )}
-
-                {/* Tedarikçi İade Tarihi Hata Mesajı */}
-                {supplierReturnDateError && (
-                  <div className="rounded-lg border border-red-200 bg-red-50 p-3 dark:border-red-800 dark:bg-red-900/20">
-                    <p className="text-sm font-medium text-red-800 dark:text-red-300">
-                      {supplierReturnDateError}
-                    </p>
-                    {supplierReturnDateError.includes("Token") && (
-                      <p className="mt-1 text-xs text-red-600 dark:text-red-400">
-                        Lütfen Chrome eklentisini kullanarak warehouse.getir.com'da yeni token ekleyin.
-                      </p>
+                    {/* Tedarikçi İade Tarihi Gösterimi */}
+                    {supplierReturnDate !== null && !supplierReturnDateError && (
+                      <div className="rounded-lg border border-green-200 bg-green-50 p-3 dark:border-green-800 dark:bg-green-900/20">
+                        <p className="text-sm font-medium text-green-800 dark:text-green-300">
+                          Tedarikçi İade Tarihi: <span className="text-lg font-semibold">{supplierReturnDate}</span> gün önceden çıkılacak
+                        </p>
+                      </div>
                     )}
-                  </div>
-                )}
 
-                {/* Yaklaşan SKT Olarak İşaretle Butonu */}
-                {(catalogProduct || initialItem) && (
-                <div className="flex flex-col gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setExpiringProductModalOpen(true)}
-                    className="flex items-center justify-center gap-2 rounded-lg border border-zinc-300 bg-white px-4 py-2 text-sm font-medium text-zinc-700 transition hover:bg-zinc-50 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700"
-                  >
-                    <Calendar className="size-4" />
-                    <span>
-                      {existingExpiringProduct
-                        ? "Yaklaşan SKT'yi Düzenle"
-                        : "Yaklaşan SKT Olarak İşaretle"}
-                    </span>
-                  </button>
-                  <div>
-                    <button
-                      type="button"
-                      onClick={() => void sendStokBildirim()}
-                      disabled={stokBildirimSending}
-                      className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-700 transition hover:bg-amber-100 disabled:opacity-60 disabled:pointer-events-none dark:border-amber-700 dark:bg-amber-900/30 dark:text-amber-200 dark:hover:bg-amber-900/50"
-                    >
-                      <AlertTriangle className="size-3.5" />
-                      {stokBildirimSending ? "Gönderiliyor…" : "Stok Görünmüyor Bildir"}
-                    </button>
-                  </div>
-                </div>
-                )}
+                    {/* Tedarikçi İade Tarihi Hata Mesajı */}
+                    {supplierReturnDateError && (
+                      <div className="rounded-lg border border-red-200 bg-red-50 p-3 dark:border-red-800 dark:bg-red-900/20">
+                        <p className="text-sm font-medium text-red-800 dark:text-red-300">
+                          {supplierReturnDateError}
+                        </p>
+                        {supplierReturnDateError.includes("Token") && (
+                          <p className="mt-1 text-xs text-red-600 dark:text-red-400">
+                            Lütfen Chrome eklentisini kullanarak warehouse.getir.com'da yeni token ekleyin.
+                          </p>
+                        )}
+                      </div>
+                    )}
 
-                {/* Mevcut Yaklaşan SKT Bilgisi */}
-                {existingExpiringProduct && (
-                  <div className="rounded-lg border border-orange-200 bg-orange-50 p-3 dark:border-orange-800 dark:bg-orange-900/20">
-                    <p className="text-sm font-medium text-orange-800 dark:text-orange-300">
-                      <span className="font-semibold">SKT:</span> {existingExpiringProduct.expiryDate}
-                    </p>
-                    <p className="mt-1 text-sm font-medium text-orange-800 dark:text-orange-300">
-                      <span className="font-semibold">Çıkılması Gereken Tarih:</span>{" "}
-                      {existingExpiringProduct.removalDate}
-                    </p>
-                  </div>
+                    {/* Yaklaşan SKT Olarak İşaretle */}
+                    {(catalogProduct || initialItem) && (
+                      <div className="flex flex-col gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setExpiringProductModalOpen(true)}
+                          className="flex items-center justify-center gap-2 rounded-lg border border-zinc-300 bg-white px-4 py-2 text-sm font-medium text-zinc-700 transition hover:bg-zinc-50 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700"
+                        >
+                          <Calendar className="size-4" />
+                          <span>
+                            {existingExpiringProduct
+                              ? "Yaklaşan SKT'yi Düzenle"
+                              : "Yaklaşan SKT Olarak İşaretle"}
+                          </span>
+                        </button>
+                      </div>
+                    )}
+
+                    {/* Mevcut Yaklaşan SKT Bilgisi */}
+                    {existingExpiringProduct && (
+                      <div className="rounded-lg border border-orange-200 bg-orange-50 p-3 dark:border-orange-800 dark:bg-orange-900/20">
+                        <p className="text-sm font-medium text-orange-800 dark:text-orange-300">
+                          <span className="font-semibold">SKT:</span> {existingExpiringProduct.expiryDate}
+                        </p>
+                        <p className="mt-1 text-sm font-medium text-orange-800 dark:text-orange-300">
+                          <span className="font-semibold">Çıkılması Gereken Tarih:</span>{" "}
+                          {existingExpiringProduct.removalDate}
+                        </p>
+                      </div>
+                    )}
+                  </>
                 )}
               </div>
             </div>
@@ -913,38 +966,40 @@ export function AddProductModal({
             )}
 
             {/* Ekleme butonları - Sadece ürün hiç eklenmemişse göster */}
-            {!productStatus.hasMissing && !productStatus.hasExtra && (
-            <div className="grid grid-cols-2 gap-3">
-              <button
-                type="button"
-                onClick={() => {
-                    if (catalogProduct) {
-                      setFormTypeFromCatalog("missing");
-                      setShowFormFromCatalog(true);
-                  }
-                }}
-                className="flex items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-medium text-white transition-all duration-200 hover:opacity-90 hover:scale-[1.02] active:scale-[0.98]"
-                style={{ backgroundColor: "var(--color-missing)" }}
-              >
-                <PackageMinus className="size-5" />
-                Eksik Ekle
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                    if (catalogProduct) {
-                      setFormTypeFromCatalog("extra");
-                      setShowFormFromCatalog(true);
-                  }
-                }}
-                className="flex items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-medium text-white transition-all duration-200 hover:opacity-90 hover:scale-[1.02] active:scale-[0.98]"
-                style={{ backgroundColor: "var(--color-extra)" }}
-              >
-                <PackagePlus className="size-5" />
-                Fazla Ekle
-              </button>
-            </div>
-            )}
+            {!bakeryCatalogCard &&
+              !productStatus.hasMissing &&
+              !productStatus.hasExtra && (
+                <div className="grid grid-cols-2 gap-3">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (catalogProduct) {
+                        setFormTypeFromCatalog("missing");
+                        setShowFormFromCatalog(true);
+                      }
+                    }}
+                    className="flex items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-medium text-white transition-all duration-200 hover:opacity-90 hover:scale-[1.02] active:scale-[0.98]"
+                    style={{ backgroundColor: "var(--color-missing)" }}
+                  >
+                    <PackageMinus className="size-5" />
+                    Eksik Ekle
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (catalogProduct) {
+                        setFormTypeFromCatalog("extra");
+                        setShowFormFromCatalog(true);
+                      }
+                    }}
+                    className="flex items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-medium text-white transition-all duration-200 hover:opacity-90 hover:scale-[1.02] active:scale-[0.98]"
+                    style={{ backgroundColor: "var(--color-extra)" }}
+                  >
+                    <PackagePlus className="size-5" />
+                    Fazla Ekle
+                  </button>
+                </div>
+              )}
             {/* Eğer ürün hem eksik hem fazla eklenmişse uyarı göster */}
             {productStatus.hasMissing && productStatus.hasExtra && (
               <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 dark:border-amber-800 dark:bg-amber-900/20">
@@ -1025,10 +1080,10 @@ export function AddProductModal({
                   </button>
 
                   {/* Stok Bilgisi Gösterimi */}
-                  {getirStock !== null && !getirStockError && (
+                  {getirStock !== null && !getirStockError && !getirStockLoading && (
                     <div className="rounded-lg border border-green-200 bg-green-50 p-3 dark:border-green-800 dark:bg-green-900/20">
                       <p className="text-sm font-medium text-green-800 dark:text-green-300">
-                        Getir Stoku: <span className="text-lg font-semibold">{getirStock}</span> adet
+                        Stok: <span className="text-lg font-semibold">{getirStock}</span>
                       </p>
                     </div>
                   )}
@@ -1046,6 +1101,15 @@ export function AddProductModal({
                       )}
                     </div>
                   )}
+
+                  {getirStockFetchComplete &&
+                    getirStock === null &&
+                    !getirStockError &&
+                    !getirStockLoading && (
+                      <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-3 text-sm text-zinc-600 dark:border-zinc-600 dark:bg-zinc-800/50 dark:text-zinc-400">
+                        Getir stoku şu an gösterilemiyor (eşleşme veya API yanıtı).
+                      </div>
+                    )}
 
                   {/* Kaç Gün Önceden Çıkılacak Butonu - Sadece değer yoksa göster */}
                   {supplierReturnDate === null && (
@@ -1092,7 +1156,7 @@ export function AddProductModal({
                     </div>
                   )}
 
-                  {/* Yaklaşan SKT Olarak İşaretle & Ürün/Stok Görünmüyor Bildir Butonları */}
+                  {/* Yaklaşan SKT Olarak İşaretle */}
                   {initialItem && (
                     <div className="space-y-2">
                       <button
@@ -1108,19 +1172,6 @@ export function AddProductModal({
                         </span>
                       </button>
 
-                      <div>
-                        <button
-                          type="button"
-                          onClick={() => void sendStokBildirim()}
-                          disabled={stokBildirimSending}
-                          className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-700 transition hover:bg-amber-100 disabled:opacity-60 disabled:pointer-events-none dark:border-amber-700 dark:bg-amber-900/30 dark:text-amber-200 dark:hover:bg-amber-900/50"
-                        >
-                          <AlertTriangle className="size-3.5" />
-                          {stokBildirimSending ? "Gönderiliyor…" : "Stok Görünmüyor Bildir"}
-                        </button>
-                      </div>
-
-                      {/* Mevcut Yaklaşan SKT Bilgisi */}
                       {existingExpiringProduct && (
                         <div className="rounded-lg border border-orange-200 bg-orange-50 p-3 dark:border-orange-800 dark:bg-orange-900/20">
                           <p className="text-sm font-medium text-orange-800 dark:text-orange-300">
@@ -1162,6 +1213,14 @@ export function AddProductModal({
                   {catalogProduct.name}
                 </div>
               </div>
+              {!bakeryCatalogCard &&
+                typeof catalogProduct.price === "number" &&
+                !Number.isNaN(catalogProduct.price) && (
+                  <CatalogProductPriceHighlight
+                    price={catalogProduct.price}
+                    align="start"
+                  />
+                )}
               <div>
                 <label className="mb-1 block text-sm font-medium text-zinc-700 dark:text-zinc-300">
                   Barkod

@@ -135,6 +135,8 @@ export interface CatalogProduct {
   barcode: string;
   imageUrl?: string;
   productId?: string;
+  /** Getir bayi satış fiyatı (ör. stocks API); kuruş değil, TL ondalıklı */
+  price?: number;
 }
 
 /**
@@ -146,6 +148,7 @@ export interface SupplementalCatalogProduct {
   barcode: string;
   imageUrl?: string;
   productId?: string;
+  price?: number;
   source: "warehouse_shelf_label";
   createdAt: string;
   updatedAt: string;

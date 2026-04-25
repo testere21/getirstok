@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "scrape-products": "node scripts/scrape-getir-products.mjs"
+    "scrape-products": "node scripts/scrape-getir-products.mjs",
+    "fill-prices": "node scripts/fill-product-prices-from-stocks-api.mjs"
   },
   "dependencies": {
     "firebase": "^12.8.0",

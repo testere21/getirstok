@@ -1,5 +1,6 @@
 import { getGetirToken } from "./getirTokenService";
 import { getProductIdByBarcode } from "./barcodeProductMappingService";
+import { getProductIdFromMergedCatalog } from "./catalogProductIdResolver";
 import { DEFAULT_WAREHOUSE_ID } from "./types";
 
 /** Getir API'den stok bilgisi çekme hatası */
@@ -171,8 +172,9 @@ export async function getGetirStockByProductId(
 
 /**
  * Getir API'den belirli bir barkod için stok miktarını çeker
- * Önce barkod -> ürün ID mapping'inden ürün ID'sini bulur, sonra hızlı stok sorgulama yapar
- * Eğer mapping'de yoksa, eski yöntemle (pagination) arama yapar
+ * Önce Firestore `barcode_product_mappings`, yoksa birleşik katalog (products.json + Firestore
+ * supplemental) içindeki productId kullanılır; bulunursa hızlı stok sorgusu yapılır.
+ * İkisi de yoksa eski yöntemle (pagination) arama yapar.
  * @param barcode Ürün barkodu
  * @returns Promise<number | null> Stok miktarı (ürün bulunamazsa veya hata varsa null)
  * @throws GetirApiError Token yoksa veya network hatası varsa
@@ -181,13 +183,18 @@ export async function getGetirStock(barcode: string): Promise<number | null> {
   try {
     console.log("[Getir API] Fetching stock for barcode:", barcode);
 
-    // Önce barkod -> ürün ID mapping'inden ürün ID'sini bul
-    const productId = await getProductIdByBarcode(barcode);
+    // Önce Firestore mapping, yoksa katalog (products.json + supplemental) productId
+    const productIdFromMapping = await getProductIdByBarcode(barcode);
+    const productIdFromCatalog = productIdFromMapping
+      ? null
+      : await getProductIdFromMergedCatalog(barcode);
+    const productId = productIdFromMapping ?? productIdFromCatalog;
 
     if (productId) {
-      // Ürün ID'si bulundu - hızlı yöntemle stok sorgula
       console.log(
-        "[Getir API] Product ID found in mapping, using fast method:",
+        productIdFromMapping
+          ? "[Getir API] Product ID found in mapping, using fast method:"
+          : "[Getir API] Product ID found in catalog (json/supplemental), using fast method:",
         productId
       );
       return await getGetirStockByProductId(productId);

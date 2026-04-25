@@ -4,11 +4,21 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type CSSProperties,
 } from "react";
 import Image from "next/image";
-import { Barcode, Pencil, Trash2, ArrowUp, ArrowDown } from "lucide-react";
+import {
+  Barcode,
+  Pencil,
+  Trash2,
+  ArrowUp,
+  ArrowDown,
+  ChefHat,
+  X,
+  RefreshCw,
+} from "lucide-react";
 import { AddProductModal } from "./components/AddProductModal";
 import { SearchBar } from "./components/SearchBar";
 import { BarcodeScanner } from "./components/BarcodeScanner";
@@ -34,6 +44,11 @@ import { ReferenceWaterProductsPanel } from "./components/ReferenceWaterProducts
 import { ReferenceWaterProductsPanelContent } from "./components/ReferenceWaterProductsPanelContent";
 import type { StockItemWithId, ExpiringProductWithId } from "@/app/lib/types";
 import { formatDateTime } from "@/app/lib/utils";
+import {
+  resolveBakeryProducts,
+  type BakeryResolvedRow,
+} from "@/app/lib/bakeryProductBarcodes";
+import { getBakeryFullImageUrl } from "@/app/lib/bakeryFullImage";
 
 /** Buton merkezinden radyal — çok baloncuk, halkalar halinde mesafe çeşitliliği */
 const REF_WATER_AROUND_BUTTON_COUNT = 120;
@@ -61,10 +76,11 @@ interface CatalogProduct {
   barcode: string;
   imageUrl?: string;
   productId?: string;
+  price?: number;
 }
 
 export type ModalType = null | "missing" | "extra";
-export type TabType = "missing" | "extra" | "expiring";
+export type TabType = "missing" | "extra" | "expiring" | "bakery";
 
 interface ToastState {
   message: string;
@@ -73,18 +89,60 @@ interface ToastState {
   autoClose?: number;
 }
 
+type StockListSortKey = "name" | "barcode" | "quantity" | "totalAmount";
+
 /** Eksik/Fazla listesi sütun tanımları — masaüstü başlık, satır ve mobil kart tek kaynaktan */
 const STOCK_LIST_COLUMNS: {
-  key: "name" | "barcode" | "quantity" | "notes";
+  key: "name" | "barcode" | "quantity" | "notes" | "totalAmount";
   title: string;
   mobileLabel: string;
-  sortKey: "name" | "barcode" | "quantity" | null;
+  sortKey: StockListSortKey | null;
 }[] = [
   { key: "name", title: "Ürün", mobileLabel: "Ürün", sortKey: "name" },
   { key: "barcode", title: "Barkod", mobileLabel: "Barkod", sortKey: "barcode" },
   { key: "quantity", title: "Miktar", mobileLabel: "Miktar", sortKey: "quantity" },
   { key: "notes", title: "Notlar", mobileLabel: "Notlar", sortKey: null },
+  {
+    key: "totalAmount",
+    title: "Toplam tutar",
+    mobileLabel: "Toplam tutar",
+    sortKey: "totalAmount",
+  },
 ];
+
+function formatTryPriceTRY(value: number) {
+  return new Intl.NumberFormat("tr-TR", {
+    style: "currency",
+    currency: "TRY",
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(value);
+}
+
+/** Katalog fiyatı bilinen satırların para tutarı (miktar × birim fiyat) */
+function sumStockValueByBarcode(
+  list: StockItemWithId[],
+  priceByBarcode: Map<string, number>
+): number {
+  return list.reduce((sum, item) => {
+    const unit = priceByBarcode.get(item.barcode);
+    if (typeof unit !== "number" || Number.isNaN(unit)) return sum;
+    return sum + unit * item.quantity;
+  }, 0);
+}
+
+/** Satır tutarı: fiyat yoksa metin "—", sıralamada değer null (sona) */
+function getItemLineTotalTry(
+  item: StockItemWithId,
+  priceByBarcode: Map<string, number>
+): { text: string; sortValue: number | null } {
+  const unit = priceByBarcode.get(item.barcode);
+  if (typeof unit !== "number" || Number.isNaN(unit)) {
+    return { text: "—", sortValue: null };
+  }
+  const v = unit * item.quantity;
+  return { text: formatTryPriceTRY(v), sortValue: v };
+}
 
 // Basit debounce hook'u — verilen değeri belirli bir gecikmeden sonra günceller
 function useDebounce<T>(value: T, delay: number): T {
@@ -118,7 +176,7 @@ export default function Home() {
   const [firestoreError, setFirestoreError] = useState<string | null>(null);
   const [toast, setToast] = useState<ToastState | null>(null);
   // Sıralama state'leri
-  const [sortField, setSortField] = useState<"name" | "barcode" | "quantity" | null>(null);
+  const [sortField, setSortField] = useState<StockListSortKey | null>(null);
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
   // Yaklaşan SKT bildirimi
   const [expiringProductsToday, setExpiringProductsToday] = useState<ExpiringProductWithId[]>([]);
@@ -457,6 +515,274 @@ export default function Home() {
     [filteredItems]
   );
 
+  const catalogPriceByBarcode = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const p of catalogProducts) {
+      if (
+        p.barcode &&
+        typeof p.price === "number" &&
+        !Number.isNaN(p.price)
+      ) {
+        m.set(p.barcode, p.price);
+      }
+    }
+    return m;
+  }, [catalogProducts]);
+
+  /** Katalogda eşleşmeyen barkodlar listede gösterilmez */
+  const bakeryRows = useMemo(
+    () =>
+      resolveBakeryProducts(catalogProducts).filter((r) => r.inCatalog),
+    [catalogProducts]
+  );
+
+  const handleBakeryRowClick = useCallback(
+    (row: BakeryResolvedRow) => {
+      const product = catalogProducts.find((p) => p.barcode === row.barcode);
+      if (product) setSelectedCatalogProduct(product);
+    },
+    [catalogProducts]
+  );
+
+  const [bakeryStocks, setBakeryStocks] = useState<
+    Record<string, number | null>
+  >({});
+  const [bakeryStocksLoading, setBakeryStocksLoading] = useState(false);
+  const bakeryStockFetchGenRef = useRef(0);
+  /** Fırın listesi: `public/bakery-images/{barkod}.jpg` tam ekran */
+  const [bakeryLightboxBarcode, setBakeryLightboxBarcode] = useState<
+    string | null
+  >(null);
+  const [bakeryLightboxFailed, setBakeryLightboxFailed] = useState(false);
+  /** `public/bakery-images/{barkod}.jpg` dosyası olan barkodlar (API'den) */
+  const [bakeryImageBarcodes, setBakeryImageBarcodes] = useState<Set<string>>(
+    () => new Set()
+  );
+  /** Fırın: varsayılan = raf stoku 0 olanlar üstte; tıkla = az→çok → çok→az → varsayılan */
+  const [bakeryRafSort, setBakeryRafSort] = useState<
+    "default" | "asc" | "desc"
+  >("default");
+
+  const bakeryStocksKey = useMemo(
+    () => bakeryRows.map((r) => r.barcode).join("\u0000"),
+    [bakeryRows]
+  );
+
+  const fetchBakeryStockEntries = useCallback(
+    async (rows: BakeryResolvedRow[]) =>
+      Promise.all(
+        rows.map(async (row) => {
+          try {
+            const res = await fetch(
+              `/api/getir-stock?barcode=${encodeURIComponent(row.barcode)}`
+            );
+            const data = (await res.json()) as { stock?: number | null };
+            if (res.ok && data && typeof data.stock === "number") {
+              return [row.barcode, data.stock] as const;
+            }
+            if (
+              res.ok &&
+              data &&
+              (data.stock === null || data.stock === undefined)
+            ) {
+              return [row.barcode, null] as const;
+            }
+            return [row.barcode, null] as const;
+          } catch {
+            return [row.barcode, null] as const;
+          }
+        })
+      ),
+    []
+  );
+
+  const handleBakeryStockRefresh = useCallback(() => {
+    if (bakeryRows.length === 0) return;
+    const gen = ++bakeryStockFetchGenRef.current;
+    setBakeryStocksLoading(true);
+    setBakeryStocks({});
+    void (async () => {
+      try {
+        const entries = await fetchBakeryStockEntries(bakeryRows);
+        if (gen !== bakeryStockFetchGenRef.current) return;
+        setBakeryStocks(
+          Object.fromEntries(entries) as Record<string, number | null>
+        );
+        setBakeryStocksLoading(false);
+        setBakeryRafSort("asc");
+      } catch {
+        if (gen === bakeryStockFetchGenRef.current) {
+          setBakeryStocksLoading(false);
+        }
+      }
+    })();
+  }, [bakeryRows, fetchBakeryStockEntries]);
+
+  useEffect(() => {
+    if (activeTab !== "bakery" || catalogLoading) return;
+    if (bakeryRows.length === 0) {
+      setBakeryStocks({});
+      setBakeryStocksLoading(false);
+      return;
+    }
+    const gen = ++bakeryStockFetchGenRef.current;
+    setBakeryStocksLoading(true);
+    setBakeryStocks({});
+
+    void (async () => {
+      try {
+        const entries = await fetchBakeryStockEntries(bakeryRows);
+        if (gen !== bakeryStockFetchGenRef.current) return;
+        setBakeryStocks(
+          Object.fromEntries(entries) as Record<string, number | null>
+        );
+        setBakeryStocksLoading(false);
+      } catch {
+        if (gen === bakeryStockFetchGenRef.current) {
+          setBakeryStocksLoading(false);
+        }
+      }
+    })();
+
+    return () => {
+      bakeryStockFetchGenRef.current += 1;
+    };
+  }, [activeTab, catalogLoading, bakeryStocksKey, fetchBakeryStockEntries]);
+
+  useEffect(() => {
+    if (activeTab !== "bakery") return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch("/api/bakery-images");
+        const data = (await res.json()) as { barcodes?: string[] };
+        if (cancelled || !res.ok || !Array.isArray(data.barcodes)) return;
+        setBakeryImageBarcodes(new Set(data.barcodes.map((b) => b.trim())));
+      } catch {
+        /* mevcut küme kalsın */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [activeTab]);
+
+  useEffect(() => {
+    if (activeTab !== "bakery") setBakeryRafSort("default");
+  }, [activeTab]);
+
+  useEffect(() => {
+    if (!bakeryLightboxBarcode) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setBakeryLightboxBarcode(null);
+        setBakeryLightboxFailed(false);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [bakeryLightboxBarcode]);
+
+  useEffect(() => {
+    if (!bakeryLightboxBarcode) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, [bakeryLightboxBarcode]);
+
+  /**
+   * Eksik/fazla tablo ile aynı mantık: `gap-4`, görsel 3rem, ürün adı `1fr`,
+   * barkod `minmax(8rem,10rem)`; sondaki `1fr` boş sütun kalan genişliği paylaşır
+   * (eksik/fazlada notlar + toplam arasındaki gibi — sütunlar sağa yapışmaz).
+   */
+  const BAKERY_LIST_GRID =
+    "3rem minmax(0,1fr) minmax(8rem,10rem) minmax(4rem,6rem) minmax(5rem,7rem) minmax(0,1fr)";
+
+  const bakeryRowIndexByBarcode = useMemo(() => {
+    const m = new Map<string, number>();
+    bakeryRows.forEach((r, i) => m.set(r.barcode, i));
+    return m;
+  }, [bakeryRows]);
+
+  const cycleBakeryRafSort = useCallback(() => {
+    setBakeryRafSort((s) =>
+      s === "default" ? "asc" : s === "asc" ? "desc" : "default"
+    );
+  }, []);
+
+  const bakeryDisplayRows = useMemo(() => {
+    const rows = [...bakeryRows];
+    const idx = (r: BakeryResolvedRow) =>
+      bakeryRowIndexByBarcode.get(r.barcode) ?? 0;
+
+    const numericShelf = (r: BakeryResolvedRow): number | null => {
+      if (bakeryStocksLoading) return null;
+      const v = bakeryStocks[r.barcode];
+      return typeof v === "number" ? v : null;
+    };
+
+    if (bakeryRafSort === "default") {
+      if (bakeryStocksLoading) return rows;
+      rows.sort((a, b) => {
+        const sa = numericShelf(a);
+        const sb = numericShelf(b);
+        const aZero = sa === 0;
+        const bZero = sb === 0;
+        if (aZero && !bZero) return -1;
+        if (!aZero && bZero) return 1;
+        return idx(a) - idx(b);
+      });
+      return rows;
+    }
+
+    if (bakeryRafSort === "asc") {
+      rows.sort((a, b) => {
+        const sa = numericShelf(a);
+        const sb = numericShelf(b);
+        const ka = sa === null ? Number.POSITIVE_INFINITY : sa;
+        const kb = sb === null ? Number.POSITIVE_INFINITY : sb;
+        if (ka !== kb) return ka - kb;
+        return idx(a) - idx(b);
+      });
+      return rows;
+    }
+
+    rows.sort((a, b) => {
+      const sa = numericShelf(a);
+      const sb = numericShelf(b);
+      const ka = sa === null ? Number.NEGATIVE_INFINITY : sa;
+      const kb = sb === null ? Number.NEGATIVE_INFINITY : sb;
+      if (kb !== ka) return kb - ka;
+      return idx(a) - idx(b);
+    });
+    return rows;
+  }, [
+    bakeryRows,
+    bakeryRowIndexByBarcode,
+    bakeryStocks,
+    bakeryStocksLoading,
+    bakeryRafSort,
+  ]);
+
+  const totalMissingValueTry = useMemo(
+    () =>
+      sumStockValueByBarcode(
+        filteredItems.filter((i) => i.type === "missing"),
+        catalogPriceByBarcode
+      ),
+    [filteredItems, catalogPriceByBarcode]
+  );
+  const totalExtraValueTry = useMemo(
+    () =>
+      sumStockValueByBarcode(
+        filteredItems.filter((i) => i.type === "extra"),
+        catalogPriceByBarcode
+      ),
+    [filteredItems, catalogPriceByBarcode]
+  );
+
   /**
    * Sekmeli listeler — filteredItems'tan türetilir (tek kaynak).
    * Her sekme kendi tipine göre filtrelenmiş listeyi gösterir.
@@ -477,14 +803,26 @@ export default function Home() {
    */
   const displayItems = useMemo(() => {
     const items = activeTab === "missing" ? missingItems : extraItems;
-    
+
     if (!sortField) return items;
-    
-    // Sıralama yap
+
     const sorted = [...items].sort((a, b) => {
+      if (sortField === "totalAmount") {
+        const va = getItemLineTotalTry(a, catalogPriceByBarcode);
+        const vb = getItemLineTotalTry(b, catalogPriceByBarcode);
+        if (va.sortValue == null && vb.sortValue == null) return 0;
+        if (va.sortValue == null) return 1;
+        if (vb.sortValue == null) return -1;
+        if (va.sortValue < vb.sortValue)
+          return sortDirection === "asc" ? -1 : 1;
+        if (va.sortValue > vb.sortValue)
+          return sortDirection === "asc" ? 1 : -1;
+        return 0;
+      }
+
       let aValue: string | number;
       let bValue: string | number;
-      
+
       switch (sortField) {
         case "name":
           aValue = a.name.toLowerCase();
@@ -501,27 +839,40 @@ export default function Home() {
         default:
           return 0;
       }
-      
+
       if (aValue < bValue) return sortDirection === "asc" ? -1 : 1;
       if (aValue > bValue) return sortDirection === "asc" ? 1 : -1;
       return 0;
     });
-    
+
     return sorted;
-  }, [activeTab, missingItems, extraItems, sortField, sortDirection]);
+  }, [
+    activeTab,
+    missingItems,
+    extraItems,
+    sortField,
+    sortDirection,
+    catalogPriceByBarcode,
+  ]);
 
   // Kısa arama kontrolü (örneğin tek karakter yazıldığında)
   const trimmedSearchQuery = debouncedSearchQuery.trim();
   const isShortSearchQuery =
     trimmedSearchQuery.length > 0 && trimmedSearchQuery.length < MIN_SEARCH_LENGTH;
   
-  // Sıralama fonksiyonu
-  const handleSort = useCallback((field: "name" | "barcode" | "quantity") => {
+  const handleSort = useCallback((field: StockListSortKey) => {
+    if (field === "totalAmount") {
+      if (sortField === "totalAmount") {
+        setSortDirection((d) => (d === "desc" ? "asc" : "desc"));
+      } else {
+        setSortField("totalAmount");
+        setSortDirection("desc");
+      }
+      return;
+    }
     if (sortField === field) {
-      // Aynı alana tekrar tıklandıysa yönü değiştir
       setSortDirection(sortDirection === "asc" ? "desc" : "asc");
     } else {
-      // Yeni alana tıklandıysa o alanı seç ve varsayılan olarak artan sırala
       setSortField(field);
       setSortDirection("asc");
     }
@@ -550,15 +901,20 @@ export default function Home() {
     setEditingItem(item);
   }, []);
 
-  const handleItemClick = useCallback((item: StockItemWithId) => {
-    // StockItem'dan CatalogProduct oluştur
-    const catalogProduct: CatalogProduct = {
-      name: item.name,
-      barcode: item.barcode,
-      imageUrl: item.imageUrl,
-    };
-    setSelectedCatalogProduct(catalogProduct);
-  }, []);
+  const handleItemClick = useCallback(
+    (item: StockItemWithId) => {
+      const fromCatalog = catalogProducts.find((p) => p.barcode === item.barcode);
+      const catalogProduct: CatalogProduct = {
+        name: item.name,
+        barcode: item.barcode,
+        imageUrl: item.imageUrl ?? fromCatalog?.imageUrl,
+        productId: fromCatalog?.productId,
+        price: fromCatalog?.price,
+      };
+      setSelectedCatalogProduct(catalogProduct);
+    },
+    [catalogProducts]
+  );
 
   // Tüm sayfa boş mu? (henüz hiç ürün eklenmemiş)
   const isPageEmpty = !isLoading && items.length === 0;
@@ -695,8 +1051,11 @@ export default function Home() {
           setSuccessModalMessage(message);
           setSelectedCatalogProduct(null);
         }}
-        onBildirimSent={() => setSuccessModalMessage("Bildirim gönderildi.")}
-        onBildirimError={(message) => setToast({ message, type: "error" })}
+        bakeryCatalogCard={
+          activeTab === "bakery" &&
+          selectedCatalogProduct !== null &&
+          editingItem === null
+        }
       />
 
       {/* Orta bölüm: istatistik kartları */}
@@ -727,8 +1086,17 @@ export default function Home() {
               <p className="text-sm font-medium text-zinc-500 dark:text-zinc-400">
                 Toplam Eksik Ürün Miktarı
               </p>
-              <p className="mt-1 text-2xl font-semibold tabular-nums sm:text-3xl" style={{ color: "var(--color-missing)" }}>
-                {totalMissing}
+              <p
+                className="mt-1 flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-2xl font-semibold tabular-nums sm:text-3xl"
+                style={{ color: "var(--color-missing)" }}
+              >
+                <span>{totalMissing}</span>
+                <span
+                  className="text-lg font-semibold sm:text-2xl"
+                  style={{ color: "var(--color-missing)" }}
+                >
+                  ({formatTryPriceTRY(totalMissingValueTry)})
+                </span>
               </p>
             </div>
             <div
@@ -740,8 +1108,17 @@ export default function Home() {
               <p className="text-sm font-medium text-zinc-500 dark:text-zinc-400">
                 Toplam Fazla Ürün Miktarı
               </p>
-              <p className="mt-1 text-2xl font-semibold tabular-nums sm:text-3xl" style={{ color: "var(--color-extra)" }}>
-                {totalExtra}
+              <p
+                className="mt-1 flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-2xl font-semibold tabular-nums sm:text-3xl"
+                style={{ color: "var(--color-extra)" }}
+              >
+                <span>{totalExtra}</span>
+                <span
+                  className="text-lg font-semibold sm:text-2xl"
+                  style={{ color: "var(--color-extra)" }}
+                >
+                  ({formatTryPriceTRY(totalExtraValueTry)})
+                </span>
               </p>
             </div>
           </div>
@@ -988,8 +1365,8 @@ export default function Home() {
         <div className="overflow-hidden rounded-xl border border-zinc-200 dark:border-zinc-700">
           <div
             role="tablist"
-            aria-label="Eksik ve fazla ürün listeleri"
-            className="flex gap-0 border-b border-zinc-200 bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-800"
+            aria-label="Eksik, fazla, yaklaşan SKT ve fırın ürün listeleri"
+            className="flex flex-wrap gap-0 border-b border-zinc-200 bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-800"
           >
             <button
               type="button"
@@ -1054,11 +1431,51 @@ export default function Home() {
                 />
               )}
             </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={activeTab === "bakery"}
+              aria-controls="panel-bakery"
+              id="tab-bakery"
+              onClick={() => setActiveTab("bakery")}
+              className={`relative px-4 py-4 text-sm font-medium transition min-h-[44px] sm:px-6 sm:py-4 sm:text-base ${
+                activeTab === "bakery"
+                  ? "text-amber-700 dark:text-amber-400"
+                  : "text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200"
+              }`}
+            >
+              <span className="inline-flex items-center gap-1.5">
+                <ChefHat className="size-4 shrink-0 opacity-80" aria-hidden />
+                Fırın ürünleri
+              </span>
+              {activeTab === "bakery" && (
+                <span
+                  className="absolute bottom-0 left-0 right-0 h-0.5 bg-amber-600 dark:bg-amber-400"
+                  aria-hidden
+                />
+              )}
+            </button>
           </div>
           <div
             role="tabpanel"
-            id={activeTab === "missing" ? "panel-missing" : activeTab === "extra" ? "panel-extra" : "panel-expiring"}
-            aria-labelledby={activeTab === "missing" ? "tab-missing" : activeTab === "extra" ? "tab-extra" : "tab-expiring"}
+            id={
+              activeTab === "missing"
+                ? "panel-missing"
+                : activeTab === "extra"
+                  ? "panel-extra"
+                  : activeTab === "expiring"
+                    ? "panel-expiring"
+                    : "panel-bakery"
+            }
+            aria-labelledby={
+              activeTab === "missing"
+                ? "tab-missing"
+                : activeTab === "extra"
+                  ? "tab-extra"
+                  : activeTab === "expiring"
+                    ? "tab-expiring"
+                    : "tab-bakery"
+            }
             className="min-h-[120px]"
           >
             {activeTab === "expiring" ? (
@@ -1213,6 +1630,310 @@ export default function Home() {
                   </div>
                 )}
               </div>
+            ) : activeTab === "bakery" ? (
+              catalogLoading ? (
+                <ListSkeleton />
+              ) : (
+                <div
+                  className="flex max-h-[55vh] min-h-[8rem] flex-col overflow-hidden"
+                  aria-label="Fırın ürünleri listesi"
+                >
+                  {bakeryRows.length === 0 ? (
+                    <EmptyState
+                      title="Fırın listesinde eşleşen ürün yok"
+                      message="Fırın barkodlarında katalogda bulunan ürün henüz yok. products.json / kataloğa eklendikten sonra burada listelenir."
+                      icon={ChefHat}
+                    />
+                  ) : (
+                    <>
+                      <div className="shrink-0 border-b border-amber-900/20 bg-zinc-50 dark:border-amber-900/40 dark:bg-zinc-900/40">
+                        <div
+                          className="hidden w-full items-center gap-4 border-b border-zinc-200 bg-zinc-50 px-4 py-3 text-left text-sm font-medium uppercase tracking-wide text-zinc-500 sm:grid dark:border-zinc-700 dark:bg-zinc-800/50 dark:text-zinc-400"
+                          style={{ gridTemplateColumns: BAKERY_LIST_GRID }}
+                          role="row"
+                        >
+                          <span className="min-w-[3rem]" aria-hidden />
+                          <span role="columnheader" className="min-w-0 text-left">
+                            Ürün adı
+                          </span>
+                          <span role="columnheader" className="min-w-0 text-left">
+                            Barkod
+                          </span>
+                          <button
+                            type="button"
+                            onClick={cycleBakeryRafSort}
+                            className={`flex min-w-0 items-center gap-1 text-left uppercase tracking-wide transition-colors hover:text-zinc-700 dark:hover:text-zinc-200 ${
+                              bakeryRafSort !== "default"
+                                ? "text-zinc-900 dark:text-zinc-100"
+                                : ""
+                            }`}
+                            aria-label="Raf stoğa göre sırala: önce sıfır stok, azdan çoka, çoktan aza"
+                          >
+                            <span>Raf stok</span>
+                            {bakeryRafSort === "asc" ? (
+                              <ArrowUp className="size-3 shrink-0" aria-hidden />
+                            ) : bakeryRafSort === "desc" ? (
+                              <ArrowDown className="size-3 shrink-0" aria-hidden />
+                            ) : null}
+                          </button>
+                          <span
+                            role="columnheader"
+                            className="min-w-0 text-left"
+                          >
+                            Donuk stok
+                          </span>
+                          <div className="flex min-w-0 items-center justify-end">
+                            <button
+                              type="button"
+                              onClick={handleBakeryStockRefresh}
+                              disabled={bakeryStocksLoading}
+                              className="flex size-9 shrink-0 items-center justify-center rounded-lg text-zinc-500 transition hover:bg-zinc-200 hover:text-zinc-800 disabled:cursor-not-allowed disabled:opacity-50 dark:text-zinc-400 dark:hover:bg-zinc-700 dark:hover:text-zinc-100"
+                              aria-label="Raf stoklarını yenile"
+                              title="Raf stoklarını yenile"
+                            >
+                              <RefreshCw
+                                className={`size-4 ${bakeryStocksLoading ? "animate-spin" : ""}`}
+                                aria-hidden
+                              />
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-zinc-200 bg-zinc-50/90 px-3 py-2 sm:hidden dark:border-zinc-700 dark:bg-zinc-900/40">
+                        <button
+                          type="button"
+                          onClick={cycleBakeryRafSort}
+                          className="min-w-0 text-left text-xs font-medium text-amber-900/90 underline-offset-2 hover:underline dark:text-amber-200/90"
+                        >
+                          Raf stok sırası:{" "}
+                          {bakeryRafSort === "default"
+                            ? "Önce 0"
+                            : bakeryRafSort === "asc"
+                              ? "Az → çok"
+                              : "Çok → az"}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleBakeryStockRefresh}
+                          disabled={bakeryStocksLoading}
+                          className="flex size-9 shrink-0 items-center justify-center rounded-lg text-zinc-500 transition hover:bg-zinc-200 hover:text-zinc-800 disabled:cursor-not-allowed disabled:opacity-50 dark:text-zinc-400 dark:hover:bg-zinc-700 dark:hover:text-zinc-100"
+                          aria-label="Raf stoklarını yenile"
+                          title="Raf stoklarını yenile"
+                        >
+                          <RefreshCw
+                            className={`size-4 ${bakeryStocksLoading ? "animate-spin" : ""}`}
+                            aria-hidden
+                          />
+                        </button>
+                      </div>
+                      <ul
+                        role="list"
+                        className="min-h-0 flex-1 overflow-auto divide-y divide-zinc-200 dark:divide-zinc-700"
+                      >
+                        {bakeryDisplayRows.map((row) => {
+                            const imageUrl = getCatalogProductImage(row.barcode);
+                            const shelf = bakeryStocks[row.barcode];
+                            const shelfText = bakeryStocksLoading
+                              ? "…"
+                              : shelf === null || shelf === undefined
+                                ? "—"
+                                : String(shelf);
+                            const hasBakeryFullImage = bakeryImageBarcodes.has(
+                              row.barcode.trim()
+                            );
+                            const openBakeryFullImage = () => {
+                              if (!hasBakeryFullImage) return;
+                              setBakeryLightboxFailed(false);
+                              setBakeryLightboxBarcode(row.barcode);
+                            };
+                            const thumbSm = imageUrl ? (
+                              <img
+                                src={imageUrl}
+                                alt=""
+                                className="size-16 rounded-lg object-cover"
+                                width={64}
+                                height={64}
+                                loading="lazy"
+                              />
+                            ) : (
+                              <div className="flex size-16 items-center justify-center rounded-lg border border-zinc-200 bg-zinc-100 dark:border-zinc-700 dark:bg-zinc-800">
+                                <ChefHat className="size-7 text-zinc-400 dark:text-zinc-500" />
+                              </div>
+                            );
+                            const thumbLg = imageUrl ? (
+                              <img
+                                src={imageUrl}
+                                alt=""
+                                className="size-10 rounded object-cover"
+                                width={40}
+                                height={40}
+                                loading="lazy"
+                              />
+                            ) : (
+                              <span className="flex size-10 shrink-0 items-center justify-center rounded-lg border border-zinc-200 bg-zinc-100 dark:border-zinc-700 dark:bg-zinc-800">
+                                <ChefHat className="size-5 text-zinc-400" />
+                              </span>
+                            );
+                            const isRafZeroRow =
+                              !bakeryStocksLoading &&
+                              typeof shelf === "number" &&
+                              shelf === 0;
+                            return (
+                              <li
+                                key={row.barcode}
+                                className={`transition-colors duration-150 ${
+                                  isRafZeroRow
+                                    ? "mx-2 my-1.5 overflow-hidden rounded-xl border-2 border-red-300/90 bg-red-50 shadow-sm hover:bg-red-100/95 dark:border-red-800/85 dark:bg-red-950/50 dark:shadow-none dark:hover:bg-red-950/65"
+                                    : "hover:bg-zinc-50 dark:hover:bg-zinc-800/50"
+                                }`}
+                              >
+                                <div className="flex gap-3 px-4 py-3 sm:hidden">
+                                  {hasBakeryFullImage ? (
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        openBakeryFullImage();
+                                      }}
+                                      className="shrink-0 rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-zinc-950"
+                                      aria-label={`${row.displayName} — tam ekran görsel (fırın)`}
+                                    >
+                                      {thumbSm}
+                                    </button>
+                                  ) : (
+                                    <span className="shrink-0 rounded-lg">
+                                      {thumbSm}
+                                    </span>
+                                  )}
+                                  <div
+                                    role="button"
+                                    tabIndex={0}
+                                    className="min-w-0 flex-1 cursor-pointer text-left"
+                                    onClick={() => handleBakeryRowClick(row)}
+                                    onKeyDown={(e) => {
+                                      if (e.key === "Enter" || e.key === " ") {
+                                        e.preventDefault();
+                                        handleBakeryRowClick(row);
+                                      }
+                                    }}
+                                    aria-label={`${row.displayName}, barkod ${row.barcode}, ürün kartını aç`}
+                                  >
+                                    <p className="text-sm font-semibold leading-snug text-zinc-900 dark:text-zinc-100">
+                                      {row.displayName}
+                                    </p>
+                                    <p className="mt-1 break-all text-xs text-zinc-500 dark:text-zinc-400">
+                                      Barkod: {row.barcode}
+                                    </p>
+                                    <p className="mt-1 text-xs text-zinc-600 dark:text-zinc-300">
+                                      Raf stok (Getir):{" "}
+                                      <span
+                                        className={`font-semibold tabular-nums ${
+                                          isRafZeroRow
+                                            ? "text-red-700 dark:text-red-300"
+                                            : ""
+                                        }`}
+                                      >
+                                        {shelfText}
+                                      </span>
+                                    </p>
+                                    <p className="mt-0.5 text-xs text-zinc-500">
+                                      Donuk stok: —
+                                    </p>
+                                  </div>
+                                </div>
+                                <div
+                                  className="hidden w-full items-center gap-4 px-4 py-3 text-sm sm:grid"
+                                  style={{
+                                    gridTemplateColumns: BAKERY_LIST_GRID,
+                                  }}
+                                >
+                                  <span className="flex items-center justify-center">
+                                    {hasBakeryFullImage ? (
+                                      <button
+                                        type="button"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          openBakeryFullImage();
+                                        }}
+                                        className="rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-zinc-950"
+                                        aria-label={`${row.displayName} — tam ekran görsel (fırın)`}
+                                      >
+                                        {thumbLg}
+                                      </button>
+                                    ) : (
+                                      <span className="rounded-lg">
+                                        {thumbLg}
+                                      </span>
+                                    )}
+                                  </span>
+                                  <div
+                                    role="button"
+                                    tabIndex={0}
+                                    className="grid min-h-[44px] min-w-0 cursor-pointer items-center gap-4 text-left"
+                                    style={{
+                                      gridColumn: "2 / 6",
+                                      gridTemplateColumns:
+                                        "minmax(0,1fr) minmax(8rem,10rem) minmax(4rem,6rem) minmax(5rem,7rem)",
+                                    }}
+                                    onClick={() => handleBakeryRowClick(row)}
+                                    onKeyDown={(e) => {
+                                      if (e.key === "Enter" || e.key === " ") {
+                                        e.preventDefault();
+                                        handleBakeryRowClick(row);
+                                      }
+                                    }}
+                                    aria-label={`${row.displayName}, barkod ${row.barcode}, ürün kartını aç`}
+                                  >
+                                    <span className="line-clamp-2 min-w-0 font-medium text-zinc-900 dark:text-zinc-100">
+                                      {row.displayName}
+                                    </span>
+                                    <span className="min-w-0 break-all tabular-nums text-zinc-600 dark:text-zinc-300">
+                                      {row.barcode}
+                                    </span>
+                                    <span
+                                      className={`tabular-nums text-zinc-800 dark:text-zinc-200 ${
+                                        isRafZeroRow
+                                          ? "font-semibold text-red-700 dark:text-red-300"
+                                          : ""
+                                      }`}
+                                    >
+                                      {shelfText}
+                                    </span>
+                                    <span className="text-zinc-500 dark:text-zinc-500">
+                                      —
+                                    </span>
+                                  </div>
+                                  <div className="hidden min-w-0 justify-end sm:flex">
+                                    {isRafZeroRow && (
+                                      <div
+                                        className="bakery-cook-alert-banner inline-flex items-center rounded-lg border border-red-300/80 bg-gradient-to-r from-red-100/95 via-amber-50/95 to-red-100/95 px-2.5 py-1 text-center dark:border-red-800/70 dark:from-red-950/90 dark:via-amber-950/35 dark:to-red-950/90"
+                                        role="status"
+                                      >
+                                        <span className="bakery-cook-alert-text text-[11px] font-black uppercase text-red-900 dark:text-amber-100">
+                                          BENİ PİŞİRİN !
+                                        </span>
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                                {isRafZeroRow && (
+                                  <div
+                                    className="bakery-cook-alert-banner border-t border-red-300/80 bg-gradient-to-r from-red-100/95 via-amber-50/95 to-red-100/95 px-3 py-1.5 text-center sm:hidden dark:border-red-800/70 dark:from-red-950/90 dark:via-amber-950/35 dark:to-red-950/90"
+                                    role="status"
+                                  >
+                                    <span className="bakery-cook-alert-text text-[11px] font-black uppercase text-red-900 dark:text-amber-100">
+                                      BENİ PİŞİRİN !
+                                    </span>
+                                  </div>
+                                )}
+                              </li>
+                            );
+                        })}
+                      </ul>
+                    </>
+                  )}
+                </div>
+              )
             ) : isLoading || catalogLoading ? (
               <ListSkeleton />
             ) : (
@@ -1224,7 +1945,8 @@ export default function Home() {
                 <div
                   className="hidden sm:grid sticky top-0 z-10 gap-4 border-b border-zinc-200 bg-zinc-50 px-4 py-3 text-left text-sm font-medium uppercase tracking-wide text-zinc-500 dark:border-zinc-700 dark:bg-zinc-800/50 dark:text-zinc-400"
                   style={{ 
-                    gridTemplateColumns: "3rem minmax(0,1fr) minmax(8rem,10rem) minmax(3rem,4rem) minmax(0,1fr) minmax(5rem,6rem)",
+                    gridTemplateColumns:
+                      "3rem minmax(0,1fr) minmax(8rem,10rem) minmax(3rem,4rem) minmax(0,1fr) minmax(5.5rem,7.5rem) minmax(5rem,6rem)",
                   }}
                 >
                   <span></span>
@@ -1318,7 +2040,29 @@ export default function Home() {
                           <div className="min-w-0 flex-1 flex flex-col gap-2">
                             {STOCK_LIST_COLUMNS.map((col) => {
                               if (col.key === "notes" && !item.notes) return null;
-                              const value = col.key === "notes" ? item.notes! : String(item[col.key] ?? "");
+                              if (col.key === "totalAmount") {
+                                const { text } = getItemLineTotalTry(
+                                  item,
+                                  catalogPriceByBarcode
+                                );
+                                return (
+                                  <div
+                                    key={col.key}
+                                    role="group"
+                                    aria-label={col.title}
+                                    className="text-xs text-zinc-600 dark:text-zinc-300"
+                                  >
+                                    <span className="font-medium text-zinc-500 dark:text-zinc-400">
+                                      {col.mobileLabel}:
+                                    </span>{" "}
+                                    <span className="tabular-nums font-medium">
+                                      {text}
+                                    </span>
+                                  </div>
+                                );
+                              }
+                              const value =
+                                col.key === "notes" ? item.notes! : String(item[col.key] ?? "");
                               const isName = col.key === "name";
                               const isNotes = col.key === "notes";
                               const wrapperClass = isName
@@ -1384,7 +2128,8 @@ export default function Home() {
                         <div
                           className="hidden sm:grid gap-4 px-4 py-3 text-sm"
                         style={{ 
-                          gridTemplateColumns: "3rem minmax(0,1fr) minmax(8rem,10rem) minmax(3rem,4rem) minmax(0,1fr) minmax(5rem,6rem)",
+                          gridTemplateColumns:
+                            "3rem minmax(0,1fr) minmax(8rem,10rem) minmax(3rem,4rem) minmax(0,1fr) minmax(5.5rem,7.5rem) minmax(5rem,6rem)",
                         }}
                       >
                         <span className="flex items-center justify-center">
@@ -1404,7 +2149,22 @@ export default function Home() {
                           )}
                         </span>
                         {STOCK_LIST_COLUMNS.map((col) => {
-                          const value = col.key === "notes" ? (item.notes || "—") : String(item[col.key] ?? "");
+                          if (col.key === "totalAmount") {
+                            const { text } = getItemLineTotalTry(
+                              item,
+                              catalogPriceByBarcode
+                            );
+                            return (
+                              <span
+                                key={col.key}
+                                className="tabular-nums text-zinc-600 dark:text-zinc-300"
+                              >
+                                {text}
+                              </span>
+                            );
+                          }
+                          const value =
+                            col.key === "notes" ? (item.notes || "—") : String(item[col.key] ?? "");
                           const cellClass =
                             col.key === "name"
                               ? "min-w-0 font-medium text-zinc-900 dark:text-zinc-100"
@@ -1448,8 +2208,8 @@ export default function Home() {
                         </span>
                           {(item.createdAt || item.updatedAt) && (
                           <span
-                            className="col-span-5 mt-0.5 text-xs text-zinc-400 dark:text-zinc-500"
-                            style={{ gridColumn: "span 5" }}
+                            className="mt-0.5 text-xs text-zinc-400 dark:text-zinc-500"
+                            style={{ gridColumn: "2 / -1" }}
                             aria-hidden
                           >
                               {item.updatedAt ? (
@@ -1557,6 +2317,56 @@ export default function Home() {
           setListDeleteConfirmItem(null);
         }}
       />
+
+      {bakeryLightboxBarcode && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="Fırın ürün görseli"
+          className="fixed inset-0 z-[60] flex flex-col bg-black/92 p-3 sm:p-5"
+          onClick={() => {
+            setBakeryLightboxBarcode(null);
+            setBakeryLightboxFailed(false);
+          }}
+        >
+          <div className="flex shrink-0 justify-end pb-2">
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setBakeryLightboxBarcode(null);
+                setBakeryLightboxFailed(false);
+              }}
+              className="flex size-10 items-center justify-center rounded-full bg-zinc-800 text-zinc-100 ring-1 ring-zinc-600/80 transition hover:bg-zinc-700"
+              aria-label="Kapat"
+            >
+              <X className="size-5" aria-hidden />
+            </button>
+          </div>
+          <div
+            className="flex min-h-0 flex-1 items-center justify-center px-1"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {bakeryLightboxFailed ? (
+              <p className="max-w-md text-center text-sm leading-relaxed text-zinc-200">
+                Görsel bulunamadı.{" "}
+                <code className="rounded bg-zinc-800 px-1.5 py-0.5 text-xs text-amber-200">
+                  public/bakery-images/{bakeryLightboxBarcode}.jpg
+                </code>{" "}
+                dosyasını ekleyin veya barkodu kontrol edin.
+              </p>
+            ) : (
+              // eslint-disable-next-line @next/next/no-img-element -- public klasöründeki kullanıcı görselleri
+              <img
+                src={getBakeryFullImageUrl(bakeryLightboxBarcode)}
+                alt=""
+                className="max-h-[min(90dvh,calc(100vh-5rem))] max-w-full object-contain shadow-2xl"
+                onError={() => setBakeryLightboxFailed(true)}
+              />
+            )}
+          </div>
+        </div>
+      )}
 
       <ReferenceWaterProductsPanel
         open={referencePanelOpen}
