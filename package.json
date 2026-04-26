@@ -8,7 +8,15 @@
     "start": "next start",
     "lint": "eslint",
     "scrape-products": "node scripts/scrape-getir-products.mjs",
-    "fill-prices": "node scripts/fill-product-prices-from-stocks-api.mjs"
+    "fill-prices": "node scripts/fill-product-prices-from-stocks-api.mjs",
+    "missing-from-panel": "node scripts/find-missing-products-from-getir-panel.mjs",
+    "update-from-panel": "node scripts/update-products-from-getir-panel.mjs",
+    "update-from-api": "node scripts/update-products-from-getir-api.mjs",
+    "sync-barcodes": "node scripts/sync-product-barcodes-from-getir-api.mjs",
+    "fill-added-details": "node scripts/fill-added-products-details-from-getir-api.mjs",
+    "fill-added-details-by-id": "node scripts/fill-added-products-details-by-productid.mjs",
+    "fill-missing-details-warehouse": "node scripts/fill-missing-details-from-warehouse-products.mjs",
+    "clean-placeholder-products": "node scripts/clean-placeholder-getir-panel-products.mjs"
   },
   "dependencies": {
     "firebase": "^12.8.0",

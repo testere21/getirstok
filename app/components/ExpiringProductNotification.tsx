@@ -7,6 +7,7 @@ import Image from "next/image";
 interface CatalogProduct {
   name: string;
   barcode: string;
+  barcodes?: string[];
   imageUrl?: string;
   productId?: string;
 }
@@ -34,7 +35,10 @@ export function ExpiringProductNotification({
 
   // Barkod'a göre ürün resmini bulma helper fonksiyonu
   const getProductImage = (barcode: string): string | undefined => {
-    const catalogProduct = catalogProducts.find((p) => p.barcode === barcode);
+    const b = barcode.trim();
+    const catalogProduct = catalogProducts.find(
+      (p) => p.barcode === b || (p.barcodes ?? []).some((x) => x.trim() === b)
+    );
     return normalizeImageUrl(catalogProduct?.imageUrl);
   };
 

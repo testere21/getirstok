@@ -44,3 +44,6 @@ next-env.d.ts
 data/.fill-prices-progress.json
 data/*.bak*
 data/*.bak-before-*
+
+# scripts outputs / debug dumps (do not commit)
+scripts/*.json

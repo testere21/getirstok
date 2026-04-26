@@ -16,6 +16,7 @@ export type AddProductModalType = "missing" | "extra";
 export interface CatalogProduct {
   name: string;
   barcode: string;
+  barcodes?: string[];
   imageUrl?: string;
   productId?: string;
   price?: number;

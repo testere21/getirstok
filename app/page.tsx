@@ -49,6 +49,7 @@ import {
   type BakeryResolvedRow,
 } from "@/app/lib/bakeryProductBarcodes";
 import { getBakeryFullImageUrl } from "@/app/lib/bakeryFullImage";
+import { catalogProductMatchesBarcode } from "@/app/lib/catalogBarcodeMatch";
 
 /** Buton merkezinden radyal — çok baloncuk, halkalar halinde mesafe çeşitliliği */
 const REF_WATER_AROUND_BUTTON_COUNT = 120;
@@ -74,6 +75,7 @@ const REF_WATER_HOVER_BUBBLE_STYLES: CSSProperties[] = Array.from(
 interface CatalogProduct {
   name: string;
   barcode: string;
+  barcodes?: string[];
   imageUrl?: string;
   productId?: string;
   price?: number;
@@ -169,6 +171,8 @@ export default function Home() {
   const [catalogProducts, setCatalogProducts] = useState<CatalogProduct[]>([]);
   const [catalogLoading, setCatalogLoading] = useState(true);
   const [selectedCatalogProduct, setSelectedCatalogProduct] = useState<CatalogProduct | null>(null);
+  /** Fırın sekmesinde: sadece fırın listesinden açılan ürün kartı "stok-only" görünmeli */
+  const [bakeryCatalogStockOnly, setBakeryCatalogStockOnly] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<TabType>("missing");
   const [editingItem, setEditingItem] = useState<StockItemWithId | null>(null);
@@ -435,7 +439,9 @@ export default function Home() {
   // Katalogdan ürün görselini bul (barkoda göre)
   const getCatalogProductImage = useCallback(
     (barcode: string): string | undefined => {
-      const match = catalogProducts.find((p) => p.barcode === barcode);
+      const match = catalogProducts.find((p) =>
+        catalogProductMatchesBarcode(p, barcode)
+      );
       return normalizeImageUrl(match?.imageUrl);
     },
     [catalogProducts]
@@ -449,11 +455,12 @@ export default function Home() {
   const filteredCatalogProducts = useMemo(() => {
     const q = debouncedSearchQuery.trim().toLowerCase();
     if (!q || q.length < MIN_SEARCH_LENGTH) return [];
-    const filtered = catalogProducts.filter(
-      (product) =>
-        (product.name || "").toLowerCase().includes(q) ||
-        (product.barcode || "").toLowerCase().includes(q)
-    );
+    const filtered = catalogProducts.filter((product) => {
+      if ((product.name || "").toLowerCase().includes(q)) return true;
+      if ((product.barcode || "").toLowerCase().includes(q)) return true;
+      const alts = product.barcodes ?? [];
+      return alts.some((b) => (b || "").toLowerCase().includes(q));
+    });
     
     // Duplicate'leri temizle: productId varsa ona göre, yoksa barcode'a göre
     const seen = new Map<string, boolean>();
@@ -479,9 +486,12 @@ export default function Home() {
     
     // Eğer katalog ürünü seçilmişse, sadece o ürüne ait kayıtları göster
     if (selectedCatalogProduct) {
-      return items.filter(
-        (item) => item.barcode === selectedCatalogProduct.barcode
-      );
+      // Kayıtlar tek barkodla tutuluyor; ürünün alternatif barkodları varsa onları da eşle.
+      const allowed = new Set<string>([
+        selectedCatalogProduct.barcode,
+        ...(selectedCatalogProduct.barcodes ?? []),
+      ]);
+      return items.filter((item) => allowed.has(item.barcode));
     }
     
     // Normal arama: name veya barcode içinde arama yap
@@ -538,8 +548,13 @@ export default function Home() {
 
   const handleBakeryRowClick = useCallback(
     (row: BakeryResolvedRow) => {
-      const product = catalogProducts.find((p) => p.barcode === row.barcode);
-      if (product) setSelectedCatalogProduct(product);
+      const product = catalogProducts.find((p) =>
+        catalogProductMatchesBarcode(p, row.barcode)
+      );
+      if (product) {
+        setBakeryCatalogStockOnly(true);
+        setSelectedCatalogProduct(product);
+      }
     },
     [catalogProducts]
   );
@@ -911,6 +926,7 @@ export default function Home() {
         productId: fromCatalog?.productId,
         price: fromCatalog?.price,
       };
+      setBakeryCatalogStockOnly(false);
       setSelectedCatalogProduct(catalogProduct);
     },
     [catalogProducts]
@@ -1019,6 +1035,7 @@ export default function Home() {
           setModalType(null);
           setEditingItem(null);
           setSelectedCatalogProduct(null);
+          setBakeryCatalogStockOnly(false);
         }}
         type={
           editingItem
@@ -1035,6 +1052,7 @@ export default function Home() {
         catalogProduct={selectedCatalogProduct ?? undefined}
         stockItems={items}
         onAddFromCatalog={(product, addType) => {
+          setBakeryCatalogStockOnly(false);
           setSelectedCatalogProduct(product);
           setModalType(addType);
         }}
@@ -1042,6 +1060,7 @@ export default function Home() {
           setEditingItem(item);
           // Katalog görünümünden çık ve düzenleme moduna geç
           setSelectedCatalogProduct(null);
+          setBakeryCatalogStockOnly(false);
         }}
         onDeleteItem={(item) => {
           // Ürün kartında zaten "Kaydı sil" modalı ile onay alındı, tekrar confirm gösterme
@@ -1050,9 +1069,11 @@ export default function Home() {
         onSuccess={(message) => {
           setSuccessModalMessage(message);
           setSelectedCatalogProduct(null);
+          setBakeryCatalogStockOnly(false);
         }}
         bakeryCatalogCard={
           activeTab === "bakery" &&
+          bakeryCatalogStockOnly &&
           selectedCatalogProduct !== null &&
           editingItem === null
         }
@@ -1204,7 +1225,10 @@ export default function Home() {
                         <button
                           key={uniqueKey}
                           type="button"
-                          onClick={() => setSelectedCatalogProduct(product)}
+                          onClick={() => {
+                            setBakeryCatalogStockOnly(false);
+                            setSelectedCatalogProduct(product);
+                          }}
                           className={`w-full text-left transition-colors duration-150 border-l-4 ${cardBorderColor || "border-transparent"} ${cardColorClass || ""} ${hoverColorClass}`}
                         >
                           {/* Mobil görünüm: Kart layout */}

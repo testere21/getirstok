@@ -133,6 +133,8 @@ export const PRODUCT_ISSUE_REPORTS_COLLECTION = "product_issue_reports";
 export interface CatalogProduct {
   name: string;
   barcode: string;
+  /** Aynı ürün için alternatif barkodlar (opsiyonel) */
+  barcodes?: string[];
   imageUrl?: string;
   productId?: string;
   /** Getir bayi satış fiyatı (ör. stocks API); kuruş değil, TL ondalıklı */
