@@ -3,9 +3,14 @@ import type {
   StockItemType,
   ProductIssueType,
 } from "./types";
+import {
+  listActiveTelegramChatIds,
+  markTelegramSubscriberInactive,
+} from "./telegramSubscriberService";
 
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID;
+const TELEGRAM_BROADCAST = process.env.TELEGRAM_BROADCAST === "1";
 
 interface TelegramAddStockItemParams {
   name: string;
@@ -21,34 +26,53 @@ interface TelegramAddStockItemParams {
  */
 export async function sendTelegramMessage(message: string): Promise<void> {
   try {
-    if (!TELEGRAM_BOT_TOKEN || !TELEGRAM_CHAT_ID) {
+    if (!TELEGRAM_BOT_TOKEN) {
       console.warn(
-        "[telegramService] TELEGRAM_BOT_TOKEN veya TELEGRAM_CHAT_ID tanımlı değil; mesaj gönderilmeyecek."
+        "[telegramService] TELEGRAM_BOT_TOKEN tanımlı değil; mesaj gönderilmeyecek."
       );
       return;
     }
 
     const url = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`;
 
-    const response = await fetch(url, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        chat_id: TELEGRAM_CHAT_ID,
-        text: message,
-        // parse_mode: "Markdown", // İleride formatlamak istersek açılabilir
-        disable_web_page_preview: true,
-      }),
-    });
+    const chatIds = new Set<string>();
+    if (TELEGRAM_CHAT_ID) chatIds.add(String(TELEGRAM_CHAT_ID).trim());
+    if (TELEGRAM_BROADCAST) {
+      const subs = await listActiveTelegramChatIds();
+      subs.forEach((id) => chatIds.add(String(id).trim()));
+    }
 
-    if (!response.ok) {
-      const errorText = await response.text().catch(() => "");
-      console.error(
-        `[telegramService] Telegram API hatası: ${response.status} ${response.statusText}`,
-        errorText
+    if (chatIds.size === 0) {
+      console.warn(
+        "[telegramService] Chat hedefi yok (TELEGRAM_CHAT_ID boş ve broadcast aboneleri yok)."
       );
+      return;
+    }
+
+    // Basit rate-limit: sırayla gönder (Telegram 429 riskini azaltır)
+    for (const chatId of chatIds) {
+      if (!chatId) continue;
+      const response = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          chat_id: chatId,
+          text: message,
+          disable_web_page_preview: true,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text().catch(() => "");
+        console.error(
+          `[telegramService] Telegram API hatası chat_id=${chatId}: ${response.status} ${response.statusText}`,
+          errorText
+        );
+        // Chat kapandıysa / bot engellendiyse aboneyi pasif yap
+        if (TELEGRAM_BROADCAST && (response.status === 403 || response.status === 400)) {
+          await markTelegramSubscriberInactive(chatId).catch(() => null);
+        }
+      }
     }
   } catch (error) {
     console.error("[telegramService] Telegram mesajı gönderilemedi:", error);
