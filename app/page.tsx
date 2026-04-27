@@ -198,14 +198,14 @@ function BarcodeGraphicLabel({ barcode }: { barcode: string }) {
   );
 }
 
-/** Barkod numarası her zaman görünür; “Barkod aç” çizgili barkodu gösterir/gizler. */
+/** Barkod numarası her zaman görünür; “Barkod aç” çizgili barkodu gösterir/gizler. Kök `div` — `<p>` veya `<span>` içinde blok çocuk hydration hatası oluşturmaz. */
 function BarcodeRevealInline({ barcode }: { barcode: string }) {
   const [graphicOpen, setGraphicOpen] = useState(false);
   const bc = barcode.trim();
 
   return (
-    <span className="inline-flex max-w-full flex-col gap-0.5 align-middle">
-      <span className="inline-flex max-w-full flex-wrap items-center gap-x-2 gap-y-1">
+    <div className="inline-flex max-w-full min-w-0 flex-col gap-0.5 align-middle">
+      <div className="inline-flex max-w-full flex-wrap items-center gap-x-2 gap-y-1">
         <span className="break-all tabular-nums">{bc.length > 0 ? bc : "—"}</span>
         <button
           type="button"
@@ -217,11 +217,11 @@ function BarcodeRevealInline({ barcode }: { barcode: string }) {
         >
           {graphicOpen ? "Barkodu kapat" : "Barkod aç"}
         </button>
-      </span>
+      </div>
       {graphicOpen && bc.length > 0 ? (
         <BarcodeGraphicLabel key={bc} barcode={bc} />
       ) : null}
-    </span>
+    </div>
   );
 }
 
@@ -1777,9 +1777,9 @@ export default function Home() {
                               <div className="font-medium text-zinc-900 dark:text-zinc-100 text-sm leading-snug line-clamp-2">
                                 {product.name}
                               </div>
-                              <div className="text-xs text-zinc-500 dark:text-zinc-400">
+                              <div className="text-xs text-zinc-500 dark:text-zinc-400 break-all">
                                 <span className="font-medium">Barkod:</span>{" "}
-                                <BarcodeRevealInline barcode={product.barcode} />
+                                {product.barcode}
                               </div>
                               <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
                                 <span>
@@ -1824,8 +1824,8 @@ export default function Home() {
                             <span className="min-w-0 font-medium text-zinc-900 dark:text-zinc-100 text-left">
                               {product.name}
                             </span>
-                            <span className="min-w-0 text-left text-zinc-600 dark:text-zinc-300">
-                              <BarcodeRevealInline barcode={product.barcode} />
+                            <span className="tabular-nums text-zinc-600 dark:text-zinc-300 break-all text-left">
+                              {product.barcode}
                             </span>
                             <span className="text-left">
                               <span className="text-xs text-zinc-500 dark:text-zinc-400">Eksik: </span>
@@ -2118,8 +2118,7 @@ export default function Home() {
                                   {product.productName}
                                 </p>
                                 <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
-                                  <span className="font-medium">Barkod:</span>{" "}
-                                  <BarcodeRevealInline barcode={product.barcode} />
+                                  Barkod: {product.barcode}
                                 </p>
                                 <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
                                   SKT: {product.expiryDate}
@@ -2182,9 +2181,7 @@ export default function Home() {
                                 )}
                                 <span className="line-clamp-2">{product.productName}</span>
                               </span>
-                              <span className="min-w-0 text-zinc-600 dark:text-zinc-400">
-                                <BarcodeRevealInline barcode={product.barcode} />
-                              </span>
+                              <span className="text-zinc-600 dark:text-zinc-400">{product.barcode}</span>
                               <span className="text-zinc-600 dark:text-zinc-400">{product.expiryDate}</span>
                               <span className="text-zinc-600 dark:text-zinc-400">{product.removalDate}</span>
                               <span className={`font-medium ${status.color}`}>{status.label}</span>
@@ -2405,9 +2402,8 @@ export default function Home() {
                                     <p className="text-sm font-semibold leading-snug text-zinc-900 dark:text-zinc-100">
                                       {row.displayName}
                                     </p>
-                                    <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
-                                      <span className="font-medium">Barkod:</span>{" "}
-                                      <BarcodeRevealInline barcode={row.barcode} />
+                                    <p className="mt-1 break-all text-xs text-zinc-500 dark:text-zinc-400">
+                                      Barkod: {row.barcode}
                                     </p>
                                     <p className="mt-1 text-xs text-zinc-600 dark:text-zinc-300">
                                       Raf stok (Getir):{" "}
@@ -2472,8 +2468,8 @@ export default function Home() {
                                     <span className="line-clamp-2 min-w-0 font-medium text-zinc-900 dark:text-zinc-100">
                                       {row.displayName}
                                     </span>
-                                    <span className="min-w-0 tabular-nums text-zinc-600 dark:text-zinc-300">
-                                      <BarcodeRevealInline barcode={row.barcode} />
+                                    <span className="min-w-0 break-all tabular-nums text-zinc-600 dark:text-zinc-300">
+                                      {row.barcode}
                                     </span>
                                     <span
                                       className={`tabular-nums text-zinc-800 dark:text-zinc-200 ${
@@ -2624,10 +2620,10 @@ export default function Home() {
                                 <p className="line-clamp-2 text-sm font-medium text-zinc-900 dark:text-zinc-100">
                                   {product.name}
                                 </p>
-                                <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
+                                <div className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
                                   <span className="font-medium">Barkod:</span>{" "}
                                   <BarcodeRevealInline barcode={product.barcode} />
-                                </p>
+                                </div>
                                 <p className="mt-1 text-xs tabular-nums">
                                   <span style={{ color: "var(--color-missing)" }}>
                                     Eksik (kayıt): {totals.missingTotal}
@@ -3021,12 +3017,12 @@ export default function Home() {
                                 col.key === "notes" ? item.notes! : String(item[col.key] ?? "");
                               const isName = col.key === "name";
                               const isNotes = col.key === "notes";
-                              const isBarcode = col.key === "barcode";
                               const wrapperClass = isName
                                 ? "text-xs"
                                 : isNotes
                                 ? "min-w-0 text-xs text-zinc-500 dark:text-zinc-400"
-                                : "text-xs text-zinc-600 dark:text-zinc-300" + (isBarcode ? " min-w-0" : "");
+                                : "text-xs text-zinc-600 dark:text-zinc-300" +
+                                  (col.key === "barcode" ? " break-all" : "");
                               const valueClass = isName
                                 ? "text-sm font-semibold text-zinc-900 dark:text-zinc-100 leading-snug line-clamp-2"
                                 : isNotes
@@ -3037,11 +3033,7 @@ export default function Home() {
                               return (
                                 <div key={col.key} role="group" aria-label={col.title} className={wrapperClass}>
                                   <span className="font-medium text-zinc-500 dark:text-zinc-400">{col.mobileLabel}:</span>{" "}
-                                  {isBarcode ? (
-                                    <BarcodeRevealInline barcode={item.barcode} />
-                                  ) : (
-                                    <span className={valueClass}>{value}</span>
-                                  )}
+                                  <span className={valueClass}>{value}</span>
                                 </div>
                               );
                             })}
@@ -3132,15 +3124,11 @@ export default function Home() {
                               : col.key === "notes"
                               ? "min-w-0 truncate text-zinc-500 dark:text-zinc-400"
                               : col.key === "barcode"
-                              ? "min-w-0 text-zinc-600 dark:text-zinc-300"
+                              ? "tabular-nums text-zinc-600 dark:text-zinc-300 break-all"
                               : "tabular-nums text-zinc-600 dark:text-zinc-300";
                           return (
                             <span key={col.key} className={cellClass}>
-                              {col.key === "barcode" ? (
-                                <BarcodeRevealInline barcode={item.barcode} />
-                              ) : (
-                                value
-                              )}
+                              {value}
                             </span>
                           );
                         })}
