@@ -8,6 +8,7 @@ import {
   useState,
   type CSSProperties,
 } from "react";
+import JsBarcode from "jsbarcode";
 import Image from "next/image";
 import {
   Barcode,
@@ -18,6 +19,7 @@ import {
   ChefHat,
   X,
   RefreshCw,
+  Calculator,
 } from "lucide-react";
 import { AddProductModal } from "./components/AddProductModal";
 import { SearchBar } from "./components/SearchBar";
@@ -50,6 +52,23 @@ import {
 } from "@/app/lib/bakeryProductBarcodes";
 import { getBakeryFullImageUrl } from "@/app/lib/bakeryFullImage";
 import { catalogProductMatchesBarcode } from "@/app/lib/catalogBarcodeMatch";
+import {
+  filterCatalogProductsForHesaplama,
+  filterHesaplamaCandidatesBySearch,
+  findCatalogProductByBarcode,
+  getDefaultHesaplamaQuantityForSide,
+  getFirestoreMissingExtraTotalsForProduct,
+  getHesaplamaLineValueTry,
+  resolveHesaplamaSideFromFirestoreTotals,
+  removeHesaplamaSessionLine,
+  getHesaplamaLinePricingSource,
+  setHesaplamaSessionLineManualUnitPrice,
+  setHesaplamaSessionLineQuantity,
+  sumHesaplamaSessionLinesTry,
+  upsertHesaplamaSessionLine,
+  type HesaplamaLinePricingSource,
+  type HesaplamaSessionLine,
+} from "@/app/lib/hesaplamaRules";
 
 /** Buton merkezinden radyal — çok baloncuk, halkalar halinde mesafe çeşitliliği */
 const REF_WATER_AROUND_BUTTON_COUNT = 120;
@@ -82,7 +101,12 @@ interface CatalogProduct {
 }
 
 export type ModalType = null | "missing" | "extra";
-export type TabType = "missing" | "extra" | "expiring" | "bakery";
+export type TabType =
+  | "missing"
+  | "extra"
+  | "expiring"
+  | "bakery"
+  | "hesaplama";
 
 interface ToastState {
   message: string;
@@ -121,6 +145,86 @@ function formatTryPriceTRY(value: number) {
   }).format(value);
 }
 
+/** Çizgili barkod görseli (EAN-13 / EAN-8 / CODE128); beyaz, yuvarlatılmış etiket. */
+function BarcodeGraphicLabel({ barcode }: { barcode: string }) {
+  const svgRef = useRef<SVGSVGElement>(null);
+
+  useEffect(() => {
+    const el = svgRef.current;
+    const raw = barcode.trim().replace(/\s+/g, "");
+    if (!el || !raw) return;
+
+    const common: Record<string, unknown> = {
+      width: 1.65,
+      height: 54,
+      displayValue: true,
+      fontSize: 13,
+      fontOptions: "bold",
+      textMargin: 6,
+      margin: 14,
+      background: "#ffffff",
+      lineColor: "#111111",
+    };
+
+    try {
+      if (/^\d{13}$/.test(raw)) {
+        JsBarcode(el, raw, { ...common, format: "EAN13" });
+      } else if (/^\d{8}$/.test(raw)) {
+        JsBarcode(el, raw, { ...common, format: "EAN8" });
+      } else {
+        JsBarcode(el, raw, { ...common, format: "CODE128" });
+      }
+    } catch {
+      try {
+        JsBarcode(el, raw, { ...common, format: "CODE128" });
+      } catch {
+        /* geçersiz kod */
+      }
+    }
+  }, [barcode]);
+
+  return (
+    <div
+      className="mt-1.5 inline-block max-w-full rounded-2xl border border-zinc-200/90 bg-white p-3 shadow-sm dark:border-zinc-500 dark:bg-white"
+      onClick={(e) => e.stopPropagation()}
+    >
+      <svg
+        ref={svgRef}
+        className="block h-auto max-w-[min(100%,min(320px,90vw))]"
+        role="img"
+        aria-label={`Barkod görseli ${barcode.trim()}`}
+      />
+    </div>
+  );
+}
+
+/** Barkod numarası her zaman görünür; “Barkod aç” çizgili barkodu gösterir/gizler. */
+function BarcodeRevealInline({ barcode }: { barcode: string }) {
+  const [graphicOpen, setGraphicOpen] = useState(false);
+  const bc = barcode.trim();
+
+  return (
+    <span className="inline-flex max-w-full flex-col gap-0.5 align-middle">
+      <span className="inline-flex max-w-full flex-wrap items-center gap-x-2 gap-y-1">
+        <span className="break-all tabular-nums">{bc.length > 0 ? bc : "—"}</span>
+        <button
+          type="button"
+          className="shrink-0 rounded-md border border-zinc-300 bg-white px-2 py-0.5 text-[11px] font-medium text-zinc-700 hover:bg-zinc-50 motion-safe:transition-colors dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-300 dark:hover:bg-zinc-800"
+          onClick={(e) => {
+            e.stopPropagation();
+            setGraphicOpen((v) => !v);
+          }}
+        >
+          {graphicOpen ? "Barkodu kapat" : "Barkod aç"}
+        </button>
+      </span>
+      {graphicOpen && bc.length > 0 ? (
+        <BarcodeGraphicLabel key={bc} barcode={bc} />
+      ) : null}
+    </span>
+  );
+}
+
 /** Katalog fiyatı bilinen satırların para tutarı (miktar × birim fiyat) */
 function sumStockValueByBarcode(
   list: StockItemWithId[],
@@ -144,6 +248,182 @@ function getItemLineTotalTry(
   }
   const v = unit * item.quantity;
   return { text: formatTryPriceTRY(v), sortValue: v };
+}
+
+function HesaplamaSessionLineRow({
+  side,
+  line,
+  pricingSource,
+  lineSubtotalFormatted,
+  lineHasPrice,
+  onQuantityCommit,
+  onRemove,
+  onApplyFirestore,
+  onManualUnitPriceCommit,
+  shelfStockDisplay,
+}: {
+  side: "missing" | "extra";
+  line: HesaplamaSessionLine;
+  pricingSource: HesaplamaLinePricingSource;
+  /** Satır tutarı (miktar × birim), `formatTryPriceTRY` ile biçimli */
+  lineSubtotalFormatted: string;
+  lineHasPrice: boolean;
+  /** Getir raf stoku metni: sayı, “…” (yükleniyor) veya “—” */
+  shelfStockDisplay: string;
+  onQuantityCommit: (
+    side: "missing" | "extra",
+    barcode: string,
+    quantity: number
+  ) => void;
+  onRemove: (side: "missing" | "extra", barcode: string) => void;
+  onApplyFirestore: (side: "missing" | "extra", barcode: string) => void;
+  /** Geçici birim fiyat; `null` özel fiyatı kaldırır */
+  onManualUnitPriceCommit: (
+    side: "missing" | "extra",
+    barcode: string,
+    value: number | null
+  ) => void;
+}) {
+  const manualInputRef = useRef<HTMLInputElement>(null);
+  const focusRing =
+    "focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 focus-visible:ring-offset-2 motion-safe:transition-colors motion-safe:duration-150 dark:focus-visible:ring-offset-zinc-950";
+  const inputId = `hesaplama-q-${side}-${line.barcode.replace(/\s+/g, "").slice(0, 48)}`;
+  const manualId = `hesaplama-manual-${side}-${line.barcode.replace(/\s+/g, "").slice(0, 48)}`;
+
+  return (
+    <li className="flex flex-col gap-3 border-b border-zinc-100 px-4 py-3 last:border-b-0 dark:border-zinc-700/80 sm:flex-row sm:items-start sm:justify-between">
+      <div className="min-w-0 flex-1">
+        <p className="line-clamp-2 text-sm font-medium text-zinc-900 dark:text-zinc-100">
+          {line.name}
+        </p>
+        <div className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
+          <BarcodeRevealInline barcode={line.barcode} />
+        </div>
+        {pricingSource === "none" ? (
+          <div className="mt-2 space-y-2">
+            <p className="text-xs leading-relaxed text-amber-800 dark:text-amber-300">
+              Bu ürün için katalogda birim fiyat bulunmuyor. Hesaplama tutarı için
+              geçici birim fiyat (TL/ad) girin veya satırı silin.
+            </p>
+            <div className="flex flex-wrap items-center gap-2">
+              <label htmlFor={manualId} className="sr-only">
+                Geçici birim fiyatı TL
+              </label>
+              <input
+                ref={manualInputRef}
+                id={manualId}
+                type="number"
+                inputMode="decimal"
+                min={0}
+                step={0.01}
+                placeholder="Örn: 24,90"
+                defaultValue={
+                  line.manualUnitPriceTry !== undefined
+                    ? line.manualUnitPriceTry
+                    : undefined
+                }
+                className={`w-28 rounded-lg border border-amber-300/80 bg-white px-2 py-1.5 text-sm tabular-nums text-zinc-900 dark:border-amber-700 dark:bg-zinc-900 dark:text-zinc-100 ${focusRing}`}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    const raw = (e.target as HTMLInputElement).value.replace(
+                      ",",
+                      "."
+                    );
+                    const n = parseFloat(raw);
+                    if (Number.isFinite(n) && n >= 0) {
+                      onManualUnitPriceCommit(side, line.barcode, n);
+                    }
+                  }
+                }}
+              />
+              <button
+                type="button"
+                className={`rounded-lg border border-amber-600 bg-amber-50 px-3 py-1.5 text-xs font-medium text-amber-900 hover:bg-amber-100 dark:border-amber-700 dark:bg-amber-950/50 dark:text-amber-100 dark:hover:bg-amber-950 ${focusRing}`}
+                onClick={() => {
+                  const raw =
+                    manualInputRef.current?.value.replace(",", ".") ?? "";
+                  const n = parseFloat(raw);
+                  if (Number.isFinite(n) && n >= 0) {
+                    onManualUnitPriceCommit(side, line.barcode, n);
+                  }
+                }}
+              >
+                Uygula
+              </button>
+            </div>
+          </div>
+        ) : (
+          <p className="mt-1 text-xs tabular-nums">
+            {lineHasPrice ? (
+              <span className="font-medium text-zinc-700 dark:text-zinc-300">
+                Fiyat: {lineSubtotalFormatted}
+                {pricingSource === "manual" && (
+                  <span className="ml-1.5 font-normal text-emerald-700 dark:text-emerald-400">
+                    (özel birim)
+                  </span>
+                )}
+              </span>
+            ) : (
+              <span className="text-amber-700 dark:text-amber-400">
+                Tutar hesaplanamadı
+              </span>
+            )}
+          </p>
+        )}
+        {pricingSource === "manual" && lineHasPrice && (
+          <button
+            type="button"
+            className={`mt-1.5 text-xs font-medium text-zinc-500 underline-offset-2 hover:text-zinc-800 hover:underline dark:text-zinc-400 dark:hover:text-zinc-200 ${focusRing} rounded`}
+            onClick={() => onManualUnitPriceCommit(side, line.barcode, null)}
+          >
+            Özel birim fiyatını kaldır
+          </button>
+        )}
+        <p
+          className="mt-1 text-[11px] tabular-nums leading-snug text-zinc-500 dark:text-zinc-400"
+          aria-live="polite"
+        >
+          Güncel stok : {shelfStockDisplay}
+        </p>
+      </div>
+      <div className="flex flex-wrap items-center gap-2 sm:shrink-0">
+        <label className="sr-only" htmlFor={inputId}>
+          Miktar
+        </label>
+        <input
+          id={inputId}
+          type="number"
+          inputMode="numeric"
+          min={1}
+          step={1}
+          value={line.quantity}
+          onChange={(e) => {
+            const v = parseInt(e.target.value, 10);
+            if (!Number.isFinite(v)) return;
+            onQuantityCommit(side, line.barcode, v);
+          }}
+          className={`w-[5.5rem] rounded-lg border border-zinc-300 bg-white px-2 py-1.5 text-sm tabular-nums text-zinc-900 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100 ${focusRing}`}
+        />
+        <button
+          type="button"
+          onClick={() => onApplyFirestore(side, line.barcode)}
+          className={`rounded-lg border border-zinc-200 bg-white px-2 py-1.5 text-xs font-medium text-zinc-700 hover:bg-zinc-50 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-300 dark:hover:bg-zinc-800 ${focusRing}`}
+          title="Firestore’daki eksik/fazla kayıt toplamını bu satıra uygula"
+        >
+          Kayıt toplamı
+        </button>
+        <button
+          type="button"
+          onClick={() => onRemove(side, line.barcode)}
+          className={`rounded-lg p-2 text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/40 ${focusRing}`}
+          aria-label="Satırı sil"
+          title="Satırı sil"
+        >
+          <Trash2 className="size-4" aria-hidden />
+        </button>
+      </div>
+    </li>
+  );
 }
 
 // Basit debounce hook'u — verilen değeri belirli bir gecikmeden sonra günceller
@@ -173,6 +453,14 @@ export default function Home() {
   const [selectedCatalogProduct, setSelectedCatalogProduct] = useState<CatalogProduct | null>(null);
   /** Fırın sekmesinde: sadece fırın listesinden açılan ürün kartı "stok-only" görünmeli */
   const [bakeryCatalogStockOnly, setBakeryCatalogStockOnly] = useState(false);
+  /** Hesaplama sekmesi — barkod / ad araması ve geçici eksik/fazla listeleri */
+  const [hesaplamaSearchQuery, setHesaplamaSearchQuery] = useState("");
+  const [hesaplamaMissingLines, setHesaplamaMissingLines] = useState<
+    HesaplamaSessionLine[]
+  >([]);
+  const [hesaplamaExtraLines, setHesaplamaExtraLines] = useState<
+    HesaplamaSessionLine[]
+  >([]);
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<TabType>("missing");
   const [editingItem, setEditingItem] = useState<StockItemWithId | null>(null);
@@ -564,6 +852,13 @@ export default function Home() {
   >({});
   const [bakeryStocksLoading, setBakeryStocksLoading] = useState(false);
   const bakeryStockFetchGenRef = useRef(0);
+  /** Hesaplama sekmesi: Getir raf stoku (`/api/getir-stock`), barkod → miktar */
+  const [hesaplamaShelfStocks, setHesaplamaShelfStocks] = useState<
+    Record<string, number | null>
+  >({});
+  const [hesaplamaShelfStocksLoading, setHesaplamaShelfStocksLoading] =
+    useState(false);
+  const hesaplamaShelfStockFetchGenRef = useRef(0);
   /** Fırın listesi: `public/bakery-images/{barkod}.jpg` tam ekran */
   const [bakeryLightboxBarcode, setBakeryLightboxBarcode] = useState<
     string | null
@@ -608,6 +903,32 @@ export default function Home() {
           }
         })
       ),
+    []
+  );
+
+  /** Tek barkod için Getir stoku (hesaplama satırlarında “güncel stok”). */
+  const fetchGetirStockByBarcode = useCallback(
+    async (barcode: string): Promise<[string, number | null]> => {
+      try {
+        const res = await fetch(
+          `/api/getir-stock?barcode=${encodeURIComponent(barcode)}`
+        );
+        const data = (await res.json()) as { stock?: number | null };
+        if (res.ok && data && typeof data.stock === "number") {
+          return [barcode, data.stock];
+        }
+        if (
+          res.ok &&
+          data &&
+          (data.stock === null || data.stock === undefined)
+        ) {
+          return [barcode, null];
+        }
+        return [barcode, null];
+      } catch {
+        return [barcode, null];
+      }
+    },
     []
   );
 
@@ -817,6 +1138,9 @@ export default function Home() {
    * Sıralama uygulanır.
    */
   const displayItems = useMemo(() => {
+    if (activeTab !== "missing" && activeTab !== "extra") {
+      return [];
+    }
     const items = activeTab === "missing" ? missingItems : extraItems;
 
     if (!sortField) return items;
@@ -870,11 +1194,221 @@ export default function Home() {
     catalogPriceByBarcode,
   ]);
 
+  /** Hesaplama: Firestore’da eksik/fazla kaydı olan katalog ürünleri */
+  const hesaplamaCandidateProducts = useMemo(
+    () => filterCatalogProductsForHesaplama(catalogProducts, items),
+    [catalogProducts, items]
+  );
+
+  const hesaplamaSearchResults = useMemo(() => {
+    const filtered = filterHesaplamaCandidatesBySearch(
+      hesaplamaCandidateProducts,
+      hesaplamaSearchQuery,
+      MIN_SEARCH_LENGTH
+    );
+    return [...filtered].sort((a, b) =>
+      a.name.localeCompare(b.name, "tr", { sensitivity: "base" })
+    );
+  }, [hesaplamaCandidateProducts, hesaplamaSearchQuery]);
+
+  /** Hesaplama oturumundaki benzersiz barkodlar — Getir stoku yeniden çekmek için anahtar */
+  const hesaplamaShelfStockFetchKey = useMemo(() => {
+    const set = new Set<string>();
+    for (const l of hesaplamaMissingLines) {
+      const b = l.barcode.trim();
+      if (b) set.add(b);
+    }
+    for (const l of hesaplamaExtraLines) {
+      const b = l.barcode.trim();
+      if (b) set.add(b);
+    }
+    return [...set].sort().join("\u0000");
+  }, [hesaplamaMissingLines, hesaplamaExtraLines]);
+
+  /** Firestore özetine göre uygun hesaplama listesine ekler (tek “Listeye ekle” butonu). */
+  const handleHesaplamaAddProductToSession = useCallback(
+    (product: CatalogProduct) => {
+      const bc = product.barcode.trim();
+      if (!bc) return;
+      if (
+        hesaplamaMissingLines.some((l) => l.barcode === bc) ||
+        hesaplamaExtraLines.some((l) => l.barcode === bc)
+      ) {
+        return;
+      }
+      const totals = getFirestoreMissingExtraTotalsForProduct(product, items);
+      const side = resolveHesaplamaSideFromFirestoreTotals(totals);
+      if (!side) return;
+      const qty = getDefaultHesaplamaQuantityForSide(product, items, side);
+      if (side === "missing") {
+        setHesaplamaMissingLines((prev) =>
+          upsertHesaplamaSessionLine(prev, product, qty)
+        );
+      } else {
+        setHesaplamaExtraLines((prev) =>
+          upsertHesaplamaSessionLine(prev, product, qty)
+        );
+      }
+    },
+    [items, hesaplamaMissingLines, hesaplamaExtraLines]
+  );
+
+  /** Arama satırından: barkodu eksik ve fazla oturum listelerinden çıkarır. */
+  const handleHesaplamaRemoveProductFromSession = useCallback(
+    (product: CatalogProduct) => {
+      const bc = product.barcode.trim();
+      if (!bc) return;
+      setHesaplamaMissingLines((prev) => removeHesaplamaSessionLine(prev, bc));
+      setHesaplamaExtraLines((prev) => removeHesaplamaSessionLine(prev, bc));
+    },
+    []
+  );
+
+  const handleHesaplamaResetSession = useCallback(() => {
+    setHesaplamaSearchQuery("");
+    setHesaplamaMissingLines([]);
+    setHesaplamaExtraLines([]);
+  }, []);
+
+  const handleHesaplamaRemoveLine = useCallback(
+    (side: "missing" | "extra", barcode: string) => {
+      const updater = (prev: HesaplamaSessionLine[]) =>
+        removeHesaplamaSessionLine(prev, barcode);
+      if (side === "missing") setHesaplamaMissingLines(updater);
+      else setHesaplamaExtraLines(updater);
+    },
+    []
+  );
+
+  const handleHesaplamaLineQuantityCommit = useCallback(
+    (side: "missing" | "extra", barcode: string, quantity: number) => {
+      const updater = (prev: HesaplamaSessionLine[]) =>
+        setHesaplamaSessionLineQuantity(prev, barcode, quantity);
+      if (side === "missing") setHesaplamaMissingLines(updater);
+      else setHesaplamaExtraLines(updater);
+    },
+    []
+  );
+
+  const handleHesaplamaApplyFirestoreTotal = useCallback(
+    (side: "missing" | "extra", barcode: string) => {
+      const product = findCatalogProductByBarcode(catalogProducts, barcode);
+      if (!product) return;
+      const qty = getDefaultHesaplamaQuantityForSide(product, items, side);
+      const updater = (prev: HesaplamaSessionLine[]) =>
+        setHesaplamaSessionLineQuantity(prev, barcode, qty);
+      if (side === "missing") setHesaplamaMissingLines(updater);
+      else setHesaplamaExtraLines(updater);
+    },
+    [catalogProducts, items]
+  );
+
+  const handleHesaplamaManualUnitPriceCommit = useCallback(
+    (side: "missing" | "extra", barcode: string, value: number | null) => {
+      const updater = (prev: HesaplamaSessionLine[]) =>
+        setHesaplamaSessionLineManualUnitPrice(prev, barcode, value);
+      if (side === "missing") setHesaplamaMissingLines(updater);
+      else setHesaplamaExtraLines(updater);
+    },
+    []
+  );
+
+  useEffect(() => {
+    if (activeTab !== "hesaplama") return;
+    const barcodes = hesaplamaShelfStockFetchKey
+      ? hesaplamaShelfStockFetchKey.split("\u0000")
+      : [];
+    if (barcodes.length === 0) {
+      setHesaplamaShelfStocks({});
+      setHesaplamaShelfStocksLoading(false);
+      return;
+    }
+    const gen = ++hesaplamaShelfStockFetchGenRef.current;
+    setHesaplamaShelfStocksLoading(true);
+    void (async () => {
+      try {
+        const entries = await Promise.all(
+          barcodes.map((bc) => fetchGetirStockByBarcode(bc))
+        );
+        if (gen !== hesaplamaShelfStockFetchGenRef.current) return;
+        setHesaplamaShelfStocks(
+          Object.fromEntries(entries) as Record<string, number | null>
+        );
+      } finally {
+        if (gen === hesaplamaShelfStockFetchGenRef.current) {
+          setHesaplamaShelfStocksLoading(false);
+        }
+      }
+    })();
+    return () => {
+      hesaplamaShelfStockFetchGenRef.current += 1;
+    };
+  }, [
+    activeTab,
+    hesaplamaShelfStockFetchKey,
+    fetchGetirStockByBarcode,
+  ]);
+
+  const hesaplamaMissingValueSum = useMemo(
+    () =>
+      sumHesaplamaSessionLinesTry(
+        hesaplamaMissingLines,
+        catalogProducts,
+        catalogPriceByBarcode
+      ),
+    [hesaplamaMissingLines, catalogProducts, catalogPriceByBarcode]
+  );
+
+  const hesaplamaExtraValueSum = useMemo(
+    () =>
+      sumHesaplamaSessionLinesTry(
+        hesaplamaExtraLines,
+        catalogProducts,
+        catalogPriceByBarcode
+      ),
+    [hesaplamaExtraLines, catalogProducts, catalogPriceByBarcode]
+  );
+
+  const hesaplamaValueComparison = useMemo(() => {
+    const m = hesaplamaMissingValueSum.sumTry;
+    const e = hesaplamaExtraValueSum.sumTry;
+    const diff = m - e;
+    const listsEmpty =
+      hesaplamaMissingLines.length === 0 && hesaplamaExtraLines.length === 0;
+    if (listsEmpty) {
+      return {
+        listsEmpty: true as const,
+        missingSumTry: m,
+        extraSumTry: e,
+        diffTry: diff,
+      };
+    }
+    let higher: "missing" | "extra" | "tie";
+    if (diff > 0) higher = "missing";
+    else if (diff < 0) higher = "extra";
+    else higher = "tie";
+    return {
+      listsEmpty: false as const,
+      missingSumTry: m,
+      extraSumTry: e,
+      diffTry: diff,
+      higher,
+      absDiffTry: Math.abs(diff),
+    };
+  }, [
+    hesaplamaMissingValueSum,
+    hesaplamaExtraValueSum,
+    hesaplamaMissingLines.length,
+    hesaplamaExtraLines.length,
+  ]);
+
   // Kısa arama kontrolü (örneğin tek karakter yazıldığında)
   const trimmedSearchQuery = debouncedSearchQuery.trim();
   const isShortSearchQuery =
     trimmedSearchQuery.length > 0 && trimmedSearchQuery.length < MIN_SEARCH_LENGTH;
-  
+
+  const hesaplamaQueryTrimmed = hesaplamaSearchQuery.trim();
+
   const handleSort = useCallback((field: StockListSortKey) => {
     if (field === "totalAmount") {
       if (sortField === "totalAmount") {
@@ -1147,18 +1681,8 @@ export default function Home() {
         </section>
       )}
 
-      {/* Sayfa tamamen boşsa ve arama yapılmamışsa: büyük empty state */}
-      {isPageEmpty && !searchQuery.trim() && (
-        <EmptyState
-          title="Henüz ürün eklenmemiş"
-          message="Eksik veya fazla ürün eklemek için yukarıdaki butonları kullanabilirsiniz."
-          icon={PackageX}
-        />
-      )}
-
-      {/* Alt bölüm: Arama sonuçları veya sekmeli listeler */}
-      {(!isPageEmpty || searchQuery.trim()) && (
-        <section aria-label="Ürün listeleri" className="flex flex-col gap-4">
+      {/* Alt bölüm: Arama sonuçları veya sekmeli listeler (Hesaplama sekmesi boş DB’de de erişilebilsin diye her zaman) */}
+      <section aria-label="Ürün listeleri" className="flex flex-col gap-4">
           {/* Arama yapıldığında: Sadece arama sonuçları göster */}
           {searchQuery.trim() ? (
             <div className="overflow-hidden rounded-xl border border-zinc-200 dark:border-zinc-700">
@@ -1253,8 +1777,9 @@ export default function Home() {
                               <div className="font-medium text-zinc-900 dark:text-zinc-100 text-sm leading-snug line-clamp-2">
                                 {product.name}
                               </div>
-                              <div className="text-xs text-zinc-500 dark:text-zinc-400 break-all">
-                                <span className="font-medium">Barkod:</span> {product.barcode}
+                              <div className="text-xs text-zinc-500 dark:text-zinc-400">
+                                <span className="font-medium">Barkod:</span>{" "}
+                                <BarcodeRevealInline barcode={product.barcode} />
                               </div>
                               <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
                                 <span>
@@ -1299,8 +1824,8 @@ export default function Home() {
                             <span className="min-w-0 font-medium text-zinc-900 dark:text-zinc-100 text-left">
                               {product.name}
                             </span>
-                            <span className="tabular-nums text-zinc-600 dark:text-zinc-300 break-all text-left">
-                              {product.barcode}
+                            <span className="min-w-0 text-left text-zinc-600 dark:text-zinc-300">
+                              <BarcodeRevealInline barcode={product.barcode} />
                             </span>
                             <span className="text-left">
                               <span className="text-xs text-zinc-500 dark:text-zinc-400">Eksik: </span>
@@ -1389,7 +1914,7 @@ export default function Home() {
         <div className="overflow-hidden rounded-xl border border-zinc-200 dark:border-zinc-700">
           <div
             role="tablist"
-            aria-label="Eksik, fazla, yaklaşan SKT ve fırın ürün listeleri"
+            aria-label="Eksik, fazla, yaklaşan SKT, fırın ürünleri ve hesaplama"
             className="flex flex-wrap gap-0 border-b border-zinc-200 bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-800"
           >
             <button
@@ -1479,6 +2004,30 @@ export default function Home() {
                 />
               )}
             </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={activeTab === "hesaplama"}
+              aria-controls="panel-hesaplama"
+              id="tab-hesaplama"
+              onClick={() => setActiveTab("hesaplama")}
+              className={`relative rounded-md px-4 py-4 text-sm font-medium motion-safe:transition-colors min-h-[44px] sm:px-6 sm:py-4 sm:text-base focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-zinc-950 ${
+                activeTab === "hesaplama"
+                  ? "text-violet-700 dark:text-violet-400"
+                  : "text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200"
+              }`}
+            >
+              <span className="inline-flex items-center gap-1.5">
+                <Calculator className="size-4 shrink-0 opacity-80" aria-hidden />
+                Hesaplama
+              </span>
+              {activeTab === "hesaplama" && (
+                <span
+                  className="absolute bottom-0 left-0 right-0 h-0.5 bg-violet-600 dark:bg-violet-400"
+                  aria-hidden
+                />
+              )}
+            </button>
           </div>
           <div
             role="tabpanel"
@@ -1489,7 +2038,11 @@ export default function Home() {
                   ? "panel-extra"
                   : activeTab === "expiring"
                     ? "panel-expiring"
-                    : "panel-bakery"
+                    : activeTab === "bakery"
+                      ? "panel-bakery"
+                      : activeTab === "hesaplama"
+                        ? "panel-hesaplama"
+                        : "panel-missing"
             }
             aria-labelledby={
               activeTab === "missing"
@@ -1498,7 +2051,11 @@ export default function Home() {
                   ? "tab-extra"
                   : activeTab === "expiring"
                     ? "tab-expiring"
-                    : "tab-bakery"
+                    : activeTab === "bakery"
+                      ? "tab-bakery"
+                      : activeTab === "hesaplama"
+                        ? "tab-hesaplama"
+                        : "tab-missing"
             }
             className="min-h-[120px]"
           >
@@ -1561,7 +2118,8 @@ export default function Home() {
                                   {product.productName}
                                 </p>
                                 <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
-                                  Barkod: {product.barcode}
+                                  <span className="font-medium">Barkod:</span>{" "}
+                                  <BarcodeRevealInline barcode={product.barcode} />
                                 </p>
                                 <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
                                   SKT: {product.expiryDate}
@@ -1624,7 +2182,9 @@ export default function Home() {
                                 )}
                                 <span className="line-clamp-2">{product.productName}</span>
                               </span>
-                              <span className="text-zinc-600 dark:text-zinc-400">{product.barcode}</span>
+                              <span className="min-w-0 text-zinc-600 dark:text-zinc-400">
+                                <BarcodeRevealInline barcode={product.barcode} />
+                              </span>
                               <span className="text-zinc-600 dark:text-zinc-400">{product.expiryDate}</span>
                               <span className="text-zinc-600 dark:text-zinc-400">{product.removalDate}</span>
                               <span className={`font-medium ${status.color}`}>{status.label}</span>
@@ -1845,8 +2405,9 @@ export default function Home() {
                                     <p className="text-sm font-semibold leading-snug text-zinc-900 dark:text-zinc-100">
                                       {row.displayName}
                                     </p>
-                                    <p className="mt-1 break-all text-xs text-zinc-500 dark:text-zinc-400">
-                                      Barkod: {row.barcode}
+                                    <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
+                                      <span className="font-medium">Barkod:</span>{" "}
+                                      <BarcodeRevealInline barcode={row.barcode} />
                                     </p>
                                     <p className="mt-1 text-xs text-zinc-600 dark:text-zinc-300">
                                       Raf stok (Getir):{" "}
@@ -1911,8 +2472,8 @@ export default function Home() {
                                     <span className="line-clamp-2 min-w-0 font-medium text-zinc-900 dark:text-zinc-100">
                                       {row.displayName}
                                     </span>
-                                    <span className="min-w-0 break-all tabular-nums text-zinc-600 dark:text-zinc-300">
-                                      {row.barcode}
+                                    <span className="min-w-0 tabular-nums text-zinc-600 dark:text-zinc-300">
+                                      <BarcodeRevealInline barcode={row.barcode} />
                                     </span>
                                     <span
                                       className={`tabular-nums text-zinc-800 dark:text-zinc-200 ${
@@ -1958,6 +2519,377 @@ export default function Home() {
                   )}
                 </div>
               )
+            ) : activeTab === "hesaplama" ? (
+              <div
+                className="flex min-h-0 w-full flex-col gap-4 p-4 sm:p-6"
+                aria-label="Hesaplama oturumu"
+              >
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+                  <div className="min-w-0 flex-1">
+                    <label
+                      htmlFor="hesaplama-barcode-search"
+                      className="mb-1 block text-xs font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400"
+                    >
+                      Barkod veya ürün adı ile ara
+                    </label>
+                    <input
+                      id="hesaplama-barcode-search"
+                      type="search"
+                      enterKeyHint="search"
+                      autoComplete="off"
+                      value={hesaplamaSearchQuery}
+                      onChange={(e) => setHesaplamaSearchQuery(e.target.value)}
+                      placeholder={`En az ${MIN_SEARCH_LENGTH} karakter (yalnızca eksik/fazla kaydı olan ürünler)`}
+                      className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2.5 text-sm text-zinc-900 shadow-sm outline-none placeholder:text-zinc-400 focus:border-violet-500 focus-visible:ring-2 focus-visible:ring-violet-500/30 focus-visible:ring-offset-2 motion-safe:transition-shadow dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100 dark:placeholder:text-zinc-500 dark:focus:border-violet-400 dark:focus-visible:ring-offset-zinc-950"
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleHesaplamaResetSession}
+                    className="shrink-0 rounded-lg border border-zinc-300 bg-zinc-50 px-4 py-2.5 text-sm font-medium text-zinc-700 motion-safe:transition-colors hover:bg-zinc-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 focus-visible:ring-offset-2 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-200 dark:hover:bg-zinc-700 dark:focus-visible:ring-offset-zinc-950"
+                  >
+                    Oturumu sıfırla
+                  </button>
+                </div>
+
+                <div
+                  className="flex min-h-[8rem] flex-col rounded-xl border border-zinc-200 bg-white dark:border-zinc-700 dark:bg-zinc-900/40"
+                  aria-label="Arama sonuçları — hesaplama adayları"
+                >
+                  {catalogLoading ? (
+                    <div className="p-4">
+                      <ListSkeleton />
+                    </div>
+                  ) : hesaplamaCandidateProducts.length === 0 ? (
+                    <div className="flex flex-1 items-center justify-center px-4 py-10 text-center text-sm text-zinc-500 dark:text-zinc-400">
+                      Henüz eksik veya fazla olarak kayıtlı ürün yok; hesaplama için önce bu
+                      kayıtları ekleyin.
+                    </div>
+                  ) : hesaplamaQueryTrimmed.length < MIN_SEARCH_LENGTH ? (
+                    <div className="flex flex-1 items-center justify-center px-4 py-10 text-center text-sm text-zinc-500 dark:text-zinc-400">
+                      Aramak için en az {MIN_SEARCH_LENGTH} karakter yazın.
+                    </div>
+                  ) : hesaplamaSearchResults.length === 0 ? (
+                    <div className="flex flex-1 items-center justify-center px-4 py-10 text-center text-sm text-zinc-500 dark:text-zinc-400">
+                      Aday ürünler arasında eşleşme yok.
+                    </div>
+                  ) : (
+                    <ul
+                      role="list"
+                      className="max-h-[min(45vh,22rem)] divide-y divide-zinc-200 overflow-y-auto overscroll-contain dark:divide-zinc-700"
+                    >
+                      {hesaplamaSearchResults.map((product) => {
+                        const totals = getFirestoreMissingExtraTotalsForProduct(
+                          product,
+                          items
+                        );
+                        const autoSide =
+                          resolveHesaplamaSideFromFirestoreTotals(totals);
+                        const targetLabel =
+                          autoSide === "missing"
+                            ? "eksik listesine"
+                            : autoSide === "extra"
+                              ? "fazla listesine"
+                              : null;
+                        const inMissingSession = hesaplamaMissingLines.some(
+                          (l) => l.barcode === product.barcode
+                        );
+                        const inExtraSession = hesaplamaExtraLines.some(
+                          (l) => l.barcode === product.barcode
+                        );
+                        const inSession = inMissingSession || inExtraSession;
+                        return (
+                          <li
+                            key={product.barcode}
+                            className="flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
+                          >
+                            <div className="flex min-w-0 flex-1 gap-3">
+                              <div className="shrink-0">
+                                {product.imageUrl ? (
+                                  <img
+                                    src={product.imageUrl}
+                                    alt={product.name}
+                                    className="size-12 rounded-lg border border-zinc-200 object-contain p-0.5 dark:border-zinc-600"
+                                    width={48}
+                                    height={48}
+                                    loading="lazy"
+                                  />
+                                ) : (
+                                  <div className="flex size-12 items-center justify-center rounded-lg border border-zinc-200 bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900/60">
+                                    <PackageX className="size-5 text-zinc-400 dark:text-zinc-500" />
+                                  </div>
+                                )}
+                              </div>
+                              <div className="min-w-0 flex-1">
+                                <p className="line-clamp-2 text-sm font-medium text-zinc-900 dark:text-zinc-100">
+                                  {product.name}
+                                </p>
+                                <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
+                                  <span className="font-medium">Barkod:</span>{" "}
+                                  <BarcodeRevealInline barcode={product.barcode} />
+                                </p>
+                                <p className="mt-1 text-xs tabular-nums">
+                                  <span style={{ color: "var(--color-missing)" }}>
+                                    Eksik (kayıt): {totals.missingTotal}
+                                  </span>
+                                  <span className="text-zinc-400"> · </span>
+                                  <span style={{ color: "var(--color-extra)" }}>
+                                    Fazla (kayıt): {totals.extraTotal}
+                                  </span>
+                                </p>
+                              </div>
+                            </div>
+                            <div className="flex shrink-0 sm:justify-end">
+                              <button
+                                type="button"
+                                disabled={inSession ? false : !autoSide}
+                                onClick={() =>
+                                  inSession
+                                    ? handleHesaplamaRemoveProductFromSession(
+                                        product
+                                      )
+                                    : handleHesaplamaAddProductToSession(product)
+                                }
+                                title={
+                                  inSession
+                                    ? "Ürünü hesaplama listesinden çıkarır"
+                                    : targetLabel
+                                      ? `Kayıtlara göre ${targetLabel} eklenir`
+                                      : undefined
+                                }
+                                className={`min-h-[44px] rounded-lg border px-4 py-2 text-sm font-medium motion-safe:transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 dark:focus-visible:ring-offset-zinc-950 ${
+                                  inSession
+                                    ? "border-red-300 bg-red-50 text-red-800 hover:bg-red-100 focus-visible:ring-red-500 dark:border-red-700 dark:bg-red-950/45 dark:text-red-200 dark:hover:bg-red-950/70"
+                                    : "border-violet-300 bg-violet-50 text-violet-800 hover:bg-violet-100 focus-visible:ring-violet-500 dark:border-violet-700 dark:bg-violet-950/50 dark:text-violet-200 dark:hover:bg-violet-950"
+                                }`}
+                              >
+                                {inSession ? "Listeden kaldır" : "Listeye ekle"}
+                              </button>
+                            </div>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  )}
+                </div>
+
+                <div
+                  className="rounded-xl border border-zinc-200 bg-zinc-50/90 p-4 dark:border-zinc-700 dark:bg-zinc-900/50"
+                  aria-label="Hesaplama tutar özeti"
+                >
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                    <div
+                      className="rounded-lg border border-zinc-200 bg-white px-4 py-3 dark:border-zinc-600 dark:bg-zinc-900"
+                      role="group"
+                      aria-label="Toplam eksik tutar"
+                    >
+                      <p className="text-xs font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
+                        Toplam eksik (TL)
+                      </p>
+                      <p
+                        className="mt-1 text-2xl font-semibold tabular-nums"
+                        style={{ color: "var(--color-missing)" }}
+                      >
+                        {formatTryPriceTRY(hesaplamaMissingValueSum.sumTry)}
+                      </p>
+                    </div>
+                    <div
+                      className="rounded-lg border border-zinc-200 bg-white px-4 py-3 dark:border-zinc-600 dark:bg-zinc-900"
+                      role="group"
+                      aria-label="Toplam fazla tutar"
+                    >
+                      <p className="text-xs font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
+                        Toplam fazla (TL)
+                      </p>
+                      <p
+                        className="mt-1 text-2xl font-semibold tabular-nums"
+                        style={{ color: "var(--color-extra)" }}
+                      >
+                        {formatTryPriceTRY(hesaplamaExtraValueSum.sumTry)}
+                      </p>
+                    </div>
+                  </div>
+                  {hesaplamaMissingValueSum.linesWithoutPrice +
+                    hesaplamaExtraValueSum.linesWithoutPrice >
+                    0 && (
+                    <p className="mt-3 text-xs text-amber-700 dark:text-amber-400">
+                      {hesaplamaMissingValueSum.linesWithoutPrice +
+                        hesaplamaExtraValueSum.linesWithoutPrice}{" "}
+                      satırda katalog fiyatı yok; tutar 0 ₺ olarak hesaplandı.
+                    </p>
+                  )}
+                  {!hesaplamaValueComparison.listsEmpty && (
+                    <div
+                      className={`mt-4 rounded-lg border px-4 py-3 text-sm ${
+                        hesaplamaValueComparison.higher === "missing"
+                          ? "border-red-200 bg-red-50/80 text-red-900 dark:border-red-900/60 dark:bg-red-950/30 dark:text-red-100"
+                          : hesaplamaValueComparison.higher === "extra"
+                            ? "border-green-200 bg-green-50/80 text-green-900 dark:border-green-900/60 dark:bg-green-950/30 dark:text-green-100"
+                            : "border-zinc-200 bg-zinc-100/80 text-zinc-800 dark:border-zinc-600 dark:bg-zinc-800/60 dark:text-zinc-200"
+                      }`}
+                      role="status"
+                    >
+                      <span>
+                        Fark{" "}
+                        <strong className="tabular-nums">
+                          {formatTryPriceTRY(
+                            hesaplamaValueComparison.absDiffTry
+                          )}
+                        </strong>
+                      </span>
+                    </div>
+                  )}
+                </div>
+
+                <div className="grid min-h-[10rem] grid-cols-1 gap-4 lg:grid-cols-2">
+                  <section
+                    aria-labelledby="hesaplama-heading-missing"
+                    className="flex flex-col rounded-xl border border-zinc-200 bg-zinc-50/80 dark:border-zinc-700 dark:bg-zinc-900/40"
+                  >
+                    <div
+                      id="hesaplama-heading-missing"
+                      className="border-b border-zinc-200 px-4 py-3 dark:border-zinc-700"
+                    >
+                      <h3
+                        className="text-sm font-semibold"
+                        style={{ color: "var(--color-missing)" }}
+                      >
+                        Eksik ürünler (hesaplama)
+                      </h3>
+                      <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
+                        Başka sekmeye geçseniz oturum korunur; temizlemek için{" "}
+                        <span className="font-medium">Oturumu sıfırla</span>.
+                      </p>
+                    </div>
+                    <div>
+                      {hesaplamaMissingLines.length === 0 ? (
+                        <div className="flex items-center justify-center px-4 py-10 text-center text-sm text-zinc-500 dark:text-zinc-400">
+                          Liste boş.
+                        </div>
+                      ) : (
+                        <ul role="list" className="border-t border-zinc-100 dark:border-zinc-700/80">
+                          {hesaplamaMissingLines.map((line) => {
+                            const val = getHesaplamaLineValueTry(
+                              line,
+                              catalogProducts,
+                              catalogPriceByBarcode
+                            );
+                            const pricingSource = getHesaplamaLinePricingSource(
+                              line,
+                              catalogProducts,
+                              catalogPriceByBarcode
+                            );
+                            const bcKey = line.barcode.trim();
+                            const shelfStockDisplay =
+                              hesaplamaShelfStocksLoading
+                                ? "…"
+                                : typeof hesaplamaShelfStocks[bcKey] ===
+                                    "number"
+                                  ? String(hesaplamaShelfStocks[bcKey])
+                                  : "—";
+                            return (
+                              <HesaplamaSessionLineRow
+                                key={line.barcode}
+                                side="missing"
+                                line={line}
+                                pricingSource={pricingSource}
+                                lineSubtotalFormatted={formatTryPriceTRY(
+                                  val.lineTotalTry
+                                )}
+                                lineHasPrice={val.hasUnitPrice}
+                                shelfStockDisplay={shelfStockDisplay}
+                                onQuantityCommit={
+                                  handleHesaplamaLineQuantityCommit
+                                }
+                                onRemove={handleHesaplamaRemoveLine}
+                                onApplyFirestore={
+                                  handleHesaplamaApplyFirestoreTotal
+                                }
+                                onManualUnitPriceCommit={
+                                  handleHesaplamaManualUnitPriceCommit
+                                }
+                              />
+                            );
+                          })}
+                        </ul>
+                      )}
+                    </div>
+                  </section>
+                  <section
+                    aria-labelledby="hesaplama-heading-extra"
+                    className="flex flex-col rounded-xl border border-zinc-200 bg-zinc-50/80 dark:border-zinc-700 dark:bg-zinc-900/40"
+                  >
+                    <div
+                      id="hesaplama-heading-extra"
+                      className="border-b border-zinc-200 px-4 py-3 dark:border-zinc-700"
+                    >
+                      <h3
+                        className="text-sm font-semibold"
+                        style={{ color: "var(--color-extra)" }}
+                      >
+                        Fazla ürünler (hesaplama)
+                      </h3>
+                      <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
+                        Başka sekmeye geçseniz oturum korunur; temizlemek için{" "}
+                        <span className="font-medium">Oturumu sıfırla</span>.
+                      </p>
+                    </div>
+                    <div>
+                      {hesaplamaExtraLines.length === 0 ? (
+                        <div className="flex items-center justify-center px-4 py-10 text-center text-sm text-zinc-500 dark:text-zinc-400">
+                          Liste boş.
+                        </div>
+                      ) : (
+                        <ul role="list" className="border-t border-zinc-100 dark:border-zinc-700/80">
+                          {hesaplamaExtraLines.map((line) => {
+                            const val = getHesaplamaLineValueTry(
+                              line,
+                              catalogProducts,
+                              catalogPriceByBarcode
+                            );
+                            const pricingSource = getHesaplamaLinePricingSource(
+                              line,
+                              catalogProducts,
+                              catalogPriceByBarcode
+                            );
+                            const bcKey = line.barcode.trim();
+                            const shelfStockDisplay =
+                              hesaplamaShelfStocksLoading
+                                ? "…"
+                                : typeof hesaplamaShelfStocks[bcKey] ===
+                                    "number"
+                                  ? String(hesaplamaShelfStocks[bcKey])
+                                  : "—";
+                            return (
+                              <HesaplamaSessionLineRow
+                                key={line.barcode}
+                                side="extra"
+                                line={line}
+                                pricingSource={pricingSource}
+                                lineSubtotalFormatted={formatTryPriceTRY(
+                                  val.lineTotalTry
+                                )}
+                                lineHasPrice={val.hasUnitPrice}
+                                shelfStockDisplay={shelfStockDisplay}
+                                onQuantityCommit={
+                                  handleHesaplamaLineQuantityCommit
+                                }
+                                onRemove={handleHesaplamaRemoveLine}
+                                onApplyFirestore={
+                                  handleHesaplamaApplyFirestoreTotal
+                                }
+                                onManualUnitPriceCommit={
+                                  handleHesaplamaManualUnitPriceCommit
+                                }
+                              />
+                            );
+                          })}
+                        </ul>
+                      )}
+                    </div>
+                  </section>
+                </div>
+              </div>
             ) : isLoading || catalogLoading ? (
               <ListSkeleton />
             ) : (
@@ -2089,11 +3021,12 @@ export default function Home() {
                                 col.key === "notes" ? item.notes! : String(item[col.key] ?? "");
                               const isName = col.key === "name";
                               const isNotes = col.key === "notes";
+                              const isBarcode = col.key === "barcode";
                               const wrapperClass = isName
                                 ? "text-xs"
                                 : isNotes
                                 ? "min-w-0 text-xs text-zinc-500 dark:text-zinc-400"
-                                : "text-xs text-zinc-600 dark:text-zinc-300" + (col.key === "barcode" ? " break-all" : "");
+                                : "text-xs text-zinc-600 dark:text-zinc-300" + (isBarcode ? " min-w-0" : "");
                               const valueClass = isName
                                 ? "text-sm font-semibold text-zinc-900 dark:text-zinc-100 leading-snug line-clamp-2"
                                 : isNotes
@@ -2104,7 +3037,11 @@ export default function Home() {
                               return (
                                 <div key={col.key} role="group" aria-label={col.title} className={wrapperClass}>
                                   <span className="font-medium text-zinc-500 dark:text-zinc-400">{col.mobileLabel}:</span>{" "}
-                                  <span className={valueClass}>{value}</span>
+                                  {isBarcode ? (
+                                    <BarcodeRevealInline barcode={item.barcode} />
+                                  ) : (
+                                    <span className={valueClass}>{value}</span>
+                                  )}
                                 </div>
                               );
                             })}
@@ -2195,11 +3132,15 @@ export default function Home() {
                               : col.key === "notes"
                               ? "min-w-0 truncate text-zinc-500 dark:text-zinc-400"
                               : col.key === "barcode"
-                              ? "tabular-nums text-zinc-600 dark:text-zinc-300 break-all"
+                              ? "min-w-0 text-zinc-600 dark:text-zinc-300"
                               : "tabular-nums text-zinc-600 dark:text-zinc-300";
                           return (
                             <span key={col.key} className={cellClass}>
-                              {value}
+                              {col.key === "barcode" ? (
+                                <BarcodeRevealInline barcode={item.barcode} />
+                              ) : (
+                                value
+                              )}
                             </span>
                           );
                         })}
@@ -2254,7 +3195,6 @@ export default function Home() {
         </div>
           )}
       </section>
-      )}
 
       {/* Yaklaşan SKT uyarı simgesi (sabit, küçük buton) */}
       {showExpiringNotification && expiringProductsToday.length > 0 && (
