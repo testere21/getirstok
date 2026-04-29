@@ -654,11 +654,11 @@ export function AddProductModal({
       aria-modal="true"
       aria-labelledby="modal-title"
     >
-      {/* Overlay — tıklanınca kapat */}
+      {/* Overlay — mobilde belirgin karartma + blur; masaüstünde daha hafif */}
       <button
         type="button"
         onClick={onClose}
-        className="absolute inset-0 bg-black/50 transition-opacity duration-300"
+        className="absolute inset-0 bg-black/78 backdrop-blur-md transition-opacity duration-300 sm:bg-black/48 sm:backdrop-blur-[2px]"
         style={{ opacity: isOpen ? 1 : 0 }}
         aria-label="Modalı kapat"
       />
