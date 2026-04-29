@@ -9,6 +9,7 @@
     "lint": "eslint",
     "scrape-products": "node scripts/scrape-getir-products.mjs",
     "fill-prices": "node scripts/fill-product-prices-from-stocks-api.mjs",
+    "fill-supplier-return-days": "node scripts/fill-supplier-return-days-from-warehouse.mjs",
     "missing-from-panel": "node scripts/find-missing-products-from-getir-panel.mjs",
     "update-from-panel": "node scripts/update-products-from-getir-panel.mjs",
     "update-from-api": "node scripts/update-products-from-getir-api.mjs",

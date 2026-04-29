@@ -139,6 +139,8 @@ export interface CatalogProduct {
   productId?: string;
   /** Getir bayi satış fiyatı (ör. stocks API); kuruş değil, TL ondalıklı */
   price?: number;
+  /** Depo panelinden tedarikçi iade: kaç gün önceden çıkılacak (expDays.dead) */
+  supplierReturnDays?: number;
 }
 
 /**

@@ -98,6 +98,7 @@ interface CatalogProduct {
   imageUrl?: string;
   productId?: string;
   price?: number;
+  supplierReturnDays?: number;
 }
 
 export type ModalType = null | "missing" | "extra";
@@ -1452,13 +1453,16 @@ export default function Home() {
 
   const handleItemClick = useCallback(
     (item: StockItemWithId) => {
-      const fromCatalog = catalogProducts.find((p) => p.barcode === item.barcode);
+      const fromCatalog = catalogProducts.find((p) =>
+        catalogProductMatchesBarcode(p, item.barcode)
+      );
       const catalogProduct: CatalogProduct = {
         name: item.name,
         barcode: item.barcode,
         imageUrl: item.imageUrl ?? fromCatalog?.imageUrl,
         productId: fromCatalog?.productId,
         price: fromCatalog?.price,
+        supplierReturnDays: fromCatalog?.supplierReturnDays,
       };
       setBakeryCatalogStockOnly(false);
       setSelectedCatalogProduct(catalogProduct);
@@ -3228,6 +3232,10 @@ export default function Home() {
         <ExpiringProductModal
           isOpen={true}
           onClose={() => setEditingExpiringProduct(null)}
+          supplierReturnDays={
+            catalogProducts.find((p) => p.barcode === editingExpiringProduct.barcode)
+              ?.supplierReturnDays
+          }
           product={{
             barcode: editingExpiringProduct.barcode,
             name: editingExpiringProduct.productName,

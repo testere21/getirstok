@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Pencil, Trash2, Calendar, AlertTriangle, ArrowUp, ArrowDown } from "lucide-react";
 import { ExpiringProductModal } from "@/app/components/ExpiringProductModal";
 import { Toast, type ToastType } from "@/app/components/Toast";
-import type { ExpiringProductWithId } from "@/app/lib/types";
+import type { CatalogProduct, ExpiringProductWithId } from "@/app/lib/types";
 
 type FilterType = "all" | "today" | "past" | "future";
 type SortField = "removalDate" | "productName" | "expiryDate";
@@ -25,6 +25,21 @@ export default function ExpiringProductsPage() {
   const [editingProduct, setEditingProduct] = useState<ExpiringProductWithId | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [toast, setToast] = useState<ToastState | null>(null);
+  const [catalogProducts, setCatalogProducts] = useState<CatalogProduct[]>([]);
+
+  // Katalog (tedarikçi iade günü – products.json)
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/products")
+      .then((r) => r.json())
+      .then((data) => {
+        if (!cancelled && Array.isArray(data)) setCatalogProducts(data);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // Yaklaşan SKT kayıtlarını yükle
   useEffect(() => {
@@ -397,6 +412,10 @@ export default function ExpiringProductsPage() {
         <ExpiringProductModal
           isOpen={true}
           onClose={() => setEditingProduct(null)}
+          supplierReturnDays={
+            catalogProducts.find((p) => p.barcode === editingProduct.barcode)
+              ?.supplierReturnDays
+          }
           product={{
             barcode: editingProduct.barcode,
             name: editingProduct.productName,

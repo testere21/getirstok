@@ -1,21 +1,53 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { X, Calendar } from "lucide-react";
 import type { ExpiringProductWithId } from "@/app/lib/types";
 
 interface ExpiringProductModalProps {
   isOpen: boolean;
   onClose: () => void;
+  /** API gövdesi için gerekli; formda gösterilmez */
   product: { barcode: string; name: string };
+  /** products.json / katalog: SKT'den kaç gün önce çıkılacak */
+  supplierReturnDays?: number | null;
   existingProduct?: ExpiringProductWithId | null;
   onSuccess?: (message: string) => void;
+}
+
+/** YYYY-MM-DD — yerel takvimde `days` gün çıkarır */
+function subtractCalendarDays(isoYmd: string, days: number): string {
+  const parts = isoYmd.trim().split("-").map((x) => parseInt(x, 10));
+  if (parts.length !== 3 || parts.some((n) => Number.isNaN(n))) return "";
+  const [y, m, d] = parts;
+  const dt = new Date(y, m - 1, d);
+  dt.setDate(dt.getDate() - days);
+  const yy = dt.getFullYear();
+  const mm = String(dt.getMonth() + 1).padStart(2, "0");
+  const dd = String(dt.getDate()).padStart(2, "0");
+  return `${yy}-${mm}-${dd}`;
+}
+
+/** Kayıttaki SKT ile çıkış tarihi arasındaki tam gün farkı */
+function inferDaysFromStoredPair(
+  expiryYmd: string,
+  removalYmd: string
+): number | null {
+  const pe = expiryYmd.trim().split("-").map((x) => parseInt(x, 10));
+  const pr = removalYmd.trim().split("-").map((x) => parseInt(x, 10));
+  if (pe.length !== 3 || pr.length !== 3 || pe.some(Number.isNaN) || pr.some(Number.isNaN))
+    return null;
+  const e = new Date(pe[0], pe[1] - 1, pe[2]);
+  const r = new Date(pr[0], pr[1] - 1, pr[2]);
+  const diff = Math.round((e.getTime() - r.getTime()) / 86400000);
+  return Number.isFinite(diff) && diff >= 0 ? diff : null;
 }
 
 export function ExpiringProductModal({
   isOpen,
   onClose,
   product,
+  supplierReturnDays,
   existingProduct,
   onSuccess,
 }: ExpiringProductModalProps) {
@@ -26,51 +58,91 @@ export function ExpiringProductModal({
 
   const isEditMode = Boolean(existingProduct);
 
-  // Modal açıldığında veya existingProduct değiştiğinde formu doldur
+  const inferredFromRecord = useMemo(() => {
+    if (!existingProduct?.expiryDate || !existingProduct?.removalDate) return null;
+    return inferDaysFromStoredPair(
+      existingProduct.expiryDate,
+      existingProduct.removalDate
+    );
+  }, [existingProduct?.expiryDate, existingProduct?.removalDate]);
+
+  const ruleDays = useMemo(() => {
+    if (
+      typeof supplierReturnDays === "number" &&
+      Number.isFinite(supplierReturnDays) &&
+      supplierReturnDays >= 0
+    ) {
+      return Math.floor(supplierReturnDays);
+    }
+    return inferredFromRecord;
+  }, [supplierReturnDays, inferredFromRecord]);
+
+  // Modal açılınca SKT’yi doldur; çıkış tarihi kural günü ile hesaplanacak
   useEffect(() => {
-    if (isOpen) {
-      if (existingProduct) {
-        setExpiryDate(existingProduct.expiryDate);
-        setRemovalDate(existingProduct.removalDate);
-      } else {
-        setExpiryDate("");
-        setRemovalDate("");
-      }
-      setError(null);
-      setIsSubmitting(false);
-    } else {
-      // Modal kapandığında temizle
+    if (!isOpen) {
       setExpiryDate("");
       setRemovalDate("");
       setError(null);
       setIsSubmitting(false);
+      return;
     }
-  }, [isOpen, existingProduct]);
+    setError(null);
+    setIsSubmitting(false);
+    if (existingProduct) {
+      setExpiryDate(existingProduct.expiryDate);
+    } else {
+      setExpiryDate("");
+      setRemovalDate("");
+    }
+  }, [isOpen, existingProduct?.id]);
+
+  // SKT veya kural günü değişince tedarikçi iade (çıkış) tarihini güncelle
+  useEffect(() => {
+    if (!isOpen) return;
+    const trimmed = expiryDate.trim();
+    const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+    if (!trimmed || !dateRegex.test(trimmed)) {
+      if (!existingProduct) setRemovalDate("");
+      return;
+    }
+    if (ruleDays !== null) {
+      setRemovalDate(subtractCalendarDays(trimmed, ruleDays));
+    } else if (existingProduct && trimmed === existingProduct.expiryDate) {
+      setRemovalDate(existingProduct.removalDate);
+    }
+  }, [isOpen, expiryDate, ruleDays, existingProduct]);
+
+  const handleExpiryChange = (value: string) => {
+    setExpiryDate(value);
+    setError(null);
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
 
-    // Validasyon
     if (!expiryDate.trim()) {
       setError("SKT tarihi gerekli");
       return;
     }
 
-    if (!removalDate.trim()) {
-      setError("Çıkılması gereken tarih gerekli");
+    const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+    if (!dateRegex.test(expiryDate.trim())) {
+      setError("SKT tarihi formatı geçersiz.");
       return;
     }
 
-    // Tarih formatı kontrolü (YYYY-MM-DD)
-    const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
-    if (!dateRegex.test(expiryDate.trim())) {
-      setError("SKT tarihi formatı geçersiz. YYYY-MM-DD formatında olmalıdır.");
+    if (!removalDate.trim()) {
+      setError(
+        ruleDays === null
+          ? "Tedarikçi iade tarihi hesaplanamadı. Ürün için katalogda supplierReturnDays yok veya kayıttan çıkarılamadı."
+          : "Tedarikçi iade tarihi hesaplanamadı."
+      );
       return;
     }
 
     if (!dateRegex.test(removalDate.trim())) {
-      setError("Çıkılması gereken tarih formatı geçersiz. YYYY-MM-DD formatında olmalıdır.");
+      setError("Tedarikçi iade tarihi formatı geçersiz.");
       return;
     }
 
@@ -81,7 +153,6 @@ export function ExpiringProductModal({
         if (!existingProduct.id || typeof existingProduct.id !== "string") {
           throw new Error("Kayıt ID bulunamadı. Lütfen sayfayı yenileyip tekrar deneyin.");
         }
-        // Güncelleme
         const response = await fetch(`/api/expiring-products/${existingProduct.id}`, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
@@ -91,24 +162,25 @@ export function ExpiringProductModal({
           }),
         });
 
-        let data: any = null;
+        let data: unknown = null;
         try {
           data = await response.json();
         } catch {
           data = null;
         }
 
-        if (!response.ok || !data?.success) {
-          throw new Error(
-            data?.error ||
-              `Güncelleme başarısız (HTTP ${response.status})`
-          );
+        const ok = data && typeof data === "object" && "success" in data && (data as { success?: boolean }).success;
+        if (!response.ok || !ok) {
+          const msg =
+            data && typeof data === "object" && "error" in data
+              ? String((data as { error?: string }).error)
+              : `Güncelleme başarısız (HTTP ${response.status})`;
+          throw new Error(msg);
         }
 
         onSuccess?.("Yaklaşan SKT kaydı başarıyla güncellendi.");
         onClose();
       } else {
-        // Yeni kayıt
         const response = await fetch("/api/expiring-products", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -120,18 +192,20 @@ export function ExpiringProductModal({
           }),
         });
 
-        let data: any = null;
+        let data: unknown = null;
         try {
           data = await response.json();
         } catch {
           data = null;
         }
 
-        if (!response.ok || !data?.success) {
-          throw new Error(
-            data?.error ||
-              `Kayıt başarısız (HTTP ${response.status})`
-          );
+        const ok = data && typeof data === "object" && "success" in data && (data as { success?: boolean }).success;
+        if (!response.ok || !ok) {
+          const msg =
+            data && typeof data === "object" && "error" in data
+              ? String((data as { error?: string }).error)
+              : `Kayıt başarısız (HTTP ${response.status})`;
+          throw new Error(msg);
         }
 
         onSuccess?.("Yaklaşan SKT kaydı başarıyla eklendi.");
@@ -147,10 +221,12 @@ export function ExpiringProductModal({
 
   if (!isOpen) return null;
 
+  const daysHint =
+    ruleDays !== null ? `${ruleDays} gün önce` : "kayıtlı gün bilgisi yok";
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
       <div className="relative w-full max-w-md rounded-lg border border-zinc-200 bg-white shadow-xl dark:border-zinc-700 dark:bg-zinc-800">
-        {/* Header */}
         <div className="flex items-center justify-between border-b border-zinc-200 p-4 dark:border-zinc-700">
           <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-50">
             {isEditMode ? "Yaklaşan SKT'yi Düzenle" : "Yaklaşan SKT Olarak İşaretle"}
@@ -165,29 +241,7 @@ export function ExpiringProductModal({
           </button>
         </div>
 
-        {/* Form */}
         <form onSubmit={handleSubmit} className="p-4">
-          {/* Ürün Bilgileri (Read-only) */}
-          <div className="mb-4 space-y-2">
-            <div>
-              <label className="mb-1 block text-sm font-medium text-zinc-700 dark:text-zinc-300">
-                Ürün Adı
-              </label>
-              <div className="rounded-lg border border-zinc-300 bg-zinc-50 px-3 py-2 text-base text-zinc-600 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-400">
-                {product.name}
-              </div>
-            </div>
-            <div>
-              <label className="mb-1 block text-sm font-medium text-zinc-700 dark:text-zinc-300">
-                Barkod
-              </label>
-              <div className="rounded-lg border border-zinc-300 bg-zinc-50 px-3 py-2 text-base text-zinc-600 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-400">
-                {product.barcode}
-              </div>
-            </div>
-          </div>
-
-          {/* SKT Tarihi */}
           <div className="mb-4">
             <label
               htmlFor="expiryDate"
@@ -200,7 +254,7 @@ export function ExpiringProductModal({
                 type="date"
                 id="expiryDate"
                 value={expiryDate}
-                onChange={(e) => setExpiryDate(e.target.value)}
+                onChange={(e) => handleExpiryChange(e.target.value)}
                 required
                 className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-base text-zinc-900 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 dark:border-zinc-600 dark:bg-zinc-700 dark:text-zinc-50 dark:focus:border-blue-400"
               />
@@ -208,38 +262,46 @@ export function ExpiringProductModal({
             </div>
           </div>
 
-          {/* Çıkılması Gereken Tarih */}
           <div className="mb-4">
             <label
-              htmlFor="removalDate"
+              htmlFor="supplierReturnRemovalDate"
               className="mb-1 block text-sm font-medium text-zinc-700 dark:text-zinc-300"
             >
-              Çıkılması Gereken Tarih <span className="text-red-500">*</span>
+              Tedarikçi İade Tarihi
             </label>
             <div className="relative">
               <input
                 type="date"
-                id="removalDate"
+                id="supplierReturnRemovalDate"
                 value={removalDate}
-                onChange={(e) => setRemovalDate(e.target.value)}
-                required
-                className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-base text-zinc-900 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 dark:border-zinc-600 dark:bg-zinc-700 dark:text-zinc-50 dark:focus:border-blue-400"
+                readOnly
+                tabIndex={-1}
+                aria-readonly="true"
+                className="w-full cursor-not-allowed rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-base text-zinc-700 dark:border-zinc-600 dark:bg-zinc-800/80 dark:text-zinc-200"
               />
               <Calendar className="pointer-events-none absolute right-3 top-1/2 size-5 -translate-y-1/2 text-zinc-400" />
             </div>
             <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
-              Bu tarih geldiğinde bildirim gösterilecektir.
+              SKT tarihinden <span className="font-medium">{daysHint}</span> çıkılması gerekir (
+              bildirim bu tarihte gösterilir).
             </p>
           </div>
 
-          {/* Hata Mesajı */}
+          {ruleDays === null && (
+            <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-3 dark:border-amber-800 dark:bg-amber-950/30">
+              <p className="text-sm text-amber-900 dark:text-amber-200">
+                Bu ürün için katalogda <span className="font-medium">supplierReturnDays</span> bulunamadı.
+                Önce ürün verisini güncelleyin veya kaydı düzenlerken mevcut tarihler korunur.
+              </p>
+            </div>
+          )}
+
           {error && (
             <div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 dark:border-red-800 dark:bg-red-900/20">
               <p className="text-sm font-medium text-red-800 dark:text-red-300">{error}</p>
             </div>
           )}
 
-          {/* Butonlar */}
           <div className="flex gap-2">
             <button
               type="button"
@@ -251,7 +313,12 @@ export function ExpiringProductModal({
             </button>
             <button
               type="submit"
-              disabled={isSubmitting}
+              disabled={
+                isSubmitting ||
+                !expiryDate.trim() ||
+                !removalDate.trim() ||
+                (ruleDays === null && !isEditMode)
+              }
               className="flex-1 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-blue-500 dark:hover:bg-blue-600"
             >
               {isSubmitting ? "Kaydediliyor..." : isEditMode ? "Güncelle" : "Kaydet"}
@@ -262,4 +329,3 @@ export function ExpiringProductModal({
     </div>
   );
 }
-
