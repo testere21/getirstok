@@ -22,6 +22,7 @@ import {
   Calculator,
 } from "lucide-react";
 import { AddProductModal } from "./components/AddProductModal";
+import { BakeryExitWizard } from "./components/BakeryExitWizard";
 import { SearchBar } from "./components/SearchBar";
 import { BarcodeScanner } from "./components/BarcodeScanner";
 import { StatCardSkeleton } from "./components/StatCardSkeleton";
@@ -498,6 +499,56 @@ export default function Home() {
   // Arama için debounce süresi (ms cinsinden)
   const DEBOUNCE_DELAY = 300;
 
+  // Extension / URL üzerinden hızlı arama (q=...) + açık sekmede mesaj
+  useEffect(() => {
+    const focusSearchInputSoon = () => {
+      // Sticky search bar render olduktan sonra
+      setTimeout(() => {
+        const input = document.querySelector<HTMLInputElement>(
+          'input[aria-label="Ürün ismi veya barkod ile ara"]'
+        );
+        if (!input) return;
+        input.focus();
+        try {
+          input.select();
+        } catch {}
+      }, 50);
+    };
+
+    const applyQueryFromUrl = () => {
+      try {
+        const q = new URLSearchParams(window.location.search).get("q");
+        if (q && q.trim()) {
+          setSearchQuery(q.trim());
+          focusSearchInputSoon();
+        }
+      } catch {
+        // ignore
+      }
+    };
+
+    applyQueryFromUrl();
+
+    const onPopState = () => applyQueryFromUrl();
+    window.addEventListener("popstate", onPopState);
+
+    const onMessage = (event: MessageEvent) => {
+      const data = event.data as any;
+      if (!data || data.source !== "getirstok-extension") return;
+      if (data.type !== "SEARCH") return;
+      const q = typeof data.query === "string" ? data.query.trim() : "";
+      if (!q) return;
+      setSearchQuery(q);
+      focusSearchInputSoon();
+    };
+    window.addEventListener("message", onMessage);
+
+    return () => {
+      window.removeEventListener("popstate", onPopState);
+      window.removeEventListener("message", onMessage);
+    };
+  }, []);
+
   // Debounce edilmiş arama sorgusu — ağır işlemler bu değer üzerinden çalışır
   const debouncedSearchQuery = useDebounce(searchQuery, DEBOUNCE_DELAY);
 
@@ -869,6 +920,10 @@ export default function Home() {
   const [bakeryImageBarcodes, setBakeryImageBarcodes] = useState<Set<string>>(
     () => new Set()
   );
+  /** Fırın çık sihirbazı — açılış anında sabit kuyruk */
+  const [bakeryExitSnapshot, setBakeryExitSnapshot] = useState<
+    BakeryResolvedRow[] | null
+  >(null);
   /** Fırın: varsayılan = raf stoku 0 olanlar üstte; tıkla = az→çok → çok→az → varsayılan */
   const [bakeryRafSort, setBakeryRafSort] = useState<
     "default" | "asc" | "desc"
@@ -1043,6 +1098,26 @@ export default function Home() {
     return m;
   }, [bakeryRows]);
 
+  /**
+   * Deneme: `.env.local` içine `NEXT_PUBLIC_DEV_BAKERY_MOCK_RAF_STOCK=true` yazınca
+   * Getir raf stoku yerine sabit sahte sayılar gösterilir (Fırın çık vb.).
+   */
+  const bakeryMockRafStock =
+    process.env.NEXT_PUBLIC_DEV_BAKERY_MOCK_RAF_STOCK === "true";
+
+  const bakeryStocksLoadingForUi = bakeryMockRafStock ? false : bakeryStocksLoading;
+
+  const bakeryStocksForUi = useMemo((): Record<string, number | null> => {
+    if (!bakeryMockRafStock || bakeryRows.length === 0) {
+      return bakeryStocks;
+    }
+    const mock: Record<string, number | null> = {};
+    bakeryRows.forEach((row, i) => {
+      mock[row.barcode] = (i % 5) + 2;
+    });
+    return mock;
+  }, [bakeryMockRafStock, bakeryRows, bakeryStocks]);
+
   const cycleBakeryRafSort = useCallback(() => {
     setBakeryRafSort((s) =>
       s === "default" ? "asc" : s === "asc" ? "desc" : "default"
@@ -1055,13 +1130,13 @@ export default function Home() {
       bakeryRowIndexByBarcode.get(r.barcode) ?? 0;
 
     const numericShelf = (r: BakeryResolvedRow): number | null => {
-      if (bakeryStocksLoading) return null;
-      const v = bakeryStocks[r.barcode];
+      if (bakeryStocksLoadingForUi) return null;
+      const v = bakeryStocksForUi[r.barcode];
       return typeof v === "number" ? v : null;
     };
 
     if (bakeryRafSort === "default") {
-      if (bakeryStocksLoading) return rows;
+      if (bakeryStocksLoadingForUi) return rows;
       rows.sort((a, b) => {
         const sa = numericShelf(a);
         const sb = numericShelf(b);
@@ -1098,10 +1173,31 @@ export default function Home() {
   }, [
     bakeryRows,
     bakeryRowIndexByBarcode,
-    bakeryStocks,
-    bakeryStocksLoading,
+    bakeryStocksForUi,
+    bakeryStocksLoadingForUi,
     bakeryRafSort,
   ]);
+
+  /** Raf stoğu > 0 olan fırın satırları (sıra: liste sıralamasıyla aynı) */
+  const bakeryExitQueue = useMemo(() => {
+    return bakeryDisplayRows.filter((row) => {
+      const s = bakeryStocksForUi[row.barcode];
+      return typeof s === "number" && s > 0;
+    });
+  }, [bakeryDisplayRows, bakeryStocksForUi]);
+
+  const handleStartBakeryExit = useCallback(() => {
+    if (bakeryExitQueue.length === 0) {
+      setToast({
+        message: "Raf stoğu 0'dan büyük fırın ürünü yok.",
+        type: "error",
+      });
+      return;
+    }
+    setBakeryExitSnapshot(bakeryExitQueue);
+  }, [bakeryExitQueue]);
+
+  const handleCloseBakeryExit = useCallback(() => setBakeryExitSnapshot(null), []);
 
   const totalMissingValueTry = useMemo(
     () =>
@@ -2231,6 +2327,37 @@ export default function Home() {
                     />
                   ) : (
                     <>
+                      {bakeryMockRafStock && (
+                        <div
+                          className="shrink-0 border-b border-amber-500/35 bg-amber-950/55 px-3 py-2 text-center text-[11px] leading-snug text-amber-100 dark:text-amber-200/95"
+                          role="status"
+                        >
+                          <strong className="font-semibold">Deneme modu:</strong> raf
+                          stokları sahte (env:{" "}
+                          <code className="rounded bg-black/25 px-1 py-0.5 text-[10px]">
+                            NEXT_PUBLIC_DEV_BAKERY_MOCK_RAF_STOCK=true
+                          </code>
+                          ).
+                        </div>
+                      )}
+                      <div className="shrink-0 border-b border-amber-900/25 bg-amber-50/90 px-3 py-2 dark:border-amber-900/40 dark:bg-amber-950/35">
+                        <button
+                          type="button"
+                          onClick={handleStartBakeryExit}
+                          disabled={
+                            bakeryStocksLoadingForUi ||
+                            bakeryExitQueue.length === 0
+                          }
+                          title={
+                            bakeryExitQueue.length === 0
+                              ? "Raf stoğu olan fırın ürünü yok"
+                              : "Stokta olan ürünleri sırayla göster"
+                          }
+                          className="w-full rounded-xl border border-amber-600/50 bg-gradient-to-r from-amber-600 to-orange-700 px-4 py-2.5 text-sm font-semibold text-white shadow-md transition hover:brightness-[1.03] disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:brightness-100 dark:border-amber-500/40 dark:from-amber-700 dark:to-orange-800"
+                        >
+                          Fırın çık
+                        </button>
+                      </div>
                       <div className="shrink-0 border-b border-amber-900/20 bg-zinc-50 dark:border-amber-900/40 dark:bg-zinc-900/40">
                         <div
                           className="hidden w-full items-center gap-4 border-b border-zinc-200 bg-zinc-50 px-4 py-3 text-left text-sm font-medium uppercase tracking-wide text-zinc-500 sm:grid dark:border-zinc-700 dark:bg-zinc-800/50 dark:text-zinc-400"
@@ -2271,13 +2398,13 @@ export default function Home() {
                             <button
                               type="button"
                               onClick={handleBakeryStockRefresh}
-                              disabled={bakeryStocksLoading}
+                              disabled={bakeryStocksLoadingForUi}
                               className="flex size-9 shrink-0 items-center justify-center rounded-lg text-zinc-500 transition hover:bg-zinc-200 hover:text-zinc-800 disabled:cursor-not-allowed disabled:opacity-50 dark:text-zinc-400 dark:hover:bg-zinc-700 dark:hover:text-zinc-100"
                               aria-label="Raf stoklarını yenile"
                               title="Raf stoklarını yenile"
                             >
                               <RefreshCw
-                                className={`size-4 ${bakeryStocksLoading ? "animate-spin" : ""}`}
+                                className={`size-4 ${bakeryStocksLoadingForUi ? "animate-spin" : ""}`}
                                 aria-hidden
                               />
                             </button>
@@ -2300,13 +2427,13 @@ export default function Home() {
                         <button
                           type="button"
                           onClick={handleBakeryStockRefresh}
-                          disabled={bakeryStocksLoading}
+                          disabled={bakeryStocksLoadingForUi}
                           className="flex size-9 shrink-0 items-center justify-center rounded-lg text-zinc-500 transition hover:bg-zinc-200 hover:text-zinc-800 disabled:cursor-not-allowed disabled:opacity-50 dark:text-zinc-400 dark:hover:bg-zinc-700 dark:hover:text-zinc-100"
                           aria-label="Raf stoklarını yenile"
                           title="Raf stoklarını yenile"
                         >
                           <RefreshCw
-                            className={`size-4 ${bakeryStocksLoading ? "animate-spin" : ""}`}
+                            className={`size-4 ${bakeryStocksLoadingForUi ? "animate-spin" : ""}`}
                             aria-hidden
                           />
                         </button>
@@ -2317,8 +2444,8 @@ export default function Home() {
                       >
                         {bakeryDisplayRows.map((row) => {
                             const imageUrl = getCatalogProductImage(row.barcode);
-                            const shelf = bakeryStocks[row.barcode];
-                            const shelfText = bakeryStocksLoading
+                            const shelf = bakeryStocksForUi[row.barcode];
+                            const shelfText = bakeryStocksLoadingForUi
                               ? "…"
                               : shelf === null || shelf === undefined
                                 ? "—"
@@ -2360,7 +2487,7 @@ export default function Home() {
                               </span>
                             );
                             const isRafZeroRow =
-                              !bakeryStocksLoading &&
+                              !bakeryStocksLoadingForUi &&
                               typeof shelf === "number" &&
                               shelf === 0;
                             return (
@@ -3276,6 +3403,15 @@ export default function Home() {
           }
           setListDeleteConfirmItem(null);
         }}
+      />
+
+      <BakeryExitWizard
+        isOpen={bakeryExitSnapshot !== null && bakeryExitSnapshot.length > 0}
+        onClose={handleCloseBakeryExit}
+        queue={bakeryExitSnapshot ?? []}
+        shelfStockByBarcode={bakeryStocksForUi}
+        bakeryImageBarcodes={bakeryImageBarcodes}
+        getDefaultProductImage={getCatalogProductImage}
       />
 
       {bakeryLightboxBarcode && (

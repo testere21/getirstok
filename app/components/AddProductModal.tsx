@@ -760,20 +760,20 @@ export function AddProductModal({
               </div>
             </div>
 
-            {/* Barkod — koyu temaya uyumlu, kompakt */}
-            <div className="rounded-xl border border-zinc-200/80 bg-zinc-50/90 px-3 py-2.5 dark:border-zinc-700/70 dark:bg-zinc-900/45">
-              <p className="mb-1.5 text-center text-[10px] font-semibold uppercase tracking-[0.18em] text-zinc-500 dark:text-zinc-400">
-                Barkod
-              </p>
-              <div className="mx-auto flex max-w-[min(100%,260px)] justify-center rounded-lg bg-white px-2 py-1.5 shadow-[inset_0_1px_2px_rgba(0,0,0,0.06)] ring-1 ring-zinc-900/8 dark:bg-zinc-100 dark:ring-white/12">
+            {/* Barkod görseli — başlık yok (alan); sr-only etiket */}
+            <div
+              className="rounded-xl border border-zinc-200/80 bg-zinc-50/90 px-3 py-2 dark:border-zinc-700/70 dark:bg-zinc-900/45"
+              aria-label="Barkod"
+            >
+              <div className="mx-auto flex w-full max-w-[min(100%,380px)] justify-center rounded-lg bg-white px-3 py-2.5 shadow-[inset_0_1px_2px_rgba(0,0,0,0.06)] ring-1 ring-zinc-900/8 dark:bg-zinc-100 dark:ring-white/12">
                 <BarcodeImage
                   barcode={catalogProduct.barcode}
-                  width={1.5}
-                  height={44}
-                  className="[&_canvas]:max-h-[60px]"
+                  width={2.25}
+                  height={68}
+                  className="[&_canvas]:max-h-[102px]"
                 />
               </div>
-              <p className="mt-1.5 text-center font-mono text-[11px] tracking-wide text-zinc-600 dark:text-zinc-400">
+              <p className="mt-1.5 text-center font-mono text-xs tracking-wide text-zinc-600 dark:text-zinc-400">
                 {catalogProduct.barcode}
               </p>
             </div>

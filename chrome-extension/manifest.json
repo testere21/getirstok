@@ -5,6 +5,8 @@
   "description": "Getir Bayi Paneli ve Depo Paneli Authorization token'larını ayrı ayrı yakalayıp getirstok.netlify.app'a gönderir",
   "permissions": [
     "webRequest",
+    "tabs",
+    "scripting",
     "storage"
   ],
   "host_permissions": [
@@ -12,7 +14,9 @@
     "https://franchise-api-gateway.getirapi.com/*",
     "https://warehouse.getir.com/*",
     "https://warehouse-panel-api-gateway.getirapi.com/*",
-    "https://getirstok.netlify.app/*"
+    "https://getirstok.netlify.app/*",
+    "http://localhost:3000/*",
+    "http://127.0.0.1:3000/*"
   ],
   "background": {
     "service_worker": "background.js"
@@ -24,6 +28,15 @@
         "https://warehouse.getir.com/*"
       ],
       "js": ["content.js"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://getirstok.netlify.app/*",
+        "http://localhost:3000/*",
+        "http://127.0.0.1:3000/*"
+      ],
+      "js": ["panel-content.js"],
       "run_at": "document_idle"
     }
   ],

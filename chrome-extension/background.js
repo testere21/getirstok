@@ -6,6 +6,109 @@
 // const API_ENDPOINT = "http://localhost:3000/api/token/save";
 const API_ENDPOINT = "https://getirstok.netlify.app/api/token/save";
 
+const PANEL_URL_PATTERNS = [
+  "https://getirstok.netlify.app/*",
+  "http://localhost:3000/*",
+  "http://127.0.0.1:3000/*",
+];
+
+function buildPanelUrlWithQuery(query) {
+  const base = "https://getirstok.netlify.app/";
+  const u = new URL(base);
+  if (query && String(query).trim()) {
+    u.searchParams.set("q", String(query).trim());
+  }
+  return u.toString();
+}
+
+async function focusOrOpenPanelAndSearch(query) {
+  const q = String(query || "").trim();
+  // 1) Panel tabı zaten açık mı?
+  const tabs = await chrome.tabs.query({ url: PANEL_URL_PATTERNS });
+  if (tabs && tabs.length > 0) {
+    // En son aktif olanı seçmeye çalış
+    const sorted = [...tabs].sort((a, b) => (b.lastAccessed || 0) - (a.lastAccessed || 0));
+    const t = sorted[0];
+    if (t.id != null) {
+      await chrome.tabs.update(t.id, { active: true });
+      if (t.windowId != null) {
+        await chrome.windows.update(t.windowId, { focused: true });
+      }
+      // 0) Önce doğrudan DOM'a yapıştırmayı dene (mesajlaşmadan bağımsız, daha sağlam)
+      try {
+        await chrome.scripting.executeScript({
+          target: { tabId: t.id },
+          args: [q],
+          func: (value) => {
+            try {
+              const v = String(value || "");
+              const input =
+                document.querySelector('input[aria-label="Ürün ismi veya barkod ile ara"]') ||
+                document.querySelector('input[placeholder*="ara"]') ||
+                document.querySelector('input[type="text"]');
+              if (!input) return { ok: false, reason: "input_not_found" };
+              input.focus();
+              input.value = v;
+              // React kontrolü için input event
+              input.dispatchEvent(new Event("input", { bubbles: true }));
+              input.dispatchEvent(new Event("change", { bubbles: true }));
+              try { input.select(); } catch {}
+              return { ok: true };
+            } catch (e) {
+              return { ok: false, reason: "exception", message: String(e?.message || e) };
+            }
+          },
+        });
+        return;
+      } catch (e) {
+        // scripting başarısız olursa mesaj/URL fallback'e devam
+        console.warn("[Getir Token Yakalayıcı] scripting paste failed:", e);
+      }
+
+      // Aynı sekmede URL fallback hazırlığı (mesaj gitmezse sayfayı q ile yeniler)
+      const buildSameTabUrlWithQuery = () => {
+        try {
+          const current = t.url ? new URL(t.url) : null;
+          if (!current) return buildPanelUrlWithQuery(q);
+          if (q) current.searchParams.set("q", q);
+          else current.searchParams.delete("q");
+          return current.toString();
+        } catch {
+          return buildPanelUrlWithQuery(q);
+        }
+      };
+      // Panel content script'e mesaj
+      try {
+        await chrome.tabs.sendMessage(t.id, { type: "GETIRSTOK_SEARCH", query: q });
+      } catch {
+        // içerik script hazır değilse URL fallback
+        try {
+          const url = buildSameTabUrlWithQuery();
+          await chrome.tabs.update(t.id, { url });
+        } catch {}
+      }
+      return;
+    }
+  }
+
+  // 2) Açık değilse yeni sekme aç
+  const url = buildPanelUrlWithQuery(q);
+  await chrome.tabs.create({ url, active: true });
+}
+
+chrome.runtime.onMessage.addListener((msg, _sender, _sendResponse) => {
+  if (!msg || msg.type !== "GETIRSTOK_OPEN_SEARCH") return;
+  // async işi background'da tamamla
+  (async () => {
+    try {
+      await focusOrOpenPanelAndSearch(msg.query);
+    } catch (e) {
+      console.error("[Getir Token Yakalayıcı] Panel arama hatası:", e);
+    }
+  })();
+  return true;
+});
+
 // Token yakalama - webRequest API kullanarak
 chrome.webRequest.onBeforeSendHeaders.addListener(
   function(details) {
