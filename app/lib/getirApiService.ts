@@ -1,7 +1,6 @@
-import { getGetirToken } from "./getirTokenService";
+import { getActiveWarehouseId, getGetirToken } from "./getirTokenService";
 import { getProductIdByBarcode } from "./barcodeProductMappingService";
 import { getProductIdFromMergedCatalog } from "./catalogProductIdResolver";
-import { DEFAULT_WAREHOUSE_ID } from "./types";
 
 /** Getir API'den stok bilgisi çekme hatası */
 export class GetirApiError extends Error {
@@ -44,12 +43,9 @@ export async function getGetirStockByProductId(
     try {
       console.log("[Getir API] Fetching stock by product ID:", productId);
 
-      // Not: warehouseIds boş array ise tüm warehouse'ları getirir
-      // Ama Getir panelinde genelde belirli bir warehouse seçilidir
-      // Varsayılan warehouse ID'sini kullan (Getir panelinde seçili olan)
-      const finalWarehouseIds = warehouseIds.length > 0 
-        ? warehouseIds 
-        : [DEFAULT_WAREHOUSE_ID]; // Varsayılan warehouse ID'si
+      const activeWarehouseId = await getActiveWarehouseId();
+      const finalWarehouseIds =
+        warehouseIds.length > 0 ? warehouseIds : [activeWarehouseId];
 
       const requestBody = {
         warehouseIds: finalWarehouseIds,
@@ -229,9 +225,9 @@ export async function getGetirStock(barcode: string): Promise<number | null> {
       console.log("[Getir API] Fetching stocks from Getir API...");
       
       const requestBody = {
-        warehouseIds: [], // Boş array - tüm warehouse'ları getir
+        warehouseIds: [await getActiveWarehouseId()],
         sort: {
-          available: 1, // Stok miktarına göre sırala
+          available: 1,
         },
       };
       

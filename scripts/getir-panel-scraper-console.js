@@ -111,18 +111,22 @@
       try {
         const cells = row.querySelectorAll('td, [role="gridcell"], .ag-cell, [class*="ag-cell"]');
         if (cells.length < 3) continue;
-        
-        // Barkod (ilk sütun) - birden fazla olabilir
-        const barcodeCell = cells[0];
-        const barcodeText = barcodeCell?.textContent?.trim() || '';
-        const barcodes = barcodeText
-          .split(/[\s,]+/)
-          .map(b => b.trim())
-          .filter(b => b && /^\d+$/.test(b) && b.length >= 8)
-          .slice(0, 1); // İlk geçerli barkodu al
-        
+
+        // Barkod: checkbox / görsel sütunu olabilir; tüm hücrelerde 8+ haneli sayı ara
+        let barcode = '';
+        const barcodes = [];
+        for (let i = 0; i < cells.length; i++) {
+          const barcodeText = cells[i]?.textContent?.trim() || '';
+          const found = barcodeText
+            .split(/[\s,]+/)
+            .map((b) => b.trim())
+            .filter((b) => b && /^\d+$/.test(b) && b.length >= 8);
+          for (const b of found) {
+            if (!barcodes.includes(b)) barcodes.push(b);
+          }
+        }
         if (barcodes.length === 0) continue;
-        const barcode = barcodes[0];
+        barcode = barcodes[0].length > 13 ? barcodes[0].slice(0, 13) : barcodes[0];
         
         // Ürün ID (üçüncü sütun genelde)
         let productId = '';
@@ -162,8 +166,9 @@
           products.push({
             name: productName || '-',
             barcode: barcode,
-            productId: productId || undefined, // Ürün ID'sini de ekle
-            imageUrl: imageUrl
+            productId: productId || undefined,
+            imageUrl: imageUrl,
+            barcodes: barcodes.map((b) => (b.length > 13 ? b.slice(0, 13) : b))
           });
         }
         

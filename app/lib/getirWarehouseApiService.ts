@@ -1,5 +1,4 @@
-import { getGetirWarehouseToken } from "./getirTokenService";
-import { DEFAULT_WAREHOUSE_ID } from "./types";
+import { getActiveWarehouseId, getGetirWarehouseToken } from "./getirTokenService";
 import { getProductIdByBarcode } from "./barcodeProductMappingService";
 import {
   getCachedSupplierReturnDays,
@@ -44,6 +43,7 @@ export async function searchProductByBarcode(barcode: string): Promise<string | 
       );
     }
 
+    const warehouseId = await getActiveWarehouseId();
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 saniye timeout
 
@@ -58,7 +58,7 @@ export async function searchProductByBarcode(barcode: string): Promise<string | 
       console.log("[Getir Warehouse API] Filter request body:", JSON.stringify(requestBody, null, 2));
 
       const response = await fetch(
-        `https://warehouse-panel-api-gateway.getirapi.com/warehouse/${DEFAULT_WAREHOUSE_ID}/products?offset=0&limit=10`,
+        `https://warehouse-panel-api-gateway.getirapi.com/warehouse/${warehouseId}/products?offset=0&limit=10`,
         {
           method: "POST",
           headers: {
@@ -96,7 +96,7 @@ export async function searchProductByBarcode(barcode: string): Promise<string | 
       if (!response.ok) {
         const errorText = await response.text();
         console.error("[Getir Warehouse API] Filter error response:", errorText);
-        console.error("[Getir Warehouse API] Filter request URL:", `https://warehouse-panel-api-gateway.getirapi.com/warehouse/${DEFAULT_WAREHOUSE_ID}/products?offset=0&limit=10`);
+        console.error("[Getir Warehouse API] Filter request URL:", `https://warehouse-panel-api-gateway.getirapi.com/warehouse/${warehouseId}/products?offset=0&limit=10`);
         console.error("[Getir Warehouse API] Filter request body:", JSON.stringify(requestBody, null, 2));
         console.error("[Getir Warehouse API] Filter request headers:", {
           Authorization: `Bearer ${token.substring(0, 20)}...`,
@@ -201,6 +201,7 @@ export async function getProductSupplierReturnDate(productId: string): Promise<n
       );
     }
 
+    const warehouseId = await getActiveWarehouseId();
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 saniye timeout
 
@@ -214,7 +215,7 @@ export async function getProductSupplierReturnDate(productId: string): Promise<n
       console.log("[Getir Warehouse API] Products request body:", JSON.stringify(requestBody, null, 2));
 
       const response = await fetch(
-        `https://warehouse-panel-api-gateway.getirapi.com/warehouse/${DEFAULT_WAREHOUSE_ID}/products?offset=0&limit=20`,
+        `https://warehouse-panel-api-gateway.getirapi.com/warehouse/${warehouseId}/products?offset=0&limit=20`,
         {
           method: "POST",
           headers: {
@@ -252,7 +253,7 @@ export async function getProductSupplierReturnDate(productId: string): Promise<n
       if (!response.ok) {
         const errorText = await response.text();
         console.error("[Getir Warehouse API] Products error response:", errorText);
-        console.error("[Getir Warehouse API] Request URL:", `https://warehouse-panel-api-gateway.getirapi.com/warehouse/${DEFAULT_WAREHOUSE_ID}/products?offset=0&limit=20`);
+        console.error("[Getir Warehouse API] Request URL:", `https://warehouse-panel-api-gateway.getirapi.com/warehouse/${warehouseId}/products?offset=0&limit=20`);
         console.error("[Getir Warehouse API] Request body:", JSON.stringify(requestBody, null, 2));
         console.error("[Getir Warehouse API] Request headers:", {
           Authorization: `Bearer ${token.substring(0, 20)}...`,

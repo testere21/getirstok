@@ -13,6 +13,11 @@ const nextConfig: NextConfig = {
         hostname: "cdn.getir.com",
         pathname: "/**",
       },
+      {
+        protocol: "https",
+        hostname: "vsrm-cdn.erp.getirapi.com",
+        pathname: "/**",
+      },
     ],
   },
 };

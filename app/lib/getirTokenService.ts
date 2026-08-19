@@ -11,6 +11,8 @@ import {
   ACTIVE_FRANCHISE_TOKEN_DOC_ID,
   ACTIVE_WAREHOUSE_TOKEN_DOC_ID,
   ACTIVE_TOKEN_DOC_ID,
+  ACTIVE_WAREHOUSE_ID_DOC_ID,
+  DEFAULT_WAREHOUSE_ID,
   type GetirToken,
   type GetirTokenType,
 } from "./types";
@@ -218,5 +220,63 @@ export async function checkTokenValidity(token?: string): Promise<boolean> {
     console.error("Token geçerlilik kontrolü hatası:", error);
     return false;
   }
+}
+
+const OBJECT_ID_RE = /^[a-fA-F0-9]{24}$/;
+
+export function isValidWarehouseObjectId(id: string): boolean {
+  return OBJECT_ID_RE.test(id.trim());
+}
+
+/**
+ * Eklentinin yakaladığı aktif depo ID'sini Firestore'a kaydeder.
+ */
+export async function saveGetirWarehouseId(warehouseId: string): Promise<void> {
+  const trimmed = warehouseId.trim();
+  if (!isValidWarehouseObjectId(trimmed)) {
+    throw new Error("Geçersiz depo ID formatı");
+  }
+
+  const now = new Date().toISOString();
+  const ref = doc(db, GETIR_TOKEN_COLLECTION, ACTIVE_WAREHOUSE_ID_DOC_ID);
+  const existing = await getDoc(ref);
+
+  if (existing.exists()) {
+    await setDoc(
+      ref,
+      { warehouseId: trimmed, updatedAt: now },
+      { merge: true }
+    );
+  } else {
+    await setDoc(ref, {
+      warehouseId: trimmed,
+      createdAt: now,
+      updatedAt: now,
+    });
+  }
+}
+
+/**
+ * Firestore'daki yakalanmış depo ID'si. Yoksa null.
+ */
+export async function getSavedGetirWarehouseId(): Promise<string | null> {
+  try {
+    const ref = doc(db, GETIR_TOKEN_COLLECTION, ACTIVE_WAREHOUSE_ID_DOC_ID);
+    const snap = await getDoc(ref);
+    if (!snap.exists()) return null;
+    const id = String(snap.data()?.warehouseId || "").trim();
+    return isValidWarehouseObjectId(id) ? id : null;
+  } catch (error) {
+    console.error("Getir depo ID okunamadı:", error);
+    throw error;
+  }
+}
+
+/**
+ * Stok/depo API çağrıları için depo ID: önce eklentinin kaydı, yoksa yedek sabit.
+ */
+export async function getActiveWarehouseId(): Promise<string> {
+  const saved = await getSavedGetirWarehouseId();
+  return saved || DEFAULT_WAREHOUSE_ID;
 }
 

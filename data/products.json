@@ -3133,9 +3133,18 @@
   {
     "name": "Çilek Paket (475 g)",
     "barcode": "8184685151546",
-    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260316054215203_1e02be92-474c-40f5-95b6-f432ff79be9a.jpeg",
+    "imageUrl": "https://cdn-image.getir.com/market/product/9b7e8a2e-0a73-4cc7-8630-1e92e1246458.webp",
     "productId": "5e2703de3b1fe77969cb9bec",
     "price": 109.99,
+    "barcodes": [
+      "8184685151546",
+      "8682560926338",
+      "8684275132745",
+      "8684278082399",
+      "8684779940839",
+      "8685157984773",
+      "8685191588104"
+    ],
     "supplierReturnDays": 1
   },
   {
@@ -3733,15 +3742,25 @@
   },
   {
     "name": "Algida - Uğur/UDD 500 SC - Donuk Dolap (155 cm)",
-    "barcode": "1011815506309",
+    "barcode": "101181550630900",
+    "addedFrom": "getir-panel",
+    "addedAt": "2026-04-26T00:04:44.652Z",
     "imageUrl": "https://cdn-image.getir.com/market/product/42c41131-d789-4a88-95be-b5f8031bd805.png",
+    "barcodes": [
+      "101181550630900"
+    ],
     "productId": "5831a5f5cac74c0004189e48",
     "supplierReturnDays": 0
   },
   {
     "name": "Sütaş - Uğur/USS 374 DTKL - İçecek Dolabı (0-4 °C)",
-    "barcode": "1100406006419",
+    "barcode": "110040600641980",
+    "addedFrom": "getir-panel",
+    "addedAt": "2026-04-26T00:04:44.652Z",
     "imageUrl": "https://cdn-image.getir.com/market/product/6437fe54-573c-431d-bf10-22240d8acbac.png",
+    "barcodes": [
+      "110040600641980"
+    ],
     "productId": "5831b5186d2030000476824b"
   },
   {
@@ -4520,8 +4539,13 @@
   },
   {
     "name": "Coca Cola 2 Kapılı Dolap",
-    "barcode": "1030411008620",
-    "imageUrl": "http://cdn.getir.com/product/58d6846858dc400004df6c7c_tr_1631892887247.png",
+    "barcode": "103041100862000",
+    "addedFrom": "getir-panel",
+    "addedAt": "2026-04-26T00:04:44.652Z",
+    "imageUrl": "https://cdn.getir.com/product/58d6846858dc400004df6c7c_tr_1631892887247.png",
+    "barcodes": [
+      "103041100862000"
+    ],
     "productId": "58d6846858dc400004df6c7c",
     "supplierReturnDays": 0
   },
@@ -5969,10 +5993,15 @@
     "supplierReturnDays": 12
   },
   {
-    "name": "Buz Kasedi",
-    "barcode": "1000000000000",
-    "imageUrl": "http://cdn.getir.com/product/5a0d8b7bf00ff20004ec2538_tr_1620728711519.png",
-    "productId": "5a0d8b7bf00ff20004ec2538",
+    "name": "Kraft Pide Kesesi",
+    "barcode": "1000000000000031",
+    "addedFrom": "getir-panel",
+    "addedAt": "2026-04-26T00:04:44.652Z",
+    "barcodes": [
+      "1000000000000031"
+    ],
+    "productId": "65ca2efe80b77f6ef68bf856",
+    "imageUrl": "https://cdn-image.getir.com/market/product/85ad5df7-a3f5-4e43-9884-7c995939ac10.jpeg",
     "supplierReturnDays": 0
   },
   {
@@ -10459,11 +10488,16 @@
     ]
   },
   {
-    "name": "Milka Milkinis Süt Dolgulu Çikolata (44 g)",
-    "barcode": "9000000000000",
-    "imageUrl": "http://cdn.getir.com/product/5bffb4ec0af0fb001ec98dff_tr_1608384780123.jpeg",
-    "productId": "5bffb4ec0af0fb001ec98dff",
-    "price": 11.99
+    "name": "Eksik Ürün Kartı ve Dondurma Afişi  ((Sarf))",
+    "barcode": "900000000000016",
+    "addedFrom": "getir-panel",
+    "addedAt": "2026-04-26T00:04:44.652Z",
+    "barcodes": [
+      "900000000000016"
+    ],
+    "productId": "6478800f7127de4bf70abdae",
+    "imageUrl": "https://cdn-image.getir.com/market/product/14505475-559c-4123-a04a-7b87fd83a960.jpg",
+    "supplierReturnDays": 0
   },
   {
     "name": "Milka Beyaz Çikolata (80 g)",
@@ -10935,13 +10969,6 @@
     ]
   },
   {
-    "name": "Buz Kasedi",
-    "barcode": "1000000000000",
-    "imageUrl": "http://cdn.getir.com/product/5a0d8b7bf00ff20004ec2538_tr_1620728711519.png",
-    "productId": "5a0d8b7bf00ff20004ec2538",
-    "supplierReturnDays": 0
-  },
-  {
     "name": "Cook Ekonomik Plastik Çatal (10'lu)",
     "barcode": "8690709071009",
     "imageUrl": "http://cdn.getir.com/product/5c29e4fa38ade400012c6e32_1546500537198.jpeg?v=1546500539216",
@@ -11095,11 +11122,15 @@
     "supplierReturnDays": 0
   },
   {
-    "name": "Euro Palet",
-    "barcode": "3000000000000",
-    "imageUrl": "https://cdn-image.getir.com/market/product/85ba70f3-bb2e-4650-a239-32c1bc71454f.jpg",
-    "productId": "5c2df6686c8c720001c43b57",
-    "price": 75
+    "name": "Tire Kasa",
+    "barcode": "3000000000000014",
+    "addedFrom": "getir-panel",
+    "addedAt": "2026-04-26T00:04:44.652Z",
+    "imageUrl": "https://cdn.getir.com/misc/product_placeholder_getir_logo.jpeg",
+    "barcodes": [
+      "3000000000000014"
+    ],
+    "productId": "629da3f43f662e5464f62c75"
   },
   {
     "name": "SMA OPTIPRO 1 Devam Sütü 0 - 6 Ay (400 g)",
@@ -11797,8 +11828,13 @@
   },
   {
     "name": "Uğur Derin Dondurucu Yatay 500 BK Dolap (Demirbaş)",
-    "barcode": "1311815507108",
+    "barcode": "131181550710840",
+    "addedFrom": "getir-panel",
+    "addedAt": "2026-04-26T00:04:44.652Z",
     "imageUrl": "https://cdn-image.getir.com/market/product/85dbfb71-9135-49bb-992a-35bac24040b8.png",
+    "barcodes": [
+      "131181550710840"
+    ],
     "productId": "5c5c2d9c933183000176cf36",
     "supplierReturnDays": 0
   },
@@ -18933,8 +18969,13 @@
   },
   {
     "name": "Uğur Derin Dondurucu Yatay 500 SC Dolap (Demirbaş)",
-    "barcode": "1311815506309",
+    "barcode": "131181550630900",
+    "addedFrom": "getir-panel",
+    "addedAt": "2026-04-26T00:04:44.652Z",
     "imageUrl": "https://cdn-image.getir.com/market/product/160e6915-1bde-4298-acc0-20dd13cac783.png",
+    "barcodes": [
+      "131181550630900"
+    ],
     "productId": "5cf0d508e327a40001ee28ad",
     "supplierReturnDays": 0
   },
@@ -21058,20 +21099,6 @@
     ]
   },
   {
-    "name": "Buz Kasedi",
-    "barcode": "1000000000000",
-    "imageUrl": "http://cdn.getir.com/product/5a0d8b7bf00ff20004ec2538_tr_1620728711519.png",
-    "productId": "5a0d8b7bf00ff20004ec2538",
-    "supplierReturnDays": 0
-  },
-  {
-    "name": "Buz Kasedi",
-    "barcode": "1000000000000",
-    "imageUrl": "http://cdn.getir.com/product/5a0d8b7bf00ff20004ec2538_tr_1620728711519.png",
-    "productId": "5a0d8b7bf00ff20004ec2538",
-    "supplierReturnDays": 0
-  },
-  {
     "name": "Mini Patates File (1 kg)",
     "barcode": "8681511365912",
     "imageUrl": "https://cdn-image.getir.com/market/product/ffa5ece1-3ff6-41e5-a189-7f4beae0eb73.jpg",
@@ -21181,13 +21208,6 @@
       "8693407002788"
     ],
     "supplierReturnDays": 12
-  },
-  {
-    "name": "Euro Palet",
-    "barcode": "3000000000000",
-    "imageUrl": "https://cdn-image.getir.com/market/product/85ba70f3-bb2e-4650-a239-32c1bc71454f.jpg",
-    "productId": "5c2df6686c8c720001c43b57",
-    "price": 75
   },
   {
     "name": "Nestlé Pure Life Kids Su (330 ml)",
@@ -22090,13 +22110,6 @@
       "8718951366367"
     ],
     "supplierReturnDays": 52
-  },
-  {
-    "name": "Euro Palet",
-    "barcode": "3000000000000",
-    "imageUrl": "https://cdn-image.getir.com/market/product/85ba70f3-bb2e-4650-a239-32c1bc71454f.jpg",
-    "productId": "5c2df6686c8c720001c43b57",
-    "price": 75
   },
   {
     "name": "Godiva Sütlü Tablet Belçika Çikolatası (90 g)",
@@ -24907,23 +24920,6 @@
     ]
   },
   {
-    "name": "Çilek Paket (475 g)",
-    "barcode": "8184685151546",
-    "imageUrl": "https://cdn-image.getir.com/market/product/9b7e8a2e-0a73-4cc7-8630-1e92e1246458.webp",
-    "productId": "5e2703de3b1fe77969cb9bec",
-    "price": 109.99,
-    "barcodes": [
-      "8184685151546",
-      "8682560926338",
-      "8684275132745",
-      "8684278082399",
-      "8684779940839",
-      "8685157984773",
-      "8685191588104"
-    ],
-    "supplierReturnDays": 1
-  },
-  {
     "name": "Mantar (250 g)",
     "barcode": "8682560926307",
     "imageUrl": "https://cdn-image.getir.com/market/product/56f31788-1b64-4a1a-b7ea-b700f849f6bf.jpg",
@@ -25827,8 +25823,13 @@
   },
   {
     "name": "Algida - Uğur/UMD 1850 D - Donuk Dolap (185 cm)",
-    "barcode": "1011818508509",
+    "barcode": "101181850850900",
+    "addedFrom": "getir-panel",
+    "addedAt": "2026-04-26T00:04:44.652Z",
     "imageUrl": "https://cdn-image.getir.com/market/product/94c21bb1-d7ab-4d88-bd6d-7344c9657100.png",
+    "barcodes": [
+      "101181850850900"
+    ],
     "productId": "5e3bc06edd4ed94c6a90bcd7",
     "supplierReturnDays": 0
   },
@@ -26504,13 +26505,6 @@
       "8698268808265",
       "8698268807695"
     ]
-  },
-  {
-    "name": "Milka Milkinis Süt Dolgulu Çikolata (44 g)",
-    "barcode": "9000000000000",
-    "imageUrl": "http://cdn.getir.com/product/5bffb4ec0af0fb001ec98dff_tr_1608384780123.jpeg",
-    "productId": "5bffb4ec0af0fb001ec98dff",
-    "price": 11.99
   },
   {
     "name": "Bref DeLuxe Katı Tuvalet Bloğu Yasemin (2'li)",
@@ -28294,13 +28288,6 @@
     ]
   },
   {
-    "name": "Milka Milkinis Süt Dolgulu Çikolata (44 g)",
-    "barcode": "9000000000000",
-    "imageUrl": "http://cdn.getir.com/product/5bffb4ec0af0fb001ec98dff_tr_1608384780123.jpeg",
-    "productId": "5bffb4ec0af0fb001ec98dff",
-    "price": 11.99
-  },
-  {
     "name": "Finish Quantum Max Bulaşık Makinesi Deterjanı Tableti (22'li)",
     "barcode": "8690570552874",
     "imageUrl": "https://cdn-image.getir.com/market/product/31f5a80c-984e-4b73-b07e-446128addf78.jpg",
@@ -29955,20 +29942,6 @@
     "supplierReturnDays": 3
   },
   {
-    "name": "Euro Palet",
-    "barcode": "3000000000000",
-    "imageUrl": "https://cdn-image.getir.com/market/product/85ba70f3-bb2e-4650-a239-32c1bc71454f.jpg",
-    "productId": "5c2df6686c8c720001c43b57",
-    "price": 75
-  },
-  {
-    "name": "Euro Palet",
-    "barcode": "3000000000000",
-    "imageUrl": "https://cdn-image.getir.com/market/product/85ba70f3-bb2e-4650-a239-32c1bc71454f.jpg",
-    "productId": "5c2df6686c8c720001c43b57",
-    "price": 75
-  },
-  {
     "name": "Uno Ballı Yulaflı Propolisli Ekmek (520 g)",
     "barcode": "8690698512699",
     "imageUrl": "https://cdn-image.getir.com/market/product/45bcf675-b1ef-47bc-9f4b-2803f96f3bf8.png",
@@ -30184,10 +30157,15 @@
   },
   {
     "name": "Do Ballı Muzlu Sütlü Dondurma (450 ml)",
-    "barcode": "8682745419604",
+    "barcode": "86827454196042",
+    "addedFrom": "getir-panel",
+    "addedAt": "2026-04-26T00:04:44.652Z",
     "imageUrl": "https://cdn-image.getir.com/market/product/70c03bf5-a136-4a57-9cfc-132f24b3d328.jpg",
-    "productId": "5f1ffdd3271fd1ae48880944",
-    "price": 189.95
+    "barcodes": [
+      "86827454196042",
+      "8682754196042"
+    ],
+    "productId": "5f1ffdd3271fd1ae48880944"
   },
   {
     "name": "Üzüm Paket (500 g)",
@@ -35049,13 +35027,6 @@
     ]
   },
   {
-    "name": "Milka Milkinis Süt Dolgulu Çikolata (44 g)",
-    "barcode": "9000000000000",
-    "imageUrl": "http://cdn.getir.com/product/5bffb4ec0af0fb001ec98dff_tr_1608384780123.jpeg",
-    "productId": "5bffb4ec0af0fb001ec98dff",
-    "price": 11.99
-  },
-  {
     "name": "Nescafé Latte 10 Al 8 Öde (10'lu)",
     "barcode": "8690632532264",
     "imageUrl": "http://cdn.getir.com/product/5fc285663aa49779d85dd168_tr_1606732091983.jpeg",
@@ -36850,8 +36821,13 @@
   },
   {
     "name": "La Lorraine - Uğur/UDD 560 BK - Donuk Dolap (Sandık Tipi 150 cm)",
-    "barcode": "1081815007009",
+    "barcode": "108181500700900",
+    "addedFrom": "getir-panel",
+    "addedAt": "2026-04-26T00:04:44.652Z",
     "imageUrl": "https://cdn-image.getir.com/market/product/88a66fbf-7b26-4a75-8fe4-22ae1aa98b8d.png",
+    "barcodes": [
+      "108181500700900"
+    ],
     "productId": "6024c4d1e82bdad7d984702b",
     "supplierReturnDays": 0
   },
@@ -37678,10 +37654,16 @@
   },
   {
     "name": "Mars Snickers Stick (91 ml)",
-    "barcode": "5000115951548",
-    "imageUrl": "http://cdn.getir.com/product/6045e5aa247536690035d115_tr_1615200549529.jpeg",
+    "barcode": "50001159515481",
+    "addedFrom": "getir-panel",
+    "addedAt": "2026-04-26T00:04:44.652Z",
+    "imageUrl": "https://cdn.getir.com/product/6045e5aa247536690035d115_tr_1615200549529.jpeg",
+    "barcodes": [
+      "50001159515481",
+      "5000159462037",
+      "5000159515481"
+    ],
     "productId": "6045e5aa247536690035d115",
-    "price": 99.99,
     "supplierReturnDays": 54
   },
   {
@@ -39025,8 +39007,15 @@
   },
   {
     "name": "TRT Çocuk",
-    "barcode": "9771309989006",
-    "imageUrl": "http://cdn.getir.com/product/6087df7934d02bb344a7694f_tr_1646142329614.jpeg",
+    "barcode": "977130998900628",
+    "addedFrom": "getir-panel",
+    "addedAt": "2026-04-26T00:04:44.652Z",
+    "imageUrl": "https://cdn.getir.com/product/6087df7934d02bb344a7694f_tr_1646142329614.jpeg",
+    "barcodes": [
+      "977130998900628",
+      "977130998900634",
+      "9771309989006"
+    ],
     "productId": "6087df7934d02bb344a7694f"
   },
   {
@@ -39071,10 +39060,20 @@
   },
   {
     "name": "Sarıyer Gazozu (6 x 200 ml)",
-    "barcode": "8698720863339",
-    "imageUrl": "https://cdn-image.getir.com/market/product/59082a20-541c-4f00-90c8-2db10a3f9c48.jpg",
+    "barcode": "86987208633399",
+    "addedFrom": "getir-panel",
+    "addedAt": "2026-04-26T00:04:44.652Z",
+    "imageUrl": "https://cdn-image.getir.com/market/product/07c788cf-48f8-481f-b74a-f52d91181cbc.jpg",
+    "barcodes": [
+      "86987208633399",
+      "8698720863399",
+      "86987208633990",
+      "86987208633991",
+      "86987208633992",
+      "86987208633993",
+      "86987208633997"
+    ],
     "productId": "6089082f9afaac83713e0731",
-    "price": 110.99,
     "supplierReturnDays": 27
   },
   {
@@ -39765,10 +39764,19 @@
   },
   {
     "name": "Saka Su (6 x 1,5 L)",
-    "barcode": "6869752040107",
+    "barcode": "68697520401079",
+    "addedFrom": "getir-panel",
+    "addedAt": "2026-04-26T00:04:44.652Z",
     "imageUrl": "https://cdn-image.getir.com/market/product/733c1623-9284-47cd-85e3-6fc0cc7c8ef6.jpg",
-    "productId": "60a66352070e1f58b08c1246",
-    "price": 101.99
+    "barcodes": [
+      "68697520401079",
+      "8697520000003",
+      "8697520005923",
+      "8697520108037",
+      "8697520538599",
+      "8697520790713"
+    ],
+    "productId": "60a66352070e1f58b08c1246"
   },
   {
     "name": "Saka Su (6 x 500 ml)",
@@ -40640,8 +40648,13 @@
   },
   {
     "name": "EcoCold 1270 2 Kapılı Dikey +4 İçecek Dolabı (Demirbaş)",
-    "barcode": "1280412707920",
+    "barcode": "128041270792081",
+    "addedFrom": "getir-panel",
+    "addedAt": "2026-04-26T00:04:44.652Z",
     "imageUrl": "https://cdn-image.getir.com/market/product/5586631c-dcb2-4a23-88dd-0f4278d1d34f.png",
+    "barcodes": [
+      "128041270792081"
+    ],
     "productId": "60d076736ef8f5a34f459f5c"
   },
   {
@@ -41718,13 +41731,6 @@
     ]
   },
   {
-    "name": "Euro Palet",
-    "barcode": "3000000000000",
-    "imageUrl": "https://cdn-image.getir.com/market/product/85ba70f3-bb2e-4650-a239-32c1bc71454f.jpg",
-    "productId": "5c2df6686c8c720001c43b57",
-    "price": 75
-  },
-  {
     "name": "Bahçıvan Laktozsuz Süzme Peynir Yarım Yağlı (500 g)",
     "barcode": "8690843097170",
     "imageUrl": "http://cdn.getir.com/product/612dea29afe52615a6236338_tr_1634539204321.jpeg",
@@ -42188,10 +42194,14 @@
   },
   {
     "name": "Destek Maması (5 Kap)",
-    "barcode": "4000000000000",
+    "barcode": "4000000000000006",
+    "addedFrom": "getir-panel",
+    "addedAt": "2026-04-26T00:04:44.652Z",
     "imageUrl": "https://cdn-image.getir.com/market/product/86f4eaa7-1576-4079-824f-d1384ddb6b2e.jpg",
-    "productId": "615189a82d67fe8c887cf95d",
-    "price": 33
+    "barcodes": [
+      "4000000000000006"
+    ],
+    "productId": "615189a82d67fe8c887cf95d"
   },
   {
     "name": "Maybelline New York Instant Anti Age Eraser Kapatıcı (00 Ivory)",
@@ -42286,13 +42296,6 @@
     "barcodes": [
       "8690526063515"
     ]
-  },
-  {
-    "name": "Destek Maması (5 Kap)",
-    "barcode": "4000000000000",
-    "imageUrl": "https://cdn-image.getir.com/market/product/86f4eaa7-1576-4079-824f-d1384ddb6b2e.jpg",
-    "productId": "615189a82d67fe8c887cf95d",
-    "price": 33
   },
   {
     "name": "Eti Burçak Tuzlu Zeytinli Bisküvi (91 g)",
@@ -43368,13 +43371,6 @@
     ]
   },
   {
-    "name": "Milka Milkinis Süt Dolgulu Çikolata (44 g)",
-    "barcode": "9000000000000",
-    "imageUrl": "http://cdn.getir.com/product/5bffb4ec0af0fb001ec98dff_tr_1608384780123.jpeg",
-    "productId": "5bffb4ec0af0fb001ec98dff",
-    "price": 11.99
-  },
-  {
     "name": "Damla Minera Elma Aromalı Maden Suyu (6 x 200 ml)",
     "barcode": "5000112666366",
     "imageUrl": "https://cdn-image.getir.com/market/product/983ea92e-0f55-4b11-aba4-44982abece08.jpg",
@@ -44167,13 +44163,6 @@
     ]
   },
   {
-    "name": "Euro Palet",
-    "barcode": "3000000000000",
-    "imageUrl": "https://cdn-image.getir.com/market/product/85ba70f3-bb2e-4650-a239-32c1bc71454f.jpg",
-    "productId": "5c2df6686c8c720001c43b57",
-    "price": 75
-  },
-  {
     "name": "Urban Care Intense Keratin Saç Maskesi (50 ml)",
     "barcode": "8680690705489",
     "imageUrl": "https://cdn-image.getir.com/market/product/70bea9ef-ee4d-48dc-bedb-6a5d934cd992.jpg",
@@ -44722,34 +44711,6 @@
     ]
   },
   {
-    "name": "Euro Palet",
-    "barcode": "3000000000000",
-    "imageUrl": "https://cdn-image.getir.com/market/product/85ba70f3-bb2e-4650-a239-32c1bc71454f.jpg",
-    "productId": "5c2df6686c8c720001c43b57",
-    "price": 75
-  },
-  {
-    "name": "Euro Palet",
-    "barcode": "3000000000000",
-    "imageUrl": "https://cdn-image.getir.com/market/product/85ba70f3-bb2e-4650-a239-32c1bc71454f.jpg",
-    "productId": "5c2df6686c8c720001c43b57",
-    "price": 75
-  },
-  {
-    "name": "Euro Palet",
-    "barcode": "3000000000000",
-    "imageUrl": "https://cdn-image.getir.com/market/product/85ba70f3-bb2e-4650-a239-32c1bc71454f.jpg",
-    "productId": "5c2df6686c8c720001c43b57",
-    "price": 75
-  },
-  {
-    "name": "Euro Palet",
-    "barcode": "3000000000000",
-    "imageUrl": "https://cdn-image.getir.com/market/product/85ba70f3-bb2e-4650-a239-32c1bc71454f.jpg",
-    "productId": "5c2df6686c8c720001c43b57",
-    "price": 75
-  },
-  {
     "name": "Dalin Şampuan Klasik (500 ml)",
     "barcode": "8690605061036",
     "imageUrl": "http://cdn.getir.com/product/61b9a513d06edcbc0d125226_tr_1639726012139.jpeg",
@@ -44758,13 +44719,6 @@
     "barcodes": [
       "8690605061036"
     ]
-  },
-  {
-    "name": "Euro Palet",
-    "barcode": "3000000000000",
-    "imageUrl": "https://cdn-image.getir.com/market/product/85ba70f3-bb2e-4650-a239-32c1bc71454f.jpg",
-    "productId": "5c2df6686c8c720001c43b57",
-    "price": 75
   },
   {
     "name": "Mandıradan Edirne Beyaz Peynir (350 g)",
@@ -46361,22 +46315,37 @@
   },
   {
     "name": "Golf - Uğur/UMD 1850 D - Donuk Dolap (185 cm)",
-    "barcode": "1021818508509",
+    "barcode": "102181850850900",
+    "addedFrom": "getir-panel",
+    "addedAt": "2026-04-26T00:04:44.652Z",
     "imageUrl": "https://cdn-image.getir.com/market/product/527948b1-c921-48ed-8136-9b56bf6e81f3.png",
+    "barcodes": [
+      "102181850850900"
+    ],
     "productId": "620288330d3a0f2a090ff3f6",
     "supplierReturnDays": 0
   },
   {
     "name": "EcoCold 1620 3 Kapılı Dikey +4 İçecek Dolabı (Demirbaş)",
-    "barcode": "1280416207820",
+    "barcode": "128041620782081",
+    "addedFrom": "getir-panel",
+    "addedAt": "2026-04-26T00:04:44.652Z",
     "imageUrl": "https://cdn-image.getir.com/market/product/989f0731-09a1-4ca7-a095-8e3270c2ad5b.png",
+    "barcodes": [
+      "128041620782081"
+    ],
     "productId": "6202977b2255df05a65908eb",
     "supplierReturnDays": 0
   },
   {
     "name": "Mr No Dardanel- Green Cooler/GC380C - MS & Şarküteri (0-4 °C)",
-    "barcode": "1090406006220",
+    "barcode": "109040600622000",
+    "addedFrom": "getir-panel",
+    "addedAt": "2026-04-26T00:04:44.652Z",
     "imageUrl": "https://cdn-image.getir.com/market/product/d4b99234-e6d3-4884-93a1-6f26f550aade.png",
+    "barcodes": [
+      "109040600622000"
+    ],
     "productId": "6202ab908e0b7e062eb16324",
     "supplierReturnDays": 0
   },
@@ -46409,13 +46378,6 @@
     "barcodes": [
       "9771304558009"
     ]
-  },
-  {
-    "name": "Milka Milkinis Süt Dolgulu Çikolata (44 g)",
-    "barcode": "9000000000000",
-    "imageUrl": "http://cdn.getir.com/product/5bffb4ec0af0fb001ec98dff_tr_1608384780123.jpeg",
-    "productId": "5bffb4ec0af0fb001ec98dff",
-    "price": 11.99
   },
   {
     "name": "Lipton Tek Dem Earl Grey (10'lu)",
@@ -47193,13 +47155,6 @@
     "barcodes": [
       "8691313570209"
     ]
-  },
-  {
-    "name": "Milka Milkinis Süt Dolgulu Çikolata (44 g)",
-    "barcode": "9000000000000",
-    "imageUrl": "http://cdn.getir.com/product/5bffb4ec0af0fb001ec98dff_tr_1608384780123.jpeg",
-    "productId": "5bffb4ec0af0fb001ec98dff",
-    "price": 11.99
   },
   {
     "name": "Çağla Paket (125 g)",
@@ -48634,8 +48589,13 @@
   },
   {
     "name": "Eti Frigo - Uğur/UDD 100 SCEG - Donuk Dolap (60 cm)",
-    "barcode": "1051805605609",
+    "barcode": "105180560560901",
+    "addedFrom": "getir-panel",
+    "addedAt": "2026-04-26T00:04:44.652Z",
     "imageUrl": "https://cdn-image.getir.com/market/product/85fa2c24-70f9-400d-bf65-f4ef379d9a78.png",
+    "barcodes": [
+      "105180560560901"
+    ],
     "productId": "626dc2be44350adc2947ffa5",
     "supplierReturnDays": 0
   },
@@ -49501,13 +49461,6 @@
     ]
   },
   {
-    "name": "Euro Palet",
-    "barcode": "3000000000000",
-    "imageUrl": "https://cdn-image.getir.com/market/product/85ba70f3-bb2e-4650-a239-32c1bc71454f.jpg",
-    "productId": "5c2df6686c8c720001c43b57",
-    "price": 75
-  },
-  {
     "name": "Hürriyet Lezzetli Hayat Dergisi",
     "barcode": "9772822390003",
     "imageUrl": "https://cdn-image.getir.com/market/product/35cc8b57-8f37-42df-bd9d-4840289598dd.jpg",
@@ -49586,13 +49539,6 @@
     "barcodes": [
       "8697422941008"
     ]
-  },
-  {
-    "name": "Milka Milkinis Süt Dolgulu Çikolata (44 g)",
-    "barcode": "9000000000000",
-    "imageUrl": "http://cdn.getir.com/product/5bffb4ec0af0fb001ec98dff_tr_1608384780123.jpeg",
-    "productId": "5bffb4ec0af0fb001ec98dff",
-    "price": 11.99
   },
   {
     "name": "Balkan Tereyağı (500 g)",
@@ -52211,13 +52157,6 @@
     ]
   },
   {
-    "name": "Destek Maması (5 Kap)",
-    "barcode": "4000000000000",
-    "imageUrl": "https://cdn-image.getir.com/market/product/86f4eaa7-1576-4079-824f-d1384ddb6b2e.jpg",
-    "productId": "615189a82d67fe8c887cf95d",
-    "price": 33
-  },
-  {
     "name": "Hero Baby Organik Muzlu Armutlu Tahıllı Kavanoz Maması (120 g)",
     "barcode": "8681080598094",
     "imageUrl": "https://cdn-image.getir.com/market/product/ae255b3f-1eda-41b6-8b34-cb749ff60e64.jpg",
@@ -53128,13 +53067,6 @@
     ]
   },
   {
-    "name": "Milka Milkinis Süt Dolgulu Çikolata (44 g)",
-    "barcode": "9000000000000",
-    "imageUrl": "http://cdn.getir.com/product/5bffb4ec0af0fb001ec98dff_tr_1608384780123.jpeg",
-    "productId": "5bffb4ec0af0fb001ec98dff",
-    "price": 11.99
-  },
-  {
     "name": "Dolphin Jelatinli Körüklü Pipet  (50'li)",
     "barcode": "8697415749802",
     "imageUrl": "https://cdn-image.getir.com/market/product/f2fa4926-ee76-4c98-91e6-c0890837e8cd.jpg",
@@ -53155,20 +53087,6 @@
       "8680913418899"
     ],
     "supplierReturnDays": 0
-  },
-  {
-    "name": "Milka Milkinis Süt Dolgulu Çikolata (44 g)",
-    "barcode": "9000000000000",
-    "imageUrl": "http://cdn.getir.com/product/5bffb4ec0af0fb001ec98dff_tr_1608384780123.jpeg",
-    "productId": "5bffb4ec0af0fb001ec98dff",
-    "price": 11.99
-  },
-  {
-    "name": "Milka Milkinis Süt Dolgulu Çikolata (44 g)",
-    "barcode": "9000000000000",
-    "imageUrl": "http://cdn.getir.com/product/5bffb4ec0af0fb001ec98dff_tr_1608384780123.jpeg",
-    "productId": "5bffb4ec0af0fb001ec98dff",
-    "price": 11.99
   },
   {
     "name": "Danone Kefirhüp Frozen Çilekli  (70 g)",
@@ -55183,27 +55101,6 @@
       "3610340042683",
       "8690595147581"
     ]
-  },
-  {
-    "name": "Destek Maması (5 Kap)",
-    "barcode": "4000000000000",
-    "imageUrl": "https://cdn-image.getir.com/market/product/86f4eaa7-1576-4079-824f-d1384ddb6b2e.jpg",
-    "productId": "615189a82d67fe8c887cf95d",
-    "price": 33
-  },
-  {
-    "name": "Destek Maması (5 Kap)",
-    "barcode": "4000000000000",
-    "imageUrl": "https://cdn-image.getir.com/market/product/86f4eaa7-1576-4079-824f-d1384ddb6b2e.jpg",
-    "productId": "615189a82d67fe8c887cf95d",
-    "price": 33
-  },
-  {
-    "name": "Destek Maması (5 Kap)",
-    "barcode": "4000000000000",
-    "imageUrl": "https://cdn-image.getir.com/market/product/86f4eaa7-1576-4079-824f-d1384ddb6b2e.jpg",
-    "productId": "615189a82d67fe8c887cf95d",
-    "price": 33
   },
   {
     "name": "Dove Köpük Duş Jeli Argan Yağı Kremsi Formül (200 ml)",
@@ -57926,13 +57823,6 @@
     "barcodes": [
       "8684207310012"
     ]
-  },
-  {
-    "name": "Milka Milkinis Süt Dolgulu Çikolata (44 g)",
-    "barcode": "9000000000000",
-    "imageUrl": "http://cdn.getir.com/product/5bffb4ec0af0fb001ec98dff_tr_1608384780123.jpeg",
-    "productId": "5bffb4ec0af0fb001ec98dff",
-    "price": 11.99
   },
   {
     "name": "Beyoğlu Limonlu Naneli Doğal Mineralli Gazlı İçecek (6 x 250 ml)",
@@ -63031,9 +62921,14 @@
   },
   {
     "name": "Pernigotti - Uğur/UDD 400 SC - Donuk Dolap (130 cm)",
-    "barcode": "1041813006309",
-    "imageUrl": "https://cdn-image.getir.com/market/product/2d03f879-9214-4675-b55c-13ea25864417.jpg",
+    "barcode": "104181300630900",
+    "addedFrom": "getir-panel",
+    "addedAt": "2026-04-26T00:04:44.652Z",
+    "barcodes": [
+      "104181300630900"
+    ],
     "productId": "657955514f1e14d9a0c58f45",
+    "imageUrl": "https://cdn-image.getir.com/market/product/2d03f879-9214-4675-b55c-13ea25864417.jpg",
     "supplierReturnDays": 0
   },
   {
@@ -64459,13 +64354,6 @@
       "8690526940649"
     ],
     "supplierReturnDays": 13
-  },
-  {
-    "name": "Buz Kasedi",
-    "barcode": "1000000000000",
-    "imageUrl": "http://cdn.getir.com/product/5a0d8b7bf00ff20004ec2538_tr_1620728711519.png",
-    "productId": "5a0d8b7bf00ff20004ec2538",
-    "supplierReturnDays": 0
   },
   {
     "name": "Ülker Çokokrem (400 g)",
@@ -66123,16 +66011,14 @@
   },
   {
     "name": "Dondurma Uyarı Stickerı (TRE Ekipman)",
-    "barcode": "8000000000000",
-    "imageUrl": "https://cdn-image.getir.com/market/product/eb80dfa1-b042-4ee1-b9fd-b87984655245.png",
+    "barcode": "8000000000000005",
+    "addedFrom": "getir-panel",
+    "addedAt": "2026-04-26T00:04:44.652Z",
+    "barcodes": [
+      "8000000000000005"
+    ],
     "productId": "663345b3b59b2c903fa0bee4",
-    "supplierReturnDays": 0
-  },
-  {
-    "name": "Dondurma Uyarı Stickerı (TRE Ekipman)",
-    "barcode": "8000000000000",
     "imageUrl": "https://cdn-image.getir.com/market/product/eb80dfa1-b042-4ee1-b9fd-b87984655245.png",
-    "productId": "663345b3b59b2c903fa0bee4",
     "supplierReturnDays": 0
   },
   {
@@ -66347,13 +66233,6 @@
       "8690710143740"
     ],
     "supplierReturnDays": 27
-  },
-  {
-    "name": "Dondurma Uyarı Stickerı (TRE Ekipman)",
-    "barcode": "8000000000000",
-    "imageUrl": "https://cdn-image.getir.com/market/product/eb80dfa1-b042-4ee1-b9fd-b87984655245.png",
-    "productId": "663345b3b59b2c903fa0bee4",
-    "supplierReturnDays": 0
   },
   {
     "name": "Peyman Nutzz Popzz Fıstık Ezmeli (90 g)",
@@ -70437,25 +70316,19 @@
     ]
   },
   {
-    "name": "Golden Elma Paket (1 kg)",
-    "barcode": "1200000000000",
-    "imageUrl": "https://cdn-image.getir.com/market/product/2271b628-2ce9-4d78-bcaa-393bd6778176.jpg",
-    "productId": "671117712e92c000e974572e",
-    "price": 149.99
-  },
-  {
-    "name": "Golden Elma Paket (1 kg)",
-    "barcode": "1200000000000",
-    "imageUrl": "https://cdn-image.getir.com/market/product/2271b628-2ce9-4d78-bcaa-393bd6778176.jpg",
-    "productId": "671117712e92c000e974572e",
-    "price": 149.99
-  },
-  {
-    "name": "Golden Elma Paket (1 kg)",
-    "barcode": "1200000000000",
-    "imageUrl": "https://cdn-image.getir.com/market/product/2271b628-2ce9-4d78-bcaa-393bd6778176.jpg",
-    "productId": "671117712e92c000e974572e",
-    "price": 149.99
+    "name": "Granny Smith Elma Paket (1 kg)",
+    "barcode": "1200000000000013",
+    "addedFrom": "getir-panel",
+    "addedAt": "2026-04-26T00:04:44.652Z",
+    "barcodes": [
+      "1200000000000013",
+      "783191098949",
+      "8682655004101",
+      "8684278082429"
+    ],
+    "productId": "6711176748cbe5ce55a56d51",
+    "imageUrl": "https://cdn-image.getir.com/market/product/51971f09-1f4a-4ac9-8588-d8804caeca16.jpg",
+    "supplierReturnDays": 2
   },
   {
     "name": "Pin Beyaz Şeftali (1 L)",
@@ -72100,13 +71973,6 @@
     "barcodes": [
       "8684451163259"
     ]
-  },
-  {
-    "name": "Destek Maması (5 Kap)",
-    "barcode": "4000000000000",
-    "imageUrl": "https://cdn-image.getir.com/market/product/86f4eaa7-1576-4079-824f-d1384ddb6b2e.jpg",
-    "productId": "615189a82d67fe8c887cf95d",
-    "price": 33
   },
   {
     "name": "Tariş Kuzey Ege Sızma Zeytinyağı (1 L)",
@@ -74596,13 +74462,6 @@
     "supplierReturnDays": 14
   },
   {
-    "name": "Euro Palet",
-    "barcode": "3000000000000",
-    "imageUrl": "https://cdn-image.getir.com/market/product/85ba70f3-bb2e-4650-a239-32c1bc71454f.jpg",
-    "productId": "5c2df6686c8c720001c43b57",
-    "price": 75
-  },
-  {
     "name": "Durex Play Masaj Jeli Aloe Vera (200 ml)",
     "barcode": "5011417592632",
     "imageUrl": "https://cdn-image.getir.com/market/product/6aa9af30-31d7-47b1-a107-ca32b0b011e5.jpg",
@@ -74759,13 +74618,6 @@
       "8681506021083"
     ],
     "supplierReturnDays": 14
-  },
-  {
-    "name": "Euro Palet",
-    "barcode": "3000000000000",
-    "imageUrl": "https://cdn-image.getir.com/market/product/85ba70f3-bb2e-4650-a239-32c1bc71454f.jpg",
-    "productId": "5c2df6686c8c720001c43b57",
-    "price": 75
   },
   {
     "name": "Mehmet Reis Kıtır Simit (135 g)",
@@ -76273,13 +76125,6 @@
       "5000112665031"
     ],
     "supplierReturnDays": 14
-  },
-  {
-    "name": "Destek Maması (5 Kap)",
-    "barcode": "4000000000000",
-    "imageUrl": "https://cdn-image.getir.com/market/product/86f4eaa7-1576-4079-824f-d1384ddb6b2e.jpg",
-    "productId": "615189a82d67fe8c887cf95d",
-    "price": 33
   },
   {
     "name": "Red Bull Pink Edition (250 ml)",
@@ -80625,29 +80470,6 @@
     ]
   },
   {
-    "name": "Algida - Uğur/UDD 500 SC - Donuk Dolap (155 cm)",
-    "barcode": "101181550630900",
-    "addedFrom": "getir-panel",
-    "addedAt": "2026-04-26T00:04:44.652Z",
-    "imageUrl": "https://cdn-image.getir.com/market/product/42c41131-d789-4a88-95be-b5f8031bd805.png",
-    "barcodes": [
-      "101181550630900"
-    ],
-    "productId": "5831a5f5cac74c0004189e48",
-    "supplierReturnDays": 0
-  },
-  {
-    "name": "Sütaş - Uğur/USS 374 DTKL - İçecek Dolabı (0-4 °C)",
-    "barcode": "110040600641980",
-    "addedFrom": "getir-panel",
-    "addedAt": "2026-04-26T00:04:44.652Z",
-    "imageUrl": "https://cdn-image.getir.com/market/product/6437fe54-573c-431d-bf10-22240d8acbac.png",
-    "barcodes": [
-      "110040600641980"
-    ],
-    "productId": "5831b5186d2030000476824b"
-  },
-  {
     "name": "Apple USB Güç Adaptörü (5 W)",
     "barcode": "194252025130",
     "addedFrom": "getir-panel",
@@ -80673,18 +80495,6 @@
       "885909627424"
     ],
     "productId": "588f5e6bb119c800044b6576",
-    "supplierReturnDays": 0
-  },
-  {
-    "name": "Coca Cola 2 Kapılı Dolap",
-    "barcode": "103041100862000",
-    "addedFrom": "getir-panel",
-    "addedAt": "2026-04-26T00:04:44.652Z",
-    "imageUrl": "https://cdn.getir.com/product/58d6846858dc400004df6c7c_tr_1631892887247.png",
-    "barcodes": [
-      "103041100862000"
-    ],
-    "productId": "58d6846858dc400004df6c7c",
     "supplierReturnDays": 0
   },
   {
@@ -80723,18 +80533,6 @@
       "8690632532554"
     ],
     "productId": "59f6d39777f4970004ddcb05"
-  },
-  {
-    "name": "Buz Kasedi",
-    "barcode": "1000000000000021",
-    "addedFrom": "getir-panel",
-    "addedAt": "2026-04-26T00:04:44.652Z",
-    "imageUrl": "https://cdn.getir.com/product/5a0d8b7bf00ff20004ec2538_tr_1620728711519.png",
-    "barcodes": [
-      "1000000000000021"
-    ],
-    "productId": "5a0d8b7bf00ff20004ec2538",
-    "supplierReturnDays": 0
   },
   {
     "name": "Apple USB Güç Adaptörü (12 W)",
@@ -80934,17 +80732,6 @@
     "productId": "5bee6f4729d8b200183d1a95"
   },
   {
-    "name": "Milka Milkinis Süt Dolgulu Çikolata (44 g)",
-    "barcode": "900000000000099",
-    "addedFrom": "getir-panel",
-    "addedAt": "2026-04-26T00:04:44.652Z",
-    "imageUrl": "https://cdn.getir.com/product/5bffb4ec0af0fb001ec98dff_tr_1608384780123.jpeg",
-    "barcodes": [
-      "900000000000099"
-    ],
-    "productId": "5bffb4ec0af0fb001ec98dff"
-  },
-  {
     "name": "Eat Water Slim Rice (200 g)",
     "barcode": "609728699611",
     "addedFrom": "getir-panel",
@@ -80957,29 +80744,6 @@
     "productId": "5c090331f9292665a4da3eba"
   },
   {
-    "name": "Kraft Ekmek Kesesi",
-    "barcode": "1000000000000023",
-    "addedFrom": "getir-panel",
-    "addedAt": "2026-04-26T00:04:44.652Z",
-    "imageUrl": "https://cdn.getir.com/product/5c24fe1a3d8d9f000173a0dd_tr_1601878810893.png",
-    "barcodes": [
-      "1000000000000023"
-    ],
-    "productId": "5c24fe1a3d8d9f000173a0dd",
-    "supplierReturnDays": 0
-  },
-  {
-    "name": "Euro Palet",
-    "barcode": "3000000000000015",
-    "addedFrom": "getir-panel",
-    "addedAt": "2026-04-26T00:04:44.652Z",
-    "imageUrl": "https://cdn-image.getir.com/market/product/85ba70f3-bb2e-4650-a239-32c1bc71454f.jpg",
-    "barcodes": [
-      "3000000000000015"
-    ],
-    "productId": "5c2df6686c8c720001c43b57"
-  },
-  {
     "name": "Dixi Yüzey Temizleyici Yaban Gülü (900 ml)",
     "barcode": "86912334",
     "addedFrom": "getir-panel",
@@ -80990,18 +80754,6 @@
       "9000101422108"
     ],
     "productId": "5c3f2821f9ba5f0001e78cbd"
-  },
-  {
-    "name": "Uğur Derin Dondurucu Yatay 500 BK Dolap (Demirbaş)",
-    "barcode": "131181550710840",
-    "addedFrom": "getir-panel",
-    "addedAt": "2026-04-26T00:04:44.652Z",
-    "imageUrl": "https://cdn-image.getir.com/market/product/85dbfb71-9135-49bb-992a-35bac24040b8.png",
-    "barcodes": [
-      "131181550710840"
-    ],
-    "productId": "5c5c2d9c933183000176cf36",
-    "supplierReturnDays": 0
   },
   {
     "name": "Silifke Çileği Paket (475 g)",
@@ -81457,18 +81209,6 @@
     "supplierReturnDays": 36
   },
   {
-    "name": "Uğur Derin Dondurucu Yatay 500 SC Dolap (Demirbaş)",
-    "barcode": "131181550630900",
-    "addedFrom": "getir-panel",
-    "addedAt": "2026-04-26T00:04:44.652Z",
-    "imageUrl": "https://cdn-image.getir.com/market/product/160e6915-1bde-4298-acc0-20dd13cac783.png",
-    "barcodes": [
-      "131181550630900"
-    ],
-    "productId": "5cf0d508e327a40001ee28ad",
-    "supplierReturnDays": 0
-  },
-  {
     "name": "Tat Jalapeno Biber Turşusu (330 g)",
     "barcode": "8690635190355",
     "addedFrom": "getir-panel",
@@ -81522,41 +81262,6 @@
     "supplierReturnDays": 18
   },
   {
-    "name": "Vestel MD-20 YMB Mikrodalga Fırın",
-    "barcode": "1000000000000008",
-    "addedFrom": "getir-panel",
-    "addedAt": "2026-04-26T00:04:44.652Z",
-    "imageUrl": "https://via.placeholder.com/200/5d3ebc/ffd10d?text=getir",
-    "barcodes": [
-      "1000000000000008"
-    ],
-    "productId": "5d4186fd7512880001a97f21",
-    "supplierReturnDays": 0
-  },
-  {
-    "name": "Vestel SP 121 Sıcak Soğuk Su Sebili",
-    "barcode": "1000000000000010",
-    "addedFrom": "getir-panel",
-    "addedAt": "2026-04-26T00:04:44.652Z",
-    "imageUrl": "https://via.placeholder.com/200/5d3ebc/ffd10d?text=getir",
-    "barcodes": [
-      "1000000000000010"
-    ],
-    "productId": "5d418712f72012000135754c",
-    "supplierReturnDays": 0
-  },
-  {
-    "name": "Turpal Palet",
-    "barcode": "3000000000000004",
-    "addedFrom": "getir-panel",
-    "addedAt": "2026-04-26T00:04:44.652Z",
-    "imageUrl": "https://via.placeholder.com/200/5d3ebc/ffd10d?text=getir",
-    "barcodes": [
-      "3000000000000004"
-    ],
-    "productId": "5d5d03953a58c400016e65f7"
-  },
-  {
     "name": "Mango Paket (1 Adet)",
     "barcode": "783191099106",
     "addedFrom": "getir-panel",
@@ -81574,18 +81279,6 @@
       "8744115230564"
     ],
     "productId": "5da32672159fd43d7208cbac"
-  },
-  {
-    "name": "Uno Kasa",
-    "barcode": "3000000000000003",
-    "addedFrom": "getir-panel",
-    "addedAt": "2026-04-26T00:04:44.652Z",
-    "imageUrl": "https://via.placeholder.com/200/5d3ebc/ffd10d?text=getir",
-    "barcodes": [
-      "3000000000000003",
-      "415713805732"
-    ],
-    "productId": "5dafedcf80f35bc89049c613"
   },
   {
     "name": "Polo Karışık Meyveli Şekerleme (37 g)",
@@ -81685,18 +81378,6 @@
     "supplierReturnDays": 0
   },
   {
-    "name": "Algida - Uğur/UMD 1850 D - Donuk Dolap (185 cm)",
-    "barcode": "101181850850900",
-    "addedFrom": "getir-panel",
-    "addedAt": "2026-04-26T00:04:44.652Z",
-    "imageUrl": "https://cdn-image.getir.com/market/product/94c21bb1-d7ab-4d88-bd6d-7344c9657100.png",
-    "barcodes": [
-      "101181850850900"
-    ],
-    "productId": "5e3bc06edd4ed94c6a90bcd7",
-    "supplierReturnDays": 0
-  },
-  {
     "name": "Veteriner Anne Çiftliği Kıvırcık (1 Adet)",
     "barcode": "8684468047207",
     "addedFrom": "getir-panel",
@@ -81731,17 +81412,6 @@
       "kedievi"
     ],
     "productId": "5e45130f42b4b71908cf3dec"
-  },
-  {
-    "name": "Nescafé Classic Metal Kutu (1 Adet)",
-    "barcode": "900000000000003",
-    "addedFrom": "getir-panel",
-    "addedAt": "2026-04-26T00:04:44.652Z",
-    "imageUrl": "https://cdn.getir.com/product/5e4cdc2afac1f119acca4313_tr_1582214893429.jpeg",
-    "barcodes": [
-      "900000000000003"
-    ],
-    "productId": "5e4cdc2afac1f119acca4313"
   },
   {
     "name": "İhtiyaç Kolisi 3 (23 Ürün)",
@@ -81809,17 +81479,6 @@
     "productId": "5eb148e6246b37ea6c790824"
   },
   {
-    "name": "Algida Soğuk Çanta",
-    "barcode": "900000000000017",
-    "addedFrom": "getir-panel",
-    "addedAt": "2026-04-26T00:04:44.652Z",
-    "imageUrl": "https://cdn.getir.com/product/5eb2cc64622d69aca9cf166b_tr_1598858924052.jpeg",
-    "barcodes": [
-      "900000000000017"
-    ],
-    "productId": "5eb2cc64622d69aca9cf166b"
-  },
-  {
     "name": "Red Bull Enerji İçeceği Şeftali (250 ml)",
     "barcode": "90446306",
     "addedFrom": "getir-panel",
@@ -81860,28 +81519,6 @@
     "productId": "5eff2ab4662c4bc180accee6"
   },
   {
-    "name": "Ak Kasa",
-    "barcode": "3000000000000016",
-    "addedFrom": "getir-panel",
-    "addedAt": "2026-04-26T00:04:44.652Z",
-    "imageUrl": "https://via.placeholder.com/200/5d3ebc/ffd10d?text=getir",
-    "barcodes": [
-      "3000000000000016"
-    ],
-    "productId": "5f1540e1dec75b083d7fd7ab"
-  },
-  {
-    "name": "Balkan Kasa",
-    "barcode": "3000000000000013",
-    "addedFrom": "getir-panel",
-    "addedAt": "2026-04-26T00:04:44.652Z",
-    "imageUrl": "https://via.placeholder.com/200/5d3ebc/ffd10d?text=getir",
-    "barcodes": [
-      "3000000000000013"
-    ],
-    "productId": "5f15417f5bf7ad1d9a6619f4"
-  },
-  {
     "name": "Rexona Erkek Invisible Black & White Roll-On (50 ml)",
     "barcode": "59079477",
     "addedFrom": "getir-panel",
@@ -81908,18 +81545,6 @@
     ],
     "productId": "5f16f2ed681e445131aa4a7c",
     "supplierReturnDays": 0
-  },
-  {
-    "name": "Do Ballı Muzlu Sütlü Dondurma (450 ml)",
-    "barcode": "86827454196042",
-    "addedFrom": "getir-panel",
-    "addedAt": "2026-04-26T00:04:44.652Z",
-    "imageUrl": "https://cdn-image.getir.com/market/product/70c03bf5-a136-4a57-9cfc-132f24b3d328.jpg",
-    "barcodes": [
-      "86827454196042",
-      "8682754196042"
-    ],
-    "productId": "5f1ffdd3271fd1ae48880944"
   },
   {
     "name": "Üzüm Paket (500 g)",
@@ -82172,43 +81797,6 @@
     "productId": "5f9fcb3da489a83a56d8d5f1"
   },
   {
-    "name": "Pernigotti Soğuk Çanta",
-    "barcode": "900000000000005",
-    "addedFrom": "getir-panel",
-    "addedAt": "2026-04-26T00:04:44.652Z",
-    "imageUrl": "https://cdn.getir.com/misc/product_placeholder_getir_logo.jpeg",
-    "barcodes": [
-      "900000000000005"
-    ],
-    "productId": "5fc0cf67f5163a45f17b775c"
-  },
-  {
-    "name": "La Lorraine - Uğur/UDD 560 BK - Donuk Dolap (Sandık Tipi 150 cm)",
-    "barcode": "108181500700900",
-    "addedFrom": "getir-panel",
-    "addedAt": "2026-04-26T00:04:44.652Z",
-    "imageUrl": "https://cdn-image.getir.com/market/product/88a66fbf-7b26-4a75-8fe4-22ae1aa98b8d.png",
-    "barcodes": [
-      "108181500700900"
-    ],
-    "productId": "6024c4d1e82bdad7d984702b",
-    "supplierReturnDays": 0
-  },
-  {
-    "name": "Mars Snickers Stick (91 ml)",
-    "barcode": "50001159515481",
-    "addedFrom": "getir-panel",
-    "addedAt": "2026-04-26T00:04:44.652Z",
-    "imageUrl": "https://cdn.getir.com/product/6045e5aa247536690035d115_tr_1615200549529.jpeg",
-    "barcodes": [
-      "50001159515481",
-      "5000159462037",
-      "5000159515481"
-    ],
-    "productId": "6045e5aa247536690035d115",
-    "supplierReturnDays": 54
-  },
-  {
     "name": "Baby Avokado (250 g)",
     "barcode": "783191098918",
     "addedFrom": "getir-panel",
@@ -82267,37 +81855,6 @@
       "9010350252500"
     ],
     "productId": "606ff54ed3079ed3db86234e"
-  },
-  {
-    "name": "TRT Çocuk",
-    "barcode": "977130998900628",
-    "addedFrom": "getir-panel",
-    "addedAt": "2026-04-26T00:04:44.652Z",
-    "imageUrl": "https://cdn.getir.com/product/6087df7934d02bb344a7694f_tr_1646142329614.jpeg",
-    "barcodes": [
-      "977130998900628",
-      "977130998900634",
-      "9771309989006"
-    ],
-    "productId": "6087df7934d02bb344a7694f"
-  },
-  {
-    "name": "Sarıyer Gazozu (6 x 200 ml)",
-    "barcode": "86987208633399",
-    "addedFrom": "getir-panel",
-    "addedAt": "2026-04-26T00:04:44.652Z",
-    "imageUrl": "https://cdn-image.getir.com/market/product/07c788cf-48f8-481f-b74a-f52d91181cbc.jpg",
-    "barcodes": [
-      "86987208633399",
-      "8698720863399",
-      "86987208633990",
-      "86987208633991",
-      "86987208633992",
-      "86987208633993",
-      "86987208633997"
-    ],
-    "productId": "6089082f9afaac83713e0731",
-    "supplierReturnDays": 27
   },
   {
     "name": "Knorr Sumak (70 g)",
@@ -82362,22 +81919,6 @@
     "supplierReturnDays": 18
   },
   {
-    "name": "Saka Su (6 x 1,5 L)",
-    "barcode": "68697520401079",
-    "addedFrom": "getir-panel",
-    "addedAt": "2026-04-26T00:04:44.652Z",
-    "imageUrl": "https://cdn-image.getir.com/market/product/733c1623-9284-47cd-85e3-6fc0cc7c8ef6.jpg",
-    "barcodes": [
-      "68697520401079",
-      "8697520000003",
-      "8697520005923",
-      "8697520108037",
-      "8697520538599",
-      "8697520790713"
-    ],
-    "productId": "60a66352070e1f58b08c1246"
-  },
-  {
     "name": "Fişek Dergi",
     "barcode": "9772149594009",
     "addedFrom": "getir-panel",
@@ -82388,17 +81929,6 @@
       "9772791672001"
     ],
     "productId": "60acf59799d53e8f389d5f4a"
-  },
-  {
-    "name": "EcoCold 1270 2 Kapılı Dikey +4 İçecek Dolabı (Demirbaş)",
-    "barcode": "128041270792081",
-    "addedFrom": "getir-panel",
-    "addedAt": "2026-04-26T00:04:44.652Z",
-    "imageUrl": "https://cdn-image.getir.com/market/product/5586631c-dcb2-4a23-88dd-0f4278d1d34f.png",
-    "barcodes": [
-      "128041270792081"
-    ],
-    "productId": "60d076736ef8f5a34f459f5c"
   },
   {
     "name": "Oreo Bardak",
@@ -82413,28 +81943,6 @@
     "productId": "60d1c5ba666e2340fd0f852a"
   },
   {
-    "name": "Tahta Palet (Palet)",
-    "barcode": "3000000000000001",
-    "addedFrom": "getir-panel",
-    "addedAt": "2026-04-26T00:04:44.652Z",
-    "imageUrl": "https://cdn.getir.com/product/612ddf08310f6a74bfd434df_decfcc73-778b-4eb4-a79c-79cb36a56a3d.png",
-    "barcodes": [
-      "3000000000000001"
-    ],
-    "productId": "612ddf08310f6a74bfd434df"
-  },
-  {
-    "name": "Destek Maması (10 Kap)",
-    "barcode": "4000000000000005",
-    "addedFrom": "getir-panel",
-    "addedAt": "2026-04-26T00:04:44.652Z",
-    "imageUrl": "https://cdn-image.getir.com/market/product/994ba240-c7bc-43ce-90d6-d92c0588e5a9.jpg",
-    "barcodes": [
-      "4000000000000005"
-    ],
-    "productId": "614c56024b043fd03aa464f8"
-  },
-  {
     "name": "Gerber Muzlu & Ahududulu (35 g)",
     "barcode": "7613287206695",
     "addedFrom": "getir-panel",
@@ -82445,17 +81953,6 @@
     ],
     "productId": "614da99ef22171626a6a1032",
     "supplierReturnDays": 22
-  },
-  {
-    "name": "Destek Maması (5 Kap)",
-    "barcode": "4000000000000006",
-    "addedFrom": "getir-panel",
-    "addedAt": "2026-04-26T00:04:44.652Z",
-    "imageUrl": "https://cdn-image.getir.com/market/product/86f4eaa7-1576-4079-824f-d1384ddb6b2e.jpg",
-    "barcodes": [
-      "4000000000000006"
-    ],
-    "productId": "615189a82d67fe8c887cf95d"
   },
   {
     "name": "Taşköprü Sarımsağı (500 g)",
@@ -82482,28 +81979,6 @@
     "supplierReturnDays": 27
   },
   {
-    "name": "Baskısız Yağlı Kağıt",
-    "barcode": "900000000000009",
-    "addedFrom": "getir-panel",
-    "addedAt": "2026-04-26T00:04:44.652Z",
-    "imageUrl": "https://cdn.getir.com/misc/product_placeholder_getir_logo.jpeg",
-    "barcodes": [
-      "900000000000009"
-    ],
-    "productId": "6183b7f8086d962d37b19890"
-  },
-  {
-    "name": "İçim Kasa",
-    "barcode": "3000000000000017",
-    "addedFrom": "getir-panel",
-    "addedAt": "2026-04-26T00:04:44.652Z",
-    "imageUrl": "https://cdn.getir.com/misc/product_placeholder_getir_logo.jpeg",
-    "barcodes": [
-      "3000000000000017"
-    ],
-    "productId": "619f5e5fdb26103a20c99fcf"
-  },
-  {
     "name": "Boyamalı Bulmaca",
     "barcode": "14673629289",
     "addedFrom": "getir-panel",
@@ -82514,119 +81989,6 @@
       "9771304558023"
     ],
     "productId": "61b04e3e9a30483f120173f3"
-  },
-  {
-    "name": "Chep Palet",
-    "barcode": "3000000000000011",
-    "addedFrom": "getir-panel",
-    "addedAt": "2026-04-26T00:04:44.652Z",
-    "imageUrl": "https://cdn.getir.com/misc/product_placeholder_getir_logo.jpeg",
-    "barcodes": [
-      "3000000000000011"
-    ],
-    "productId": "61b8a7aa6804264c1bba955a"
-  },
-  {
-    "name": "Sütaş Kasa - 30012",
-    "barcode": "3000000000000007",
-    "addedFrom": "getir-panel",
-    "addedAt": "2026-04-26T00:04:44.652Z",
-    "imageUrl": "https://cdn.getir.com/misc/product_placeholder_getir_logo.jpeg",
-    "barcodes": [
-      "3000000000000007"
-    ],
-    "productId": "61b8a91ac321f28eab82ec43"
-  },
-  {
-    "name": "Eker Kasa",
-    "barcode": "3000000000000008",
-    "addedFrom": "getir-panel",
-    "addedAt": "2026-04-26T00:04:44.652Z",
-    "imageUrl": "https://cdn.getir.com/misc/product_placeholder_getir_logo.jpeg",
-    "barcodes": [
-      "3000000000000008"
-    ],
-    "productId": "61b8a988143a0420dfc4e811"
-  },
-  {
-    "name": "Sek Kasa",
-    "barcode": "3000000000000009",
-    "addedFrom": "getir-panel",
-    "addedAt": "2026-04-26T00:04:44.652Z",
-    "imageUrl": "https://cdn.getir.com/misc/product_placeholder_getir_logo.jpeg",
-    "barcodes": [
-      "3000000000000009"
-    ],
-    "productId": "61b8aa2b76f4b8106aa0274c"
-  },
-  {
-    "name": "Akkurt Kasa",
-    "barcode": "3000000000000006",
-    "addedFrom": "getir-panel",
-    "addedAt": "2026-04-26T00:04:44.652Z",
-    "imageUrl": "https://cdn.getir.com/misc/product_placeholder_getir_logo.jpeg",
-    "barcodes": [
-      "3000000000000006"
-    ],
-    "productId": "61ba2699449dd93b37fdb12f"
-  },
-  {
-    "name": "Golf - Uğur/UMD 1850 D - Donuk Dolap (185 cm)",
-    "barcode": "102181850850900",
-    "addedFrom": "getir-panel",
-    "addedAt": "2026-04-26T00:04:44.652Z",
-    "imageUrl": "https://cdn-image.getir.com/market/product/527948b1-c921-48ed-8136-9b56bf6e81f3.png",
-    "barcodes": [
-      "102181850850900"
-    ],
-    "productId": "620288330d3a0f2a090ff3f6",
-    "supplierReturnDays": 0
-  },
-  {
-    "name": "EcoCold 1620 3 Kapılı Dikey +4 İçecek Dolabı (Demirbaş)",
-    "barcode": "128041620782081",
-    "addedFrom": "getir-panel",
-    "addedAt": "2026-04-26T00:04:44.652Z",
-    "imageUrl": "https://cdn-image.getir.com/market/product/989f0731-09a1-4ca7-a095-8e3270c2ad5b.png",
-    "barcodes": [
-      "128041620782081"
-    ],
-    "productId": "6202977b2255df05a65908eb",
-    "supplierReturnDays": 0
-  },
-  {
-    "name": "Mr No Dardanel- Green Cooler/GC380C - MS & Şarküteri (0-4 °C)",
-    "barcode": "109040600622000",
-    "addedFrom": "getir-panel",
-    "addedAt": "2026-04-26T00:04:44.652Z",
-    "imageUrl": "https://cdn-image.getir.com/market/product/d4b99234-e6d3-4884-93a1-6f26f550aade.png",
-    "barcodes": [
-      "109040600622000"
-    ],
-    "productId": "6202ab908e0b7e062eb16324",
-    "supplierReturnDays": 0
-  },
-  {
-    "name": "Ülker Marifet Muffin Kraftı",
-    "barcode": "900000000000010",
-    "addedFrom": "getir-panel",
-    "addedAt": "2026-04-26T00:04:44.652Z",
-    "imageUrl": "https://cdn.getir.com/misc/product_placeholder_getir_logo.jpeg",
-    "barcodes": [
-      "900000000000010"
-    ],
-    "productId": "62068db8f281cd2866dddc6e"
-  },
-  {
-    "name": "Orkide Riviera Zeytinyağı (1 L)",
-    "barcode": "900000000000018",
-    "addedFrom": "getir-panel",
-    "addedAt": "2026-04-26T00:04:44.652Z",
-    "imageUrl": "https://cdn-image.getir.com/market/product/77102f06-68f5-4ddc-b886-0451e0774df2.jpg",
-    "barcodes": [
-      "900000000000018"
-    ],
-    "productId": "622ef1bdb951bd5379c07a38"
   },
   {
     "name": "Dardanel Konserve Ton Balığı (4 x 75 g)",
@@ -82654,40 +82016,6 @@
     "productId": "625d7d0b5b59c76b0b8cb8e2"
   },
   {
-    "name": "Eti Frigo - Uğur/UDD 100 SCEG - Donuk Dolap (60 cm)",
-    "barcode": "105180560560901",
-    "addedFrom": "getir-panel",
-    "addedAt": "2026-04-26T00:04:44.652Z",
-    "imageUrl": "https://cdn-image.getir.com/market/product/85fa2c24-70f9-400d-bf65-f4ef379d9a78.png",
-    "barcodes": [
-      "105180560560901"
-    ],
-    "productId": "626dc2be44350adc2947ffa5",
-    "supplierReturnDays": 0
-  },
-  {
-    "name": "Tire Kasa",
-    "barcode": "3000000000000014",
-    "addedFrom": "getir-panel",
-    "addedAt": "2026-04-26T00:04:44.652Z",
-    "imageUrl": "https://cdn.getir.com/misc/product_placeholder_getir_logo.jpeg",
-    "barcodes": [
-      "3000000000000014"
-    ],
-    "productId": "629da3f43f662e5464f62c75"
-  },
-  {
-    "name": "Rulot",
-    "barcode": "900000000000011",
-    "addedFrom": "getir-panel",
-    "addedAt": "2026-04-26T00:04:44.652Z",
-    "imageUrl": "https://cdn.getir.com/misc/product_placeholder_getir_logo.jpeg",
-    "barcodes": [
-      "900000000000011"
-    ],
-    "productId": "62a9c253cf64694ee175d9c7"
-  },
-  {
     "name": "Sensodyne Cam Bardak  (1 Adet)",
     "barcode": "1035133",
     "addedFrom": "getir-panel",
@@ -82698,42 +82026,6 @@
     ],
     "productId": "633ec9a8771f02c03855fced",
     "imageUrl": "https://cdn-image.getir.com/market/product/65ed8625-4b61-4928-a172-3e5046645292.jpg",
-    "supplierReturnDays": 0
-  },
-  {
-    "name": "Beyaz Zarf (Beyaz Zarf)",
-    "barcode": "900000000000013",
-    "addedFrom": "getir-panel",
-    "addedAt": "2026-04-26T00:04:44.652Z",
-    "barcodes": [
-      "900000000000013"
-    ],
-    "productId": "637615aeedb06d3ed20e0f2d",
-    "imageUrl": "https://cdn-image.getir.com/market/product/09b1a759-2e5d-4f8d-ab0e-4d772f3468fe.png",
-    "supplierReturnDays": 0
-  },
-  {
-    "name": "Müşteri Formu (Müşteri Formu)",
-    "barcode": "900000000000014",
-    "addedFrom": "getir-panel",
-    "addedAt": "2026-04-26T00:04:44.652Z",
-    "barcodes": [
-      "900000000000014"
-    ],
-    "productId": "637730ff2dcbb44fc72f955e",
-    "imageUrl": "https://cdn-image.getir.com/market/product/b7853627-3702-499f-a4ce-793ee0be4793.png",
-    "supplierReturnDays": 0
-  },
-  {
-    "name": "Mor Zarf (Mor Zarf)",
-    "barcode": "900000000000015",
-    "addedFrom": "getir-panel",
-    "addedAt": "2026-04-26T00:04:44.652Z",
-    "barcodes": [
-      "900000000000015"
-    ],
-    "productId": "6377318587a62a87438a79af",
-    "imageUrl": "https://cdn-image.getir.com/market/product/e3bb425a-e06f-4e05-97e1-a3da72809dcd.png",
     "supplierReturnDays": 0
   },
   {
@@ -82800,18 +82092,6 @@
     "supplierReturnDays": 0
   },
   {
-    "name": "Eksik Ürün Kartı ve Dondurma Afişi  ((Sarf))",
-    "barcode": "900000000000016",
-    "addedFrom": "getir-panel",
-    "addedAt": "2026-04-26T00:04:44.652Z",
-    "barcodes": [
-      "900000000000016"
-    ],
-    "productId": "6478800f7127de4bf70abdae",
-    "imageUrl": "https://cdn-image.getir.com/market/product/14505475-559c-4123-a04a-7b87fd83a960.jpg",
-    "supplierReturnDays": 0
-  },
-  {
     "name": "Knorr Çörekotu (60 g)",
     "barcode": "8683130025987",
     "addedFrom": "getir-panel",
@@ -82870,18 +82150,6 @@
     "productId": "6572f60ff0b3fcab4f617c10",
     "imageUrl": "https://cdn-image.getir.com/market/product/d8ecd1fe-9a5e-4395-8f0c-4adfc8fa9a02.jpg",
     "supplierReturnDays": 8
-  },
-  {
-    "name": "Pernigotti - Uğur/UDD 400 SC - Donuk Dolap (130 cm)",
-    "barcode": "104181300630900",
-    "addedFrom": "getir-panel",
-    "addedAt": "2026-04-26T00:04:44.652Z",
-    "barcodes": [
-      "104181300630900"
-    ],
-    "productId": "657955514f1e14d9a0c58f45",
-    "imageUrl": "https://cdn-image.getir.com/market/product/2d03f879-9214-4675-b55c-13ea25864417.jpg",
-    "supplierReturnDays": 0
   },
   {
     "name": "Veg&Bones Paça+İlikli Kemik Suyu (480 ml)",
@@ -82944,18 +82212,6 @@
     "supplierReturnDays": 0
   },
   {
-    "name": "Kraft Pide Kesesi",
-    "barcode": "1000000000000031",
-    "addedFrom": "getir-panel",
-    "addedAt": "2026-04-26T00:04:44.652Z",
-    "barcodes": [
-      "1000000000000031"
-    ],
-    "productId": "65ca2efe80b77f6ef68bf856",
-    "imageUrl": "https://cdn-image.getir.com/market/product/85ad5df7-a3f5-4e43-9884-7c995939ac10.jpeg",
-    "supplierReturnDays": 0
-  },
-  {
     "name": "Knorr Köri (65 g)",
     "barcode": "8683130055427",
     "addedFrom": "getir-panel",
@@ -82994,42 +82250,6 @@
     "supplierReturnDays": 18
   },
   {
-    "name": "Mavi Buz Jeli 25x35 (TR Ekipman)",
-    "barcode": "8000000000000001",
-    "addedFrom": "getir-panel",
-    "addedAt": "2026-04-26T00:04:44.652Z",
-    "barcodes": [
-      "8000000000000001"
-    ],
-    "productId": "6620f17f93184bcc800f5fe9",
-    "imageUrl": "https://cdn-image.getir.com/market/product/cd5c7990-713c-4ab8-aad2-a0a7b17b8e96.jpeg",
-    "supplierReturnDays": 0
-  },
-  {
-    "name": "Mandal (TR Ekipman)",
-    "barcode": "8000000000000004",
-    "addedFrom": "getir-panel",
-    "addedAt": "2026-04-26T00:04:44.652Z",
-    "barcodes": [
-      "8000000000000004"
-    ],
-    "productId": "6620f1a28212f5999dc805c9",
-    "imageUrl": "https://cdn-image.getir.com/market/product/3415c7f7-15b5-47b8-8853-4b46a2268862.png",
-    "supplierReturnDays": 0
-  },
-  {
-    "name": "Dondurma Uyarı Stickerı (TRE Ekipman)",
-    "barcode": "8000000000000005",
-    "addedFrom": "getir-panel",
-    "addedAt": "2026-04-26T00:04:44.652Z",
-    "barcodes": [
-      "8000000000000005"
-    ],
-    "productId": "663345b3b59b2c903fa0bee4",
-    "imageUrl": "https://cdn-image.getir.com/market/product/eb80dfa1-b042-4ee1-b9fd-b87984655245.png",
-    "supplierReturnDays": 0
-  },
-  {
     "name": "Humm Organik Glutensiz Vegan Kakaolu ve Fındıklı Kek (30 g)",
     "barcode": "8680050317949",
     "addedFrom": "getir-panel",
@@ -83040,35 +82260,6 @@
     "productId": "6639daed86577c5fbae5b316",
     "imageUrl": "https://cdn-image.getir.com/market/product/fbda72cd-3e66-4fbe-bb32-94a968b90dd0.jpg",
     "supplierReturnDays": 18
-  },
-  {
-    "name": "Starking Elma Paket (1 kg)",
-    "barcode": "1200000000000016",
-    "addedFrom": "getir-panel",
-    "addedAt": "2026-04-26T00:04:44.652Z",
-    "barcodes": [
-      "1200000000000016",
-      "783191098925",
-      "8682655004163"
-    ],
-    "productId": "671117542c4af4747dc5c335",
-    "imageUrl": "https://cdn-image.getir.com/market/product/0ea8f11f-e7cc-4eb7-9fad-3554042ef3e8.jpg",
-    "supplierReturnDays": 2
-  },
-  {
-    "name": "Granny Smith Elma Paket (1 kg)",
-    "barcode": "1200000000000013",
-    "addedFrom": "getir-panel",
-    "addedAt": "2026-04-26T00:04:44.652Z",
-    "barcodes": [
-      "1200000000000013",
-      "783191098949",
-      "8682655004101",
-      "8684278082429"
-    ],
-    "productId": "6711176748cbe5ce55a56d51",
-    "imageUrl": "https://cdn-image.getir.com/market/product/51971f09-1f4a-4ac9-8588-d8804caeca16.jpg",
-    "supplierReturnDays": 2
   },
   {
     "name": "Haribo Mix Bons (325 g)",
@@ -85738,5 +84929,4136 @@
     "productId": "69e0c016e93775b5afb59b20",
     "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260415120229582_eker-1.jpg",
     "supplierReturnDays": 9
+  },
+  {
+    "name": "Red Bull Şekersiz Enerji İçeceği (250 ml)",
+    "barcode": "9016284890456",
+    "imageUrl": "https://cdn-image.getir.com/market/product/cff586d8-590e-4cf1-b498-ee68e4dbb498.jpg",
+    "productId": "55983087b1dc700c006a7178",
+    "barcodes": [
+      "9016284890456"
+    ]
+  },
+  {
+    "name": "Nivea Kadın Fresh Natural Sprey Deodorant (150 ml)",
+    "barcode": "4005900155993",
+    "imageUrl": "https://cdn-image.getir.com/market/product/5f07fe59-1566-496a-bb28-10822395a2b6.jpg",
+    "productId": "559ddf9e5dc7a20c001662a3",
+    "barcodes": [
+      "4005900155993"
+    ]
+  },
+  {
+    "name": "Nivea Men Fresh Active Deodorant Sprey (150 ml)",
+    "barcode": "4005900155962",
+    "imageUrl": "https://cdn-image.getir.com/market/product/887d4d7c-52ef-41bf-88c1-0f7892004b3c.jpg",
+    "productId": "559fbae8f462100c004615fe",
+    "barcodes": [
+      "4005900155962"
+    ]
+  },
+  {
+    "name": "Feast Taze Fasulye (450 g)",
+    "barcode": "8697343550020",
+    "imageUrl": "https://cdn-image.getir.com/market/product/d8db2f95-0520-467a-b967-6bc3b8648293.jpg",
+    "productId": "56fcf95b14d7540300fde456",
+    "barcodes": [
+      "8697343550020"
+    ]
+  },
+  {
+    "name": "Algida - Uğur/UDD 600 SC - Donuk Dolap (206 cm)",
+    "barcode": "1011820606309",
+    "imageUrl": "https://cdn-image.getir.com/market/product/7bc84aa9-9c22-43ed-bd49-0dcd33ac4e93.png",
+    "productId": "5831a534cac74c0004189dba",
+    "barcodes": [
+      "1011820606309"
+    ]
+  },
+  {
+    "name": "Knorr Tavuk Suyu Bulyon (12 x 10 g)",
+    "barcode": "8683130143902",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260503044924562_8683130143902.01.png",
+    "productId": "58a1b80ef24e4d00048d81ec",
+    "barcodes": [
+      "8683130143902"
+    ]
+  },
+  {
+    "name": "Tamek Bezelye Konservesi (670 g)",
+    "barcode": "8690575061913",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260709090853856_Bezelye-670.jpg",
+    "productId": "58d3ba1ca56b8e00048304d8",
+    "barcodes": [
+      "8690575061913"
+    ]
+  },
+  {
+    "name": "Knorr Et Suyu Bulyon (12 x 10 g)",
+    "barcode": "8683130144176",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260503045226672_8683130144176.01.png",
+    "productId": "5ae99e28fe59200004000d0f",
+    "barcodes": [
+      "8683130144176"
+    ]
+  },
+  {
+    "name": "Raid Hamam Böceği Yemi ile 3 Ay Koruma (6'lı)",
+    "barcode": "8684623000399",
+    "imageUrl": "https://cdn.getir.com/product/5b0d631bd3d3a30004143db7_tr_1621939825801.jpeg",
+    "productId": "5b0d631bd3d3a30004143db7",
+    "barcodes": [
+      "8684623000399"
+    ]
+  },
+  {
+    "name": "Raid Karınca Yemi ile 3 Ay Koruma (2'li)",
+    "barcode": "8684623000412",
+    "imageUrl": "https://cdn.getir.com/product/5b0d638085b84500045bf149_939edf40-6217-4fec-80e3-0860e55d11d9.jpeg",
+    "productId": "5b0d638085b84500045bf149",
+    "barcodes": [
+      "8684623000412"
+    ]
+  },
+  {
+    "name": "Annas Orange Thins Portakallı Bisküvi (150 g)",
+    "barcode": "7312220035735",
+    "imageUrl": "https://cdn-image.getir.com/market/product/defa0097-8751-4fdb-8bbc-b00b5208a00e.png",
+    "productId": "5bb5a6c842e85d00183c903d",
+    "barcodes": [
+      "7312220035735"
+    ]
+  },
+  {
+    "name": "Kühne Paprikano Sos (350 g)",
+    "barcode": "8696027011970",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260727104211110_kuhne-paprikano-01.jpg",
+    "productId": "5ce6581dfd9b330001c4a8a7",
+    "barcodes": [
+      "8696027011970"
+    ]
+  },
+  {
+    "name": "Raya Serbest Gezen Tavuk Yumurtası (10'lu)",
+    "barcode": "4354368680596",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260511110418056_1EBE1EA7-ED3A-498D-A9DE-422FC014084F.jpg",
+    "productId": "5ce6581ea72a950001cc87e5",
+    "barcodes": [
+      "4354368680596"
+    ]
+  },
+  {
+    "name": "Nivea Men Deep Dimension Deodorant Roll On (50 ml)",
+    "barcode": "4234983942495",
+    "imageUrl": "https://cdn-image.getir.com/market/product/c8a85ec1-a0c6-468a-a16a-f8c8b48c2952.jpg",
+    "productId": "5ce65820fd9b330001c4a92d",
+    "barcodes": [
+      "4234983942495"
+    ]
+  },
+  {
+    "name": "Ananas (1 Adet)",
+    "barcode": "2449641601012",
+    "imageUrl": "https://cdn-image.getir.com/market/product/3fda4f4b-15a2-4b24-b1e6-8aba94802b64.jpg",
+    "productId": "5ceae0399d3ea8000196e14a",
+    "barcodes": [
+      "2449641601012"
+    ]
+  },
+  {
+    "name": "Olips Çilek Aromalı Şeker (28 g)",
+    "barcode": "7622210710499",
+    "imageUrl": "https://cdn-image.getir.com/market/product/bbb0470b-d47c-442b-8a88-63ebd2a3eeb8.jpg",
+    "productId": "5ced482cd349d10001e70524",
+    "barcodes": [
+      "7622210710499"
+    ]
+  },
+  {
+    "name": "Ozmo Fun Meslekler Serisi Çikolata (23 g)",
+    "barcode": "8691707060200",
+    "imageUrl": "https://cdn.getir.com/product/5ced482e4a8a2a000137da77_tr_1563722630132.jpeg",
+    "productId": "5ced482e4a8a2a000137da77",
+    "barcodes": [
+      "8691707060200"
+    ]
+  },
+  {
+    "name": "Dereotu Paket (1 Adet)",
+    "barcode": "8680422241698",
+    "imageUrl": "https://cdn-image.getir.com/market/product/2c82999b-b882-4400-80cd-02e9af6b4823.jpg",
+    "productId": "5ced482f4a8a2a000137da88",
+    "barcodes": [
+      "8680422241698"
+    ]
+  },
+  {
+    "name": "Ozmo Popsy 3'lü (24 g)",
+    "barcode": "8691707079677",
+    "imageUrl": "https://cdn-image.getir.com/market/product/2add1297-1557-4234-9e50-93f0b52ad879.jpg",
+    "productId": "5ced48304a8a2a000137daaa",
+    "barcodes": [
+      "8691707079677"
+    ]
+  },
+  {
+    "name": "Maydanoz Paket (1 Adet)",
+    "barcode": "8680422241643",
+    "imageUrl": "https://cdn-image.getir.com/market/product/d326851b-c0eb-4f46-8dcc-e31fe9c8a894.jpg",
+    "productId": "5ced4830d349d10001e7055c",
+    "barcodes": [
+      "8680422241643"
+    ]
+  },
+  {
+    "name": "SEK Kakaolu Süt (180 ml)",
+    "barcode": "8692095343869",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260730112139909_sek-kakaolu-sut-01.jpg",
+    "productId": "5d03bb6889c5f10001c36b63",
+    "barcodes": [
+      "8692095343869"
+    ]
+  },
+  {
+    "name": "Beyaz Nektarin Paket (500 g)",
+    "barcode": "8245879542363",
+    "imageUrl": "https://cdn-image.getir.com/market/product/fd5bb755-587f-4ce8-aed9-75b60adb6d98.jpg",
+    "productId": "5d28785b8f22180001c3a744",
+    "barcodes": [
+      "8245879542363"
+    ]
+  },
+  {
+    "name": "Beyaz Lahana (1 - 1,5 kg)",
+    "barcode": "8682588731211",
+    "imageUrl": "https://cdn.getir.com/product/beyazlahana_5dd2a56bfb2a975868e4e45c.png",
+    "productId": "5e3f1399c30e40f171645b17",
+    "barcodes": [
+      "8682588731211"
+    ]
+  },
+  {
+    "name": "Çengelköy Salatalık (1 kg)",
+    "barcode": "8682588730429",
+    "imageUrl": "https://cdn-image.getir.com/market/product/5271fc44-872c-41d4-8359-66bd742e232d.jpeg",
+    "productId": "5e3f20825454c34b5100b279",
+    "barcodes": [
+      "8682588730429"
+    ]
+  },
+  {
+    "name": "Dereotu (1 Demet)",
+    "barcode": "8682588730436",
+    "imageUrl": "https://cdn.getir.com/product/dereotu_5ced482f4a8a2a000137da88.png",
+    "productId": "5e3f23043e9ff8a3b9bd8f3e",
+    "barcodes": [
+      "8682588730436"
+    ]
+  },
+  {
+    "name": "Kırmızı Turp (500 g)",
+    "barcode": "8682588730535",
+    "imageUrl": "https://cdn-image.getir.com/market/product/892e0c0b-66de-4daf-9b3b-c14a8c6589ef.jpeg",
+    "productId": "5e3f3197b27db1346c04b5d0",
+    "barcodes": [
+      "8682588730535"
+    ]
+  },
+  {
+    "name": "Pancar (1 kg)",
+    "barcode": "8682588730733",
+    "imageUrl": "https://cdn-image.getir.com/market/product/e232e140-316e-41bb-88e7-ac788d6bc930.jpeg",
+    "productId": "5e405bf8d040fce99d423ad7",
+    "barcodes": [
+      "8682588730733"
+    ]
+  },
+  {
+    "name": "Finish Quantum Max Bulaşık Makinesi Deterjanı Tableti (22'li)",
+    "barcode": "8682539006764",
+    "imageUrl": "https://cdn-image.getir.com/market/product/31f5a80c-984e-4b73-b07e-446128addf78.jpg",
+    "productId": "5eb3cc73d27f6821167c5491",
+    "barcodes": [
+      "8682539006764"
+    ]
+  },
+  {
+    "name": "Bostan Patlıcan (1 kg)",
+    "barcode": "8633136300120",
+    "imageUrl": "https://cdn.getir.com/product/bostanpatlican_5eec91c555db99c69af6fd5c.png",
+    "productId": "5eec91c555db99c69af6fd5c",
+    "barcodes": [
+      "8633136300120"
+    ]
+  },
+  {
+    "name": "Golf Maraşım %81 Sütlü Sade (500 ml)",
+    "barcode": "9087897678908",
+    "imageUrl": "https://cdn-image.getir.com/market/product/78666d49-e07d-417e-8bef-d8ca72670840.jpg",
+    "productId": "5ef3140c6b28dc4894aaec11",
+    "barcodes": [
+      "9087897678908"
+    ]
+  },
+  {
+    "name": "Deniz Börülcesi Paket (1 Demet)",
+    "barcode": "8627155211123",
+    "imageUrl": "https://cdn-image.getir.com/market/product/fadd2445-697d-438b-983e-c29322002f3a.jpg",
+    "productId": "5f2184807f335f45bb6caa42",
+    "barcodes": [
+      "8627155211123"
+    ]
+  },
+  {
+    "name": "Rio Domates (1 kg)",
+    "barcode": "8680853031516",
+    "imageUrl": "https://cdn-image.getir.com/market/product/701f08bb-5e0a-4ed3-a8c5-675b0d5f562c.jpg",
+    "productId": "5f61cf375a4fb98e0dc18cd9",
+    "barcodes": [
+      "8680853031516"
+    ]
+  },
+  {
+    "name": "Kestane Mantarı Paket (400 g)",
+    "barcode": "8681072355209",
+    "imageUrl": "https://cdn-image.getir.com/market/product/e07de01b-a1e2-4c95-8de5-f57b897b1b17.jpg",
+    "productId": "5f8edbc9f6f2d50f190ce918",
+    "barcodes": [
+      "8681072355209"
+    ]
+  },
+  {
+    "name": "Obsesso Coconut Latte (250 ml)",
+    "barcode": "8690558033906",
+    "imageUrl": "https://cdn-image.getir.com/market/product/724f22d5-7398-44d2-87d8-90dbbb5e4668.jpg",
+    "productId": "5fb6328dd395828606c3647e",
+    "barcodes": [
+      "8690558033906"
+    ]
+  },
+  {
+    "name": "Vegeat's Fırınlanmış Acı Paprika Aromalı Nohut Cipsi (50 g)",
+    "barcode": "8681982003139",
+    "imageUrl": "https://cdn-image.getir.com/market/product/0ed740ab-414f-420d-92e0-97b59391f041.jpg",
+    "productId": "5fbf92f919f5ac4223f7d229",
+    "barcodes": [
+      "8681982003139"
+    ]
+  },
+  {
+    "name": "Arifoğlu Kuş Üzümü (40 g)",
+    "barcode": "8691530216232",
+    "imageUrl": "https://cdn-image.getir.com/market/product/96b69107-b486-4ecf-8bdb-ba8243346112.jpeg",
+    "productId": "606af378e30a822d7e0d215d",
+    "barcodes": [
+      "8691530216232"
+    ]
+  },
+  {
+    "name": "Pernigotti - Uğur/UDD 200 SC - Donuk Dolap (72 cm)",
+    "barcode": "1041807206309",
+    "imageUrl": "https://cdn-image.getir.com/market/product/e41164e0-8d35-4a9c-b66e-22b28918b711.png",
+    "productId": "607860637fda0d5c8d8766ee",
+    "barcodes": [
+      "1041807206309"
+    ]
+  },
+  {
+    "name": "Feast - Uğur/UDD 1450 D - Donuk Dolap (145 cm)",
+    "barcode": "1071814508509",
+    "imageUrl": "https://cdn-image.getir.com/market/product/ec4e3442-d52d-4f7f-a429-77d04684ad22.png",
+    "productId": "60813c805f5b9e18bacd4e39",
+    "barcodes": [
+      "1071814508509"
+    ]
+  },
+  {
+    "name": "Eti Lifalif İnce Öğütülmüş Müsli Hibiskuslu (250 g)",
+    "barcode": "8690526019949",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260604105718704_eti-lifalif-8690526019949-01.jpg",
+    "productId": "60d969fbf5198e7be77e46d5",
+    "barcodes": [
+      "8690526019949"
+    ]
+  },
+  {
+    "name": "Çiftçi Kırmızı Mercimek (1 kg)",
+    "barcode": "8693374190556",
+    "imageUrl": "https://cdn-image.getir.com/market/product/76de9244-b54b-4a8d-8454-966b6a9482ff.jpg",
+    "productId": "611a1a9ba30f87759104efa9",
+    "barcodes": [
+      "8693374190556"
+    ]
+  },
+  {
+    "name": "Çiftçi Kuru Fasulye (1 kg)",
+    "barcode": "8693374190235",
+    "imageUrl": "https://cdn-image.getir.com/market/product/7b07a722-2505-4b0e-95c7-6ee21ce48622.jpg",
+    "productId": "611a1b3b4bc37a6fcec08ca9",
+    "barcodes": [
+      "8693374190235"
+    ]
+  },
+  {
+    "name": "Çiftçi Pilavlık Bulgur (1 kg)",
+    "barcode": "8693374190143",
+    "imageUrl": "https://cdn-image.getir.com/market/product/52c812db-de1c-4067-9bf0-242b95d1e925.jpg",
+    "productId": "611a1bdf6e76a4bee4b47216",
+    "barcodes": [
+      "8693374190143"
+    ]
+  },
+  {
+    "name": "Teksüt Dilimli Tost Peynir (350 g)",
+    "barcode": "8690158123809",
+    "imageUrl": "https://cdn.getir.com/product/61727de685eed76368c24f69_tr_1635174855194.jpeg",
+    "productId": "61727de685eed76368c24f69",
+    "barcodes": [
+      "8690158123809"
+    ]
+  },
+  {
+    "name": "Marul (1 Adet)",
+    "barcode": "8682588735172",
+    "imageUrl": "https://cdn.getir.com/product/marul_5eec9467d4403a8f27a7aa95.png",
+    "productId": "61b1b03f6ba6a9cce7300d2e",
+    "barcodes": [
+      "8682588735172"
+    ]
+  },
+  {
+    "name": "Clasigo Sütlü Çikolatalı Kaplı Bar (55 g)",
+    "barcode": "8680512030089",
+    "imageUrl": "https://cdn.getir.com/product/61b7517d76bc62fcfc712883_tr_1639491228348.jpeg",
+    "productId": "61b7517d76bc62fcfc712883",
+    "barcodes": [
+      "8680512030089"
+    ]
+  },
+  {
+    "name": "Köy Biberi (500 g)",
+    "barcode": "2158942778919",
+    "imageUrl": "https://cdn.getir.com/product/koybiberi_61e02d1a667a7d4e3f8f1c4f.png",
+    "productId": "61e02d1a667a7d4e3f8f1c4f",
+    "barcodes": [
+      "2158942778919"
+    ]
+  },
+  {
+    "name": "Golf - Uğur/UDD 600 SC - Donuk Dolap (206 cm)",
+    "barcode": "1021820606309",
+    "imageUrl": "https://cdn-image.getir.com/market/product/4091bb46-25c2-4860-bfff-b71a39f317cf.png",
+    "productId": "6202872f88f0424b6919cf00",
+    "barcodes": [
+      "1021820606309"
+    ]
+  },
+  {
+    "name": "Ekonomik Patates (5 kg)",
+    "barcode": "8682588732614",
+    "imageUrl": "https://cdn.getir.com/product/ekonomikpatates5kg_61c42005c41c6e42d8bd6c71.png",
+    "productId": "6220cc7543c082b393aa5a6d",
+    "barcodes": [
+      "8682588732614"
+    ]
+  },
+  {
+    "name": "İçim Yarım Yağlı Yoğurt (2 kg)",
+    "barcode": "8692971425412",
+    "imageUrl": "https://cdn-image.getir.com/market/product/17a2b152-b8e3-49df-9a85-4e105ec05699.jpg",
+    "productId": "62304231d161da1581202f63",
+    "barcodes": [
+      "8692971425412"
+    ]
+  },
+  {
+    "name": "Çaykur 42 Nolu Tirebolu Çayı (500 g)",
+    "barcode": "8690105001105",
+    "imageUrl": "https://cdn-image.getir.com/market/product/0c7522e5-a56a-4531-ad60-c006d7ba1e60.jpg",
+    "productId": "62349ecb311296c74793fb20",
+    "barcodes": [
+      "8690105001105"
+    ]
+  },
+  {
+    "name": "Fantasia Choco Ring (130 ml)",
+    "barcode": "8698313599674",
+    "imageUrl": "https://cdn-image.getir.com/market/product/4ca334d8-288c-48fa-92ef-4eef85ca4f1a.jpg",
+    "productId": "623da6704abfba83c57d05f3",
+    "barcodes": [
+      "8698313599674"
+    ]
+  },
+  {
+    "name": "Golf Fantasia Çikolata Üçlüsü  (130 ml)",
+    "barcode": "8698313599667",
+    "imageUrl": "https://cdn-image.getir.com/market/product/2529f935-b5ff-4f16-9833-ae2c146cb107.jpg",
+    "productId": "623daacfee051607c123d6c1",
+    "barcodes": [
+      "8698313599667"
+    ]
+  },
+  {
+    "name": "Sinangil Gluten Yok Hamburger Ekmeği (285 g)",
+    "barcode": "8697702980222",
+    "imageUrl": "https://cdn-image.getir.com/market/product/4146433f-0446-48b4-ba82-512f2de646b9.png",
+    "productId": "624fd665b8455b6fb6314c6c",
+    "barcodes": [
+      "8697702980222"
+    ]
+  },
+  {
+    "name": "Kavun Galya (1,5 - 2 kg)",
+    "barcode": "8681511365998",
+    "imageUrl": "https://cdn-image.getir.com/market/product/6283e0cd-8fa5-4760-bf8a-04ecb49f678f.jpg",
+    "productId": "6278ef7e565493ba06ab2456",
+    "barcodes": [
+      "8681511365998"
+    ]
+  },
+  {
+    "name": "Eurofresh Yıkanmış Kıvırcık Marul Paket (150 g)",
+    "barcode": "8680422241810",
+    "imageUrl": "https://cdn.getir.com/product/627a33db5afdc7f088911613_tr_1652193159248.png",
+    "productId": "627a33db5afdc7f088911613",
+    "barcodes": [
+      "8680422241810"
+    ]
+  },
+  {
+    "name": "Fairy Platinum Plus Ultra Bulaşık Makinesi Kapsülü (12'li)",
+    "barcode": "8006540409824",
+    "imageUrl": "https://cdn.getir.com/product/6294889c893fa484644cd0fb_tr_1653920960534.jpeg",
+    "productId": "6294889c893fa484644cd0fb",
+    "barcodes": [
+      "8006540409824"
+    ]
+  },
+  {
+    "name": "Karpuz (7 - 8 kg)",
+    "barcode": "8682588735523",
+    "imageUrl": "https://cdn-image.getir.com/market/product/975588fa-1fba-443d-a33a-5d35edffd561.jpeg",
+    "productId": "62ab179570941aa4b1713ddc",
+    "barcodes": [
+      "8682588735523"
+    ]
+  },
+  {
+    "name": "Yazlık Korumalı Pantolon Tech90 3XL (TR Ekipman)",
+    "barcode": "1179000800077",
+    "imageUrl": "https://cdn-image.getir.com/market/product/0705ab15-70d0-44ec-b674-73b3d4e7dc75.jpg",
+    "productId": "62b6f5cc73da8333885e22e9",
+    "barcodes": [
+      "1179000800077"
+    ]
+  },
+  {
+    "name": "Motor Kaskı IXS L (TR Ekipman)",
+    "barcode": "1219000800049",
+    "imageUrl": "https://cdn-image.getir.com/market/product/fbfb178e-3788-4717-b0c6-0441e63cf868.jpg",
+    "productId": "62b726e388d80544d9a1fed4",
+    "barcodes": [
+      "1219000800049"
+    ]
+  },
+  {
+    "name": "Motor Kaskı IXS XL (TR Ekipman)",
+    "barcode": "1219000800056",
+    "imageUrl": "https://cdn-image.getir.com/market/product/872dec91-f07e-4e09-9423-d27b8cf954dd.jpg",
+    "productId": "62b72763b1524b87380b43c5",
+    "barcodes": [
+      "1219000800056"
+    ]
+  },
+  {
+    "name": "El Terminali L2 Sunmi (TR Ekipman)",
+    "barcode": "6972253510909",
+    "imageUrl": "https://cdn-image.getir.com/market/product/6cf7b4e2-f412-4a72-9bf8-42fbd359d6ce.jpg",
+    "productId": "62b7332a4c9b82d6c020ea29",
+    "barcodes": [
+      "6972253510909"
+    ]
+  },
+  {
+    "name": "El Terminali L2 Sunmi Ekran Koruyucu Buyx (TR Ekipman)",
+    "barcode": "2719003200024",
+    "imageUrl": "https://cdn-image.getir.com/market/product/134735de-e783-4d86-8a10-3929cbdf9a11.jpg",
+    "productId": "62b7377bca2d75c3c3d08185",
+    "barcodes": [
+      "2719003200024"
+    ]
+  },
+  {
+    "name": "Kısa Kollu T-shirt Benek M (TR Ekipman)",
+    "barcode": "1169002400030",
+    "imageUrl": "https://cdn-image.getir.com/market/product/25edae8d-3a5c-4b26-944c-07c4df194d7a.jpg",
+    "productId": "62b74f55885a1a4410aebf14",
+    "barcodes": [
+      "1169002400030"
+    ]
+  },
+  {
+    "name": "Kısa Kollu T-shirt Benek L (TR Ekipman)",
+    "barcode": "1169002400047",
+    "imageUrl": "https://cdn-image.getir.com/market/product/779893a0-8699-4ad5-8257-8b62ec3ea3b4.jpg",
+    "productId": "62b74f9f7e887aedeee8f57f",
+    "barcodes": [
+      "1169002400047"
+    ]
+  },
+  {
+    "name": "Kısa Kollu T-shirt Benek XL (TR Ekipman)",
+    "barcode": "1169002400054",
+    "imageUrl": "https://cdn-image.getir.com/market/product/cd6faf2e-972a-45a0-a291-8bd670cecc64.jpg",
+    "productId": "62b74fe680fdd260d47e1e9c",
+    "barcodes": [
+      "1169002400054"
+    ]
+  },
+  {
+    "name": "Yazlık Korumalı Pantolon Tex M (TR Ekipman)",
+    "barcode": "1179000900036",
+    "imageUrl": "https://cdn-image.getir.com/market/product/5800ebb2-501f-4d20-bab7-1fffc3554368.jpg",
+    "productId": "62b75c713bb1536825e76883",
+    "barcodes": [
+      "1179000900036"
+    ]
+  },
+  {
+    "name": "Dardanel Sushida California Roll (205 g)",
+    "barcode": "8690559020448",
+    "imageUrl": "https://cdn-image.getir.com/market/product/98de5c06-0f55-4c02-bc17-2095b20a5575.jpg",
+    "productId": "62bd8b47f4ced2207c25d69a",
+    "barcodes": [
+      "8690559020448"
+    ]
+  },
+  {
+    "name": "Dardanel Sushida Philadelpihia Roll (205 g)",
+    "barcode": "8690559020455",
+    "imageUrl": "https://cdn-image.getir.com/market/product/9afd75c8-9d59-4bf9-969f-ca1bcedc6bcf.jpg",
+    "productId": "62bd915693004ffe673e891d",
+    "barcodes": [
+      "8690559020455"
+    ]
+  },
+  {
+    "name": "Dardanel Sushida Tokyo Mix (190 g)",
+    "barcode": "8690559020424",
+    "imageUrl": "https://cdn-image.getir.com/market/product/4c06833b-f126-4a4d-b846-beb23af6c941.jpg",
+    "productId": "62bd9c3dde653526868d8bf1",
+    "barcodes": [
+      "8690559020424"
+    ]
+  },
+  {
+    "name": "Dardanel Sushida Kyoto Mix (210 g)",
+    "barcode": "8690559020431",
+    "imageUrl": "https://cdn-image.getir.com/market/product/aad19e80-1325-43dc-8456-50dd56eeae09.jpg",
+    "productId": "62bd9d634af1e61e5a643b16",
+    "barcodes": [
+      "8690559020431"
+    ]
+  },
+  {
+    "name": "Polar Pasin M (TR Ekipman)",
+    "barcode": "8683583894185",
+    "imageUrl": "https://cdn-image.getir.com/market/product/c847dd6a-37be-4135-99cc-cbc23f392c0a.jpg",
+    "productId": "62e60be42fe2eb15a0755164",
+    "barcodes": [
+      "8683583894185"
+    ]
+  },
+  {
+    "name": "Girit Kabak (1 kg)",
+    "barcode": "8682588737701",
+    "imageUrl": "https://cdn.getir.com/product/62f39e52e98a8c5cc3d12311_tr_1660214193081.jpeg",
+    "productId": "62f39e52e98a8c5cc3d12311",
+    "barcodes": [
+      "8682588737701"
+    ]
+  },
+  {
+    "name": "Portakal (2 kg)",
+    "barcode": "8372118520087",
+    "imageUrl": "https://cdn-image.getir.com/market/product/ca3ff162-5354-4306-810e-b4c5d82004d5.jpg",
+    "productId": "635bc4824b4e04ddfa6b553d",
+    "barcodes": [
+      "8372118520087"
+    ]
+  },
+  {
+    "name": "Soyulmuş Balkabağı (1 kg)",
+    "barcode": "8286588738050",
+    "imageUrl": "https://cdn-image.getir.com/market/product/bd84bb82-2dd8-4e7b-8dc1-ba198ba91373.jpeg",
+    "productId": "636b51f9c0bed341e08a8637",
+    "barcodes": [
+      "8286588738050"
+    ]
+  },
+  {
+    "name": "Ozmo Fun Figürlü Çikolata (23 g)",
+    "barcode": "7845378457784",
+    "imageUrl": "https://cdn-image.getir.com/market/product/ff2ed29f-2b6d-4920-a947-693f7e2da968.jpg",
+    "productId": "63870847304e57eaad758fb5",
+    "barcodes": [
+      "7845378457784"
+    ]
+  },
+  {
+    "name": "Doyum Kırmızı Mercimek (1 kg)",
+    "barcode": "8699409718009",
+    "imageUrl": "https://cdn-image.getir.com/market/product/ef7cd9fa-a519-4ac9-8393-420a44e03c30.jpg",
+    "productId": "63879e51d4947e9700ad9368",
+    "barcodes": [
+      "8699409718009"
+    ]
+  },
+  {
+    "name": "Doyum Nohut (1 kg)",
+    "barcode": "8699409718023",
+    "imageUrl": "https://cdn-image.getir.com/market/product/91a42b57-14af-4687-bf8c-1969266dfa08.jpg",
+    "productId": "6387a1dbbac9be134d66fb5c",
+    "barcodes": [
+      "8699409718023"
+    ]
+  },
+  {
+    "name": "Doyum Dermason Kuru Fasulye (1 kg)",
+    "barcode": "8699409718085",
+    "imageUrl": "https://cdn-image.getir.com/market/product/684c4efe-5d3e-46dd-a069-e56594efd4c0.jpg",
+    "productId": "6387a3dfc1eb6ed2c9b53eb3",
+    "barcodes": [
+      "8699409718085"
+    ]
+  },
+  {
+    "name": "Cibus Toz Eski Kaşar Peyniri (100 g)",
+    "barcode": "8680335510485",
+    "imageUrl": "https://cdn-image.getir.com/market/product/073842ff-85b6-4dcf-8004-d3c0cd8d3150.jpg",
+    "productId": "6419a04ee239ce6ae05b006f",
+    "barcodes": [
+      "8680335510485"
+    ]
+  },
+  {
+    "name": "Nivea Kuru Ciltler için Makyaj Temizleme Mendili (25'li)",
+    "barcode": "6001051005383",
+    "imageUrl": "https://cdn-image.getir.com/market/product/45e8f617-b15b-4c4a-96fb-e6b835a5f45e.jpg",
+    "productId": "644795aa37feb4d12d602d9f",
+    "barcodes": [
+      "6001051005383"
+    ]
+  },
+  {
+    "name": "Tibers Bol Peynirli Baget Sandviç (130 g)",
+    "barcode": "8684000185312",
+    "imageUrl": "https://cdn-image.getir.com/market/product/caaa78f1-d9d5-485a-866c-55f2d77e1773.jpg",
+    "productId": "6448c7e0820ea016b3bd046a",
+    "barcodes": [
+      "8684000185312"
+    ]
+  },
+  {
+    "name": "Tibers Kaşarlı Piliç Salamlı Sandviç (130 g)",
+    "barcode": "8684000185305",
+    "imageUrl": "https://cdn-image.getir.com/market/product/e0b62eb4-72ac-4024-b85d-20f0837509bb.jpg",
+    "productId": "6448c7f27ec0636a78a69675",
+    "barcodes": [
+      "8684000185305"
+    ]
+  },
+  {
+    "name": "Tibers Hindi Fümeli Baget Sandviç (130 g)",
+    "barcode": "8684000185329",
+    "imageUrl": "https://cdn-image.getir.com/market/product/c4788d4e-2843-4fcd-bd47-400e0a4783a3.jpg",
+    "productId": "644a4eacdaa9a31f1ecf659c",
+    "barcodes": [
+      "8684000185329"
+    ]
+  },
+  {
+    "name": "Pastavilla Tam Buğday Spagetti (350 g)",
+    "barcode": "8690684006430",
+    "imageUrl": "https://cdn-image.getir.com/market/product/fc9a5b20-0eba-4aa3-84a2-c718a4c5ce50.jpg",
+    "productId": "644ad737cab30f0a6d4991aa",
+    "barcodes": [
+      "8690684006430"
+    ]
+  },
+  {
+    "name": "Tibers Çıtır Tavuk Burger (180 g)",
+    "barcode": "8684000185565",
+    "imageUrl": "https://cdn-image.getir.com/market/product/88d8eb57-b980-4103-9806-76b42a69b580.jpg",
+    "productId": "64520c13ebe61d44bdb292bd",
+    "barcodes": [
+      "8684000185565"
+    ]
+  },
+  {
+    "name": "Elidor Anında Onarıcı Sıvı Saç Bakım Kremi (200 ml)",
+    "barcode": "8683130004210",
+    "imageUrl": "https://cdn-image.getir.com/market/product/09bf12df-e64e-47e2-866c-7253f6e345fb.jpg",
+    "productId": "645cfb9bc135b74fe9a0adb5",
+    "barcodes": [
+      "8683130004210"
+    ]
+  },
+  {
+    "name": "Finish Ultimate Hepsi 1 Arada Bulaşık Makinesi Tableti (22'li)",
+    "barcode": "6001913105870",
+    "imageUrl": "https://cdn-image.getir.com/market/product/b2ae125c-3728-4880-897c-fe57227ae1ac.jpg",
+    "productId": "646b64b96264b44102e23113",
+    "barcodes": [
+      "6001913105870"
+    ]
+  },
+  {
+    "name": "Komili Kepeğe Karşı Şampuan (500 ml)",
+    "barcode": "8697404380672",
+    "imageUrl": "https://cdn-image.getir.com/market/product/8cf44177-1b1a-49a4-b614-97d04abaab7d.jpg",
+    "productId": "64882abc029b7c80ae8b633a",
+    "barcodes": [
+      "8697404380672"
+    ]
+  },
+  {
+    "name": "Bobo Nuts Tuz & Karabiber Çeşnili Kaju Fıstığı (120 g)",
+    "barcode": "8682084010063",
+    "imageUrl": "https://cdn-image.getir.com/market/product/b840e092-340d-4bdd-9a84-8c958563dfbd.jpg",
+    "productId": "64c35e9f7ba218a4b141ecf1",
+    "barcodes": [
+      "8682084010063"
+    ]
+  },
+  {
+    "name": "Ülker Albeni Heyecanlı Yapay Zeka Tasarımı (40 g)",
+    "barcode": "8683508034580",
+    "imageUrl": "https://cdn-image.getir.com/market/product/58a9b29e-1ed5-4899-9898-09e6ca7b5307.jpg",
+    "productId": "64c8c0ca40bcc4950c11d8dc",
+    "barcodes": [
+      "8683508034580"
+    ]
+  },
+  {
+    "name": "Köy Domatesi (1 kg)",
+    "barcode": "8680505000105",
+    "imageUrl": "https://cdn-image.getir.com/market/product/3a480839-ed98-47c7-be72-50aa4eed5519.jpg",
+    "productId": "64ccf55dbc91cac8cff02699",
+    "barcodes": [
+      "8680505000105"
+    ]
+  },
+  {
+    "name": "Colgate Optic White Kahve, Çay ve Tütün Kullanıcıları Diş Macunu (125 ml)",
+    "barcode": "8718951590526",
+    "imageUrl": "https://cdn-image.getir.com/market/product/eec6abb5-49a2-4833-bbe6-2e1df2ac4c50.jpg",
+    "productId": "64df75cd0e6cf923cd5f6ff4",
+    "barcodes": [
+      "8718951590526"
+    ]
+  },
+  {
+    "name": "Gerber Organik Yulaflı Elma ve Mango Püre (110 g)",
+    "barcode": "8445290494573",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260803064416301_gerber-organic-for-baby-ylaf-elma-mango-01.jpg",
+    "productId": "650b1d84a47f10bb246e5e3c",
+    "barcodes": [
+      "8445290494573"
+    ]
+  },
+  {
+    "name": "Mandıradan Keş Peyniri (175 g)",
+    "barcode": "8680335516906",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260522065934374_mandiradan-kes.jpg",
+    "productId": "65686c7f7748f1cb12707b87",
+    "barcodes": [
+      "8680335516906"
+    ]
+  },
+  {
+    "name": "Hipp Organik Elma ve Muz Püresi (190 g)",
+    "barcode": "9062300117001",
+    "imageUrl": "https://cdn-image.getir.com/market/product/64578808-e94e-4c9f-9b48-86eaac3d828f.jpg",
+    "productId": "6570682ea28386466f7cc012",
+    "barcodes": [
+      "9062300117001"
+    ]
+  },
+  {
+    "name": "Toblerone Beyaz Tablet Çikolata (100 g)",
+    "barcode": "7622201755119",
+    "imageUrl": "https://cdn-image.getir.com/market/product/c543688f-f464-46b7-93cd-36c39e8bcc05.jpg",
+    "productId": "6572f4ede48c67c03e9d6087",
+    "barcodes": [
+      "7622201755119"
+    ]
+  },
+  {
+    "name": "Güven Asa Sızma Zeytinyağı (1,5 L)",
+    "barcode": "8680508013638",
+    "imageUrl": "https://cdn-image.getir.com/market/product/0b323137-f731-4642-97c2-23bd7c118b3b.jpg",
+    "productId": "657c3ff5fc9b48053014ec79",
+    "barcodes": [
+      "8680508013638"
+    ]
+  },
+  {
+    "name": "Orkid Platinum Gece (5'li)",
+    "barcode": "8700216186940",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260415090444496_8700216186940_2-power-image-_1_.jpg",
+    "productId": "658bfbac2b67d685342798c2",
+    "barcodes": [
+      "8700216186940"
+    ]
+  },
+  {
+    "name": "SuperFresh Falafel  (360 g)",
+    "barcode": "8690612417260",
+    "imageUrl": "https://cdn-image.getir.com/market/product/61727c7f-ee33-46d3-ad1b-4bd08b3c9c0b.jpg",
+    "productId": "65a0e4a6d28522066fed0629",
+    "barcodes": [
+      "8690612417260"
+    ]
+  },
+  {
+    "name": "Rivos Buğday Cipsi Yoğurt Mevsim Yeşillikleri (56 g)",
+    "barcode": "8697464691268",
+    "imageUrl": "https://cdn-image.getir.com/market/product/b566467e-bee9-495d-ada5-54a002801abd.png",
+    "productId": "65a7dd726eb35248a72f6482",
+    "barcodes": [
+      "8697464691268"
+    ]
+  },
+  {
+    "name": "Haşiroğlu Acılı Tarhana Cipsi (225 g)",
+    "barcode": "8697464690919",
+    "imageUrl": "https://cdn-image.getir.com/market/product/a23dc80d-52f5-4c51-b236-ee1aa429ac0d.png",
+    "productId": "65a7de9f1cd18844cee26a25",
+    "barcodes": [
+      "8697464690919"
+    ]
+  },
+  {
+    "name": "Rivos Buğday Cipsi Acı Ekşi  (56 g)",
+    "barcode": "8697464691169",
+    "imageUrl": "https://cdn-image.getir.com/market/product/dd26adad-3505-40e8-b111-1d119c9f4bc0.jpg",
+    "productId": "65a7dfc0983aa0da4495d83d",
+    "barcodes": [
+      "8697464691169"
+    ]
+  },
+  {
+    "name": "Züber Nutzilla Kakaolu Fındık Kreması (315 g)",
+    "barcode": "8681630361017",
+    "imageUrl": "https://cdn-image.getir.com/market/product/f93d5a48-4936-465f-87a8-000b1650570a.jpg",
+    "productId": "65b0a9c112d4838eac16b32a",
+    "barcodes": [
+      "8681630361017"
+    ]
+  },
+  {
+    "name": "Ülker Çokokrem (650 g)",
+    "barcode": "8690504121527",
+    "imageUrl": "https://cdn-image.getir.com/market/product/bdaf89b7-d5e6-4a86-89b9-46e901e873ee.jpg",
+    "productId": "65cb11307910c5bacbe6341b",
+    "barcodes": [
+      "8690504121527"
+    ]
+  },
+  {
+    "name": "Axe Erkek Deodorant Blue Lavender (150 ml)",
+    "barcode": "8683130066492",
+    "imageUrl": "https://cdn-image.getir.com/market/product/8c587220-4be3-4e79-97c1-05a40053814a.jpg",
+    "productId": "65e0523ab04729032300aebb",
+    "barcodes": [
+      "8683130066492"
+    ]
+  },
+  {
+    "name": "Olips Jar Limon Portakal (462 g)",
+    "barcode": "7622201811549",
+    "imageUrl": "https://cdn-image.getir.com/market/product/8ae53f9c-31a5-4815-99d0-5c44d9600490.jpg",
+    "productId": "65f08dc2a93c2b90ecae66fe",
+    "barcodes": [
+      "7622201811549"
+    ]
+  },
+  {
+    "name": "HiPP Organik Bebek Bisküvisi (180 g)",
+    "barcode": "4062300431928",
+    "imageUrl": "https://cdn-image.getir.com/market/product/36e50b08-7a78-44c1-8156-f51d26fc51ee.jpg",
+    "productId": "6605738a2550443dee08f701",
+    "barcodes": [
+      "4062300431928"
+    ]
+  },
+  {
+    "name": "Gliss Ultimate Repair Şampuan (400 ml)",
+    "barcode": "8690572813713",
+    "imageUrl": "https://cdn-image.getir.com/market/product/1ecd7f84-5038-40a3-a886-308ae447b7dc.jpg",
+    "productId": "6620cb2212d7b0039abb6cda",
+    "barcodes": [
+      "8690572813713"
+    ]
+  },
+  {
+    "name": "Detan 30 Gece Elektrolikit Yedek (30 Gece)",
+    "barcode": "8690530052376",
+    "imageUrl": "https://cdn-image.getir.com/market/product/6936b5ef-9ad7-417c-bdce-ffe9c6d67a7f.png",
+    "productId": "6622744e9876dd7fa12ab05b",
+    "barcodes": [
+      "8690530052376"
+    ]
+  },
+  {
+    "name": "Antbahar Hindi Glutensiz Tahıllı Tohumlu Konserve (185 g)",
+    "barcode": "8698720403717",
+    "imageUrl": "https://cdn-image.getir.com/market/product/0474b7eb-9212-4ef7-9698-3e0734bcf07f.jpg",
+    "productId": "664b59f33b30bfb02b596ad4",
+    "barcodes": [
+      "8698720403717"
+    ]
+  },
+  {
+    "name": "Çizmeci Time Heyo Vanilya Kremalı Kakaolu Bisküvi (100 g)",
+    "barcode": "8691066237510",
+    "imageUrl": "https://cdn-image.getir.com/market/product/6cfc4379-e5d1-4062-aaae-604f86be6dee.png",
+    "productId": "665ec282cc5ece947069093f",
+    "barcodes": [
+      "8691066237510"
+    ]
+  },
+  {
+    "name": "Çizmeci Time Time Up Sütlü Kremalı Çikolatalı Bisküvi (30 g)",
+    "barcode": "6910664100368",
+    "imageUrl": "https://cdn-image.getir.com/market/product/7d221b63-5df4-408f-81d3-1d5eac48b075.jpg",
+    "productId": "665ec28e06d6a62a61c548c8",
+    "barcodes": [
+      "6910664100368"
+    ]
+  },
+  {
+    "name": "Çizmeci Time Wm Slim Gofret Fındık (128 g)",
+    "barcode": "8691066504032",
+    "imageUrl": "https://cdn-image.getir.com/market/product/84ff3b55-1b68-4fdd-abb5-83316e523179.png",
+    "productId": "665ec299b1c986897ac8318a",
+    "barcodes": [
+      "8691066504032"
+    ]
+  },
+  {
+    "name": "Çizmeci Time Wafer Master Slim Gofret Çilek (128 g)",
+    "barcode": "8691066504131",
+    "imageUrl": "https://cdn-image.getir.com/market/product/96a340b6-f312-4d0b-b3cf-38496ce29498.jpg",
+    "productId": "665ec2a6b8d55c13780d1e25",
+    "barcodes": [
+      "8691066504131"
+    ]
+  },
+  {
+    "name": "Çizmeci Time Wafer Master Slim Gofret Limon (128 g)",
+    "barcode": "8691066504230",
+    "imageUrl": "https://cdn-image.getir.com/market/product/6be8e607-6b6c-4e0d-b152-6267f57a1016.jpg",
+    "productId": "665ec2b4905a7dab19c0abad",
+    "barcodes": [
+      "8691066504230"
+    ]
+  },
+  {
+    "name": "Olips Keskin Mentol Aromalı Şeker (28 g)",
+    "barcode": "7622210648921",
+    "imageUrl": "https://cdn-image.getir.com/market/product/5754b3aa-446c-414d-87bb-484473093344.png",
+    "productId": "6669ac87e17577df3471cf0e",
+    "barcodes": [
+      "7622210648921"
+    ]
+  },
+  {
+    "name": "Feast Dondurulmuş Crinky Patates (1000 g)",
+    "barcode": "8697343112235",
+    "imageUrl": "https://cdn-image.getir.com/market/product/f491e536-0a23-4322-81cd-b75c5a5b94c0.jpg",
+    "productId": "66841fe7e85e2eada66f75fa",
+    "barcodes": [
+      "8697343112235"
+    ]
+  },
+  {
+    "name": "Feast Dondurulmuş Hashbrown (450 g)",
+    "barcode": "8697343112228",
+    "imageUrl": "https://cdn-image.getir.com/market/product/44dcf949-17fa-4c16-af1b-bb042bb6a6c0.jpg",
+    "productId": "66841ff6cd44134ad71283b6",
+    "barcodes": [
+      "8697343112228"
+    ]
+  },
+  {
+    "name": "Feast Dondurulmuş Patatesli Mısır Kroket (450 g)",
+    "barcode": "8697343112211",
+    "imageUrl": "https://cdn-image.getir.com/market/product/b181a105-6a24-4196-a5f5-501340949c17.jpg",
+    "productId": "66842009319f9116459965bf",
+    "barcodes": [
+      "8697343112211"
+    ]
+  },
+  {
+    "name": "Eti Çikolata Fındık Kremalı Push Pop Çikolata (60 g)",
+    "barcode": "8690526136882",
+    "imageUrl": "https://cdn-image.getir.com/market/product/e6da5cd0-6f86-491c-8dc7-8f00a2a502cf.jpg",
+    "productId": "66f6a1e40b0b150e52c8f493",
+    "barcodes": [
+      "8690526136882"
+    ]
+  },
+  {
+    "name": "Sultan Piliç Füme Et (50 g)",
+    "barcode": "8691722098295",
+    "imageUrl": "https://cdn-image.getir.com/market/product/2ecf13b7-6865-4a30-be6e-346249c8937a.jpg",
+    "productId": "66fff2a53565255c4cdd46fb",
+    "barcodes": [
+      "8691722098295"
+    ]
+  },
+  {
+    "name": "Sultan Piliç Dilim Salam (50 g)",
+    "barcode": "8691722098271",
+    "imageUrl": "https://cdn-image.getir.com/market/product/d0656c5a-907f-4be7-b8e0-db2a876e332d.jpg",
+    "productId": "66fff2afd0388aa140434645",
+    "barcodes": [
+      "8691722098271"
+    ]
+  },
+  {
+    "name": "Komili Deniz Lavantası Sıvı Sabun  (400 ml)",
+    "barcode": "8697404380320",
+    "imageUrl": "https://cdn-image.getir.com/market/product/7117c147-1099-42a8-ae53-2c2c2ca94246.jpg",
+    "productId": "6710d5f5ddc4314613456cac",
+    "barcodes": [
+      "8697404380320"
+    ]
+  },
+  {
+    "name": "Balkan Bardak Ayran (270 ml)",
+    "barcode": "8692462044559",
+    "imageUrl": "https://cdn-image.getir.com/market/product/db22fbd1-b566-444f-8d3e-a9212e1691c1.jpg",
+    "productId": "676bafcfeff7ec03338b1f7a",
+    "barcodes": [
+      "8692462044559"
+    ]
+  },
+  {
+    "name": "Bublicious Çilek Aromalı Şekerli Balonlu Sakız (114 g)",
+    "barcode": "7622202394157",
+    "imageUrl": "https://cdn-image.getir.com/market/product/aad51f64-d118-4240-92da-deec98397e1f.jpg",
+    "productId": "6791fe22b7cb4c6333434eb1",
+    "barcodes": [
+      "7622202394157"
+    ]
+  },
+  {
+    "name": "Golf Matriko Limon-Çilek-Ananas  (65 ml)",
+    "barcode": "8698313523068",
+    "imageUrl": "https://cdn-image.getir.com/market/product/822cc99d-e958-495e-8ac8-2f3b6758a324.jpg",
+    "productId": "67ac9a3eb01a85b25fc2759c",
+    "barcodes": [
+      "8698313523068"
+    ]
+  },
+  {
+    "name": "Golf Matriko Vişne-Limon-Vanilya (65 ml)",
+    "barcode": "8698313523075",
+    "imageUrl": "https://cdn-image.getir.com/market/product/90bfe922-a2c3-4c4f-b64c-f0082ecbd02a.jpg",
+    "productId": "67ac9a48c0fcf6429916ec33",
+    "barcodes": [
+      "8698313523075"
+    ]
+  },
+  {
+    "name": "Golf Ice Jelly Funny  (47 ml)",
+    "barcode": "8698313521170",
+    "imageUrl": "https://cdn-image.getir.com/market/product/83c2ec2b-ba07-4174-ba5f-adb5137df83f.jpg",
+    "productId": "67ac9a52c0b0169a48f1bc85",
+    "barcodes": [
+      "8698313521170"
+    ]
+  },
+  {
+    "name": "Golf Ice Jelly Happy (47 ml)",
+    "barcode": "8698313523723",
+    "imageUrl": "https://cdn-image.getir.com/market/product/14ed1231-2ec1-4dab-ad02-a2ad3ef1fc9e.jpg",
+    "productId": "67ac9a5cf2d09e687e564742",
+    "barcodes": [
+      "8698313523723"
+    ]
+  },
+  {
+    "name": "Golf Classic Kakao (65 ml)",
+    "barcode": "8698313584458",
+    "imageUrl": "https://cdn-image.getir.com/market/product/b698eb72-5ff1-447f-bbc7-0b461fbe0668.jpg",
+    "productId": "67ac9a66f3e59a0b69b8a160",
+    "barcodes": [
+      "8698313584458"
+    ]
+  },
+  {
+    "name": "Golf Classic Vanilya (65 ml)",
+    "barcode": "8698313584465",
+    "imageUrl": "https://cdn-image.getir.com/market/product/9a6ca459-9e8f-4dab-aea5-31e01d4d9fe8.jpg",
+    "productId": "67ac9a7076adcff61d20abee",
+    "barcodes": [
+      "8698313584465"
+    ]
+  },
+  {
+    "name": "Golf Bravo Junior Dark Orange-Caramel Biscuit (6 x 60 ml)",
+    "barcode": "8698313523792",
+    "imageUrl": "https://cdn-image.getir.com/market/product/9b507f66-c84a-4621-ade6-ba293d83c6c5.jpg",
+    "productId": "67ac9b8482f45ccc6afeb0d4",
+    "barcodes": [
+      "8698313523792"
+    ]
+  },
+  {
+    "name": "Golf Bravo Junior Chocolate Extreme-Beyaz (6 x 60 ml)",
+    "barcode": "8698313523785",
+    "imageUrl": "https://cdn-image.getir.com/market/product/37dd78a7-c4f7-441d-bef2-d3a744754ac6.jpg",
+    "productId": "67ac9b8e3ff93f78cb895e5a",
+    "barcodes": [
+      "8698313523785"
+    ]
+  },
+  {
+    "name": "Golf Bravo Belçika Çikolatalı Dark Orange (100 ml)",
+    "barcode": "8698313523761",
+    "imageUrl": "https://cdn-image.getir.com/market/product/73b995f1-1e47-4748-993c-264a0f83030a.jpg",
+    "productId": "67ac9c8dc0b0169a48f1c191",
+    "barcodes": [
+      "8698313523761"
+    ]
+  },
+  {
+    "name": "Feast Dondurulmuş Küp Soğan  (1 kg)",
+    "barcode": "8697343112266",
+    "imageUrl": "https://cdn-image.getir.com/market/product/fd7577c5-b6f6-41ad-8eea-3b1791632f94.jpg",
+    "productId": "67adf63763bdeee5023d3b51",
+    "barcodes": [
+      "8697343112266"
+    ]
+  },
+  {
+    "name": "Selin Kolonya Manolya Esintisi (400 ml)",
+    "barcode": "8690530066649",
+    "imageUrl": "https://cdn-image.getir.com/market/product/b34f7f0b-c872-4702-9321-ebe1553ee805.jpg",
+    "productId": "67c06b3723e3270417f4a12c",
+    "barcodes": [
+      "8690530066649"
+    ]
+  },
+  {
+    "name": "Kellogg's Kakao ve Bademli Granola (250 g)",
+    "barcode": "8682530222460",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260813064250313_kellogs.jpg",
+    "productId": "680b91f46a332998b22ec1af",
+    "barcodes": [
+      "8682530222460"
+    ]
+  },
+  {
+    "name": "Nescafé Xpress Original (1 L)",
+    "barcode": "0869063276744",
+    "imageUrl": "https://cdn-image.getir.com/market/product/7147d558-d70a-474a-adf7-15e607cb3a8e.jpg",
+    "productId": "68790a217e46cbc964f4176c",
+    "barcodes": [
+      "0869063276744"
+    ]
+  },
+  {
+    "name": "Feast Acılı Soğan Halkası (450 g)",
+    "barcode": "8697343112334",
+    "imageUrl": "https://cdn-image.getir.com/market/product/959e6e03-d7d5-44db-b70c-d491bfa2fde5.jpg",
+    "productId": "689ef4c8cc3cc0adfbc4d509",
+    "barcodes": [
+      "8697343112334"
+    ]
+  },
+  {
+    "name": "Feast Yaban Mersini (250 g)",
+    "barcode": "8697343112402",
+    "imageUrl": "https://cdn-image.getir.com/market/product/9b38476d-a123-4692-a7f3-38b044088fdd.jpg",
+    "productId": "689ef4d59178f597b7b72619",
+    "barcodes": [
+      "8697343112402"
+    ]
+  },
+  {
+    "name": "Feast Prenses Patates (450 g)",
+    "barcode": "8697343112396",
+    "imageUrl": "https://cdn-image.getir.com/market/product/3976718c-a38c-4443-bdae-87517c771a02.jpg",
+    "productId": "689ef4e2e3eee3684f0ed957",
+    "barcodes": [
+      "8697343112396"
+    ]
+  },
+  {
+    "name": "Uğur USS 374 DTKL Tek Kapılı Dikey +4 İçecek Dolabı (Demirbaş)",
+    "barcode": "5482910763616",
+    "imageUrl": "https://cdn-image.getir.com/market/product/23ea7f96-77a3-469f-8af4-93d1005a275e.jpg",
+    "productId": "68b94d34053d902311b0a1fd",
+    "barcodes": [
+      "5482910763616"
+    ]
+  },
+  {
+    "name": "Dimes Cool Sour Mix (310 ml)",
+    "barcode": "8690558041468",
+    "imageUrl": "https://cdn-image.getir.com/market/product/41236a5c-12d3-4c12-bd1f-ee0b95f2127a.jpg",
+    "productId": "68b9a98956e641b8a3a23171",
+    "barcodes": [
+      "8690558041468"
+    ]
+  },
+  {
+    "name": "Eurofresh Yıkanmış Dört Mevsim Salata (250 g)",
+    "barcode": "8680422242626",
+    "imageUrl": "https://cdn-image.getir.com/market/product/a3115f3a-d964-4463-96c1-21956a470dfe.jpg",
+    "productId": "68d135bb7995bd60aaba01dc",
+    "barcodes": [
+      "8680422242626"
+    ]
+  },
+  {
+    "name": "Pınar Aç Bitir Hindi Salam (75 g)",
+    "barcode": "8690527010839",
+    "imageUrl": "https://cdn-image.getir.com/market/product/dbf9f06d-e4f9-42f0-b1d6-b0e8c702a013.jpg",
+    "productId": "68eebd9808e18cf30034cf0d",
+    "barcodes": [
+      "8690527010839"
+    ]
+  },
+  {
+    "name": "Axe Premium Collection Erkek Stick Deodorant Cherry Spritz (50 ml)",
+    "barcode": "8683130122549",
+    "imageUrl": "https://cdn-image.getir.com/market/product/49a13351-d52b-4d48-8ca7-67cf8f7f3ed9.jpg",
+    "productId": "68f8dd8c9b02785153aa124e",
+    "barcodes": [
+      "8683130122549"
+    ]
+  },
+  {
+    "name": "Signal White Now Diş Macunu 3 in 1 Ekstra Işıltı Hello Glow (75 ml)",
+    "barcode": "8720181698132",
+    "imageUrl": "https://cdn-image.getir.com/market/product/af0c1c6e-fbf8-41bf-9bfa-bb75f6fa650f.jpg",
+    "productId": "68f8debb5e20d10826eb18e9",
+    "barcodes": [
+      "8720181698132"
+    ]
+  },
+  {
+    "name": "La Lorraine Ekşi Mayalı Tam Buğday Ekmeği (380 g)",
+    "barcode": "8681573033804",
+    "imageUrl": "https://cdn-image.getir.com/market/product/69e5e6e5-7572-464f-8095-80734f4308be.jpg",
+    "productId": "68f8e94e081b9389a89d2796",
+    "barcodes": [
+      "8681573033804"
+    ]
+  },
+  {
+    "name": "Mövenpick Vanilyalı Puding (150 g)",
+    "barcode": "4002334111595",
+    "imageUrl": "https://cdn-image.getir.com/market/product/a1617653-0c13-4fa5-bb80-d9027d743340.jpeg",
+    "productId": "690b2ac821cce36b2c816a30",
+    "barcodes": [
+      "4002334111595"
+    ]
+  },
+  {
+    "name": "Chocovia Bitter Çikolata Kaplı Vişne Draje (120 g)",
+    "barcode": "8692345526608",
+    "imageUrl": "https://cdn-image.getir.com/market/product/dd1868aa-1659-48a2-93cf-610eaad89222.jpg",
+    "productId": "69171fa59a2784f4715a4d8a",
+    "barcodes": [
+      "8692345526608"
+    ]
+  },
+  {
+    "name": "Kinder Süt Dilimi Çilek (28 g)",
+    "barcode": "80844983",
+    "imageUrl": "https://cdn-image.getir.com/market/product/6ed69309-32ba-4a96-9744-06fe60baff95.jpg",
+    "productId": "692ad4b3b3ea0ba05e71ba8c",
+    "barcodes": [
+      "80844983"
+    ]
+  },
+  {
+    "name": "Dardanel Zeytinyağlı Çanakkale Sardalya (125g)",
+    "barcode": "8690559023364",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260622130310817_sardalya.jpg",
+    "productId": "692b1fbc9fa1748296c901e9",
+    "barcodes": [
+      "8690559023364"
+    ]
+  },
+  {
+    "name": "Duru Yoğun Onarım & Nem Şampuanı (400 ml)",
+    "barcode": "8690506565190",
+    "imageUrl": "https://cdn-image.getir.com/market/product/3524447c-e23a-4a4a-8d93-53e71de049c2.jpg",
+    "productId": "692da0949fa1748296cc8083",
+    "barcodes": [
+      "8690506565190"
+    ]
+  },
+  {
+    "name": "Duru Güçlü Parlaklık Şampuanı (400 ml)",
+    "barcode": "8690506565183",
+    "imageUrl": "https://cdn-image.getir.com/market/product/08b89edb-c832-4630-a636-e02da9fb01dc.jpg",
+    "productId": "692da0a71d7fecd755e00fbe",
+    "barcodes": [
+      "8690506565183"
+    ]
+  },
+  {
+    "name": "Tadelle Fındıklı Tablet Çikolata (60 g)",
+    "barcode": "8683417002564",
+    "imageUrl": "https://cdn-image.getir.com/market/product/36700ff5-7ba1-4a49-820b-0b20c6e5867d.jpeg",
+    "productId": "694d36a20102389d52f90ddd",
+    "barcodes": [
+      "8683417002564"
+    ]
+  },
+  {
+    "name": "Tadelle Bol Sütlü Tablet Çikolata (30 g)",
+    "barcode": "8683417002380",
+    "imageUrl": "https://cdn-image.getir.com/market/product/e1397a51-848d-448d-a8d1-bf2e5f00e497.jpeg",
+    "productId": "694d36acb8ae08ad320fe21d",
+    "barcodes": [
+      "8683417002380"
+    ]
+  },
+  {
+    "name": "Tadelle Sütlü Çikolata Kaplamalı Fındık Kremalı Gofret (28 g)",
+    "barcode": "8683417003295",
+    "imageUrl": "https://cdn-image.getir.com/market/product/798c437e-ca03-4199-abcb-5959c117dcdb.jpeg",
+    "productId": "694d37b0778de66b66272d49",
+    "barcodes": [
+      "8683417003295"
+    ]
+  },
+  {
+    "name": "Carte d'Or Petite Bar Chocoberry 6'lı (276 ml)",
+    "barcode": "8721274616729",
+    "imageUrl": "https://cdn-image.getir.com/market/product/980efda2-74ca-43f9-8c1e-dfa163998d86.jpg",
+    "productId": "69528f88195e04268e5a4ead",
+    "barcodes": [
+      "8721274616729"
+    ]
+  },
+  {
+    "name": "Qavruq Ballı Susamlı Fıstık (200g)",
+    "barcode": "8684441714676",
+    "imageUrl": "https://cdn-image.getir.com/market/product/df452b9a-fb14-44ef-8b5b-8ee252fe6918.jpg",
+    "productId": "6973b9faa2566a8f41688cd0",
+    "barcodes": [
+      "8684441714676"
+    ]
+  },
+  {
+    "name": "Fuji Elma Paket (750 g)",
+    "barcode": "7831910990698",
+    "imageUrl": "https://cdn-image.getir.com/market/product/02b0145c-35b2-4b96-ad44-1b9314e8e2f5.jpg",
+    "productId": "6974b6b3203f0c4e54cdde92",
+    "barcodes": [
+      "7831910990698"
+    ]
+  },
+  {
+    "name": "Qavruq Cips Fıstık (200 g)",
+    "barcode": "8684877945477",
+    "imageUrl": "https://cdn-image.getir.com/market/product/1033ef8d-aa91-4136-a350-d54b76210ac1.jpg",
+    "productId": "697b4f4e39df0939bb32e578",
+    "barcodes": [
+      "8684877945477"
+    ]
+  },
+  {
+    "name": "Rem Sofralık Yağlı Siyah Zeytin  (500 gr)",
+    "barcode": "8690279023460",
+    "imageUrl": "https://cdn-image.getir.com/market/product/e2e0d6c0-00c1-41d2-93a7-fb96a66dd45c.jpg",
+    "productId": "697c91bf3bfa5269462aaaaa",
+    "barcodes": [
+      "8690279023460"
+    ]
+  },
+  {
+    "name": "Ülker Cocostar İkramlık (300 g)",
+    "barcode": "8690766050580",
+    "imageUrl": "https://cdn-image.getir.com/market/product/11a030dd-3381-4c2a-a306-3e33bf783612.jpeg",
+    "productId": "698097c46540c0b1b243b7d7",
+    "barcodes": [
+      "8690766050580"
+    ]
+  },
+  {
+    "name": "Bind Misket Limonlu Bisküvili Beyaz Çikolata Kaplı Çilek Draje (80 g)",
+    "barcode": "8680474945063",
+    "imageUrl": "https://cdn-image.getir.com/market/product/ff2e8236-3a86-47fd-ba95-8b73673eed34.jpg",
+    "productId": "6989b757f8c1b5a076ed7d60",
+    "barcodes": [
+      "8680474945063"
+    ]
+  },
+  {
+    "name": "Peysan Tam Yağlı Olgunlaştırılmış Eski Kaşar (300 g)",
+    "barcode": "8690614011816",
+    "imageUrl": "https://cdn-image.getir.com/market/product/c551dca3-e42f-4ae5-8ab7-884a3c293511.jpg",
+    "productId": "698dc10a49c11d5b3f40e95c",
+    "barcodes": [
+      "8690614011816"
+    ]
+  },
+  {
+    "name": "Elidor Saç Bakım Kremi İpek Terapisi (350 ml)",
+    "barcode": "8683130111833",
+    "imageUrl": "https://cdn-image.getir.com/market/product/8ee6ac77-f1a6-4bd9-b751-4e4191048ba3.jpg",
+    "productId": "698f30db65c440515b1a4ee6",
+    "barcodes": [
+      "8683130111833"
+    ]
+  },
+  {
+    "name": "Tokooster Çıtır Tavuk Budu Görünümlü Çikolata (60 g)",
+    "barcode": "4262524580567",
+    "imageUrl": "https://cdn-image.getir.com/market/product/0ac91439-e965-4ec5-821c-6946e940ed1f.jpg",
+    "productId": "69943e8ec96887501260a2e6",
+    "barcodes": [
+      "4262524580567"
+    ]
+  },
+  {
+    "name": "Tokooster Çıtır Tavuk Budu Çikolata Antep Fıstıklı (60 g)",
+    "barcode": "4262524580598",
+    "imageUrl": "https://cdn-image.getir.com/market/product/1d39ff56-b15e-4c22-9c0d-b607c426c7e0.jpg",
+    "productId": "69943e9852b41d44299895ec",
+    "barcodes": [
+      "4262524580598"
+    ]
+  },
+  {
+    "name": "Lay's Deniz Tuzlu ve Trüf (125 g)",
+    "barcode": "8690624106343",
+    "imageUrl": "https://cdn-image.getir.com/market/product/160644ef-bded-4db6-b39f-6d15976cb350.jpg",
+    "productId": "6995b5c9eb4bd495341b8677",
+    "barcodes": [
+      "8690624106343"
+    ]
+  },
+  {
+    "name": "ABC Ultra Çamaşır Suyu Bembeyaz (780 ml)",
+    "barcode": "8690511110446",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260427151937951_ABC-UCS-Pure-White-750_1-1.jpg",
+    "productId": "6995c732dffc689961b2f105",
+    "barcodes": [
+      "8690511110446"
+    ]
+  },
+  {
+    "name": "ABC Parfumia Konsantre Yumuşatıcı Tutkulu (1440 ml)",
+    "barcode": "8690511125938",
+    "imageUrl": "https://cdn-image.getir.com/market/product/5d61a034-485c-42a9-a817-556d5ff306c9.jpg",
+    "productId": "699719c0aee8ccd1b4e8c272",
+    "barcodes": [
+      "8690511125938"
+    ]
+  },
+  {
+    "name": "Sleepy Natural Double Soft No:3 Midi Süper (56'lı)",
+    "barcode": "8682241224258",
+    "imageUrl": "https://cdn-image.getir.com/market/product/46b9a024-9ab1-4e6d-b3cf-6c5c340e71f4.jpg",
+    "productId": "699ede6c1d1f76729692313d",
+    "barcodes": [
+      "8682241224258"
+    ]
+  },
+  {
+    "name": "Sleepy Natural Double Soft No:4 Midi Süper (52'li)",
+    "barcode": "8682241224272",
+    "imageUrl": "https://cdn-image.getir.com/market/product/ac74e4a2-3671-4555-a9da-d6821b0f78d6.jpg",
+    "productId": "699ede76d3381f390bb97a88",
+    "barcodes": [
+      "8682241224272"
+    ]
+  },
+  {
+    "name": "Nescafé 2si1 Arada (15'li)",
+    "barcode": "8690632765242",
+    "imageUrl": "https://cdn-image.getir.com/market/product/657f6e48-ef37-4d7a-bc1c-fc3476bbe00c.jpg",
+    "productId": "69a04e75d338506a9e2e3577",
+    "barcodes": [
+      "8690632765242"
+    ]
+  },
+  {
+    "name": "Red Bull Lilac Edition (250 ml)",
+    "barcode": "90493652",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260305154024054_redbull-lilac-on.jpg",
+    "productId": "69a9a3e5d013d75d09cc22b0",
+    "barcodes": [
+      "90493652"
+    ]
+  },
+  {
+    "name": "Feast Dondurulmuş Vişne (300 g)",
+    "barcode": "8697343112556",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260306135517203_FEAST-DONDURULMUS-VISNE-300GR-ON.jpg",
+    "productId": "69aadcc38fdd2522e5cd9858",
+    "barcodes": [
+      "8697343112556"
+    ]
+  },
+  {
+    "name": "Feast Dondurulmuş Frambuaz (300 g)",
+    "barcode": "8697343112532",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260309121512295_FEAST-DONDURULMUS-FRAMBUA-300GR-ON__1_.jpg",
+    "productId": "69aeb9cf5383ebe7ccf84a9a",
+    "barcodes": [
+      "8697343112532"
+    ]
+  },
+  {
+    "name": "Algida Oreo Milka Stick (82 ml)",
+    "barcode": "8721274647440",
+    "imageUrl": "https://cdn-image.getir.com/market/product/49b31983-3320-4c59-8ffb-c4d4e854f90a.jpg",
+    "productId": "69b15dfbc65a4db97cf4718f",
+    "barcodes": [
+      "8721274647440"
+    ]
+  },
+  {
+    "name": "Nutzz Popzz Süzme Peynir & Taze Soğan (90 g)",
+    "barcode": "8695876209026",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260316120556061_c3f577e3-723a-4f59-9094-0968997633c7.jpeg",
+    "productId": "69b7f21d0b23edb0a75298cd",
+    "barcodes": [
+      "8695876209026"
+    ]
+  },
+  {
+    "name": "Golf Maraşım %81 Sütlü Sade (500 g)",
+    "barcode": "6869831358893",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260317063030573_golf-marasim-on.jpg",
+    "productId": "69b8f504510699618ff85b97",
+    "barcodes": [
+      "6869831358893"
+    ]
+  },
+  {
+    "name": "PJ Masks Sürpriz Pack (1 Adet)",
+    "barcode": "8682224003979",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260318134029867_pj-surpriz-paket-on.jpg",
+    "productId": "69baab48a9eb6c10347b76f9",
+    "barcodes": [
+      "8682224003979"
+    ]
+  },
+  {
+    "name": "Hello Kitty Kalp Yumurta (10 g)",
+    "barcode": "8682224000893",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260318135022467_HK-kalp-yumurta-display-on.jpg",
+    "productId": "69baad9ba9eb6c10347b82b1",
+    "barcodes": [
+      "8682224000893"
+    ]
+  },
+  {
+    "name": "Hello Kitty Oyuncaklı Kornet (25 g)",
+    "barcode": "8682224007168",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260318140528551_HK-Oyuncakli-Kornet-on.jpg",
+    "productId": "69bab1255142d70ec31c44fd",
+    "barcodes": [
+      "8682224007168"
+    ]
+  },
+  {
+    "name": "Hello Kitty Vantipop Sürpriz Pack (20 g)",
+    "barcode": "8682224010335",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260709095633964_HKF-Vanti-Pop-Surpriz-Paket-on.jpg",
+    "productId": "69bab82bc07fb67e694e5b32",
+    "barcodes": [
+      "8682224010335"
+    ]
+  },
+  {
+    "name": "Hello Kitty Madalyon Çikolata (18 g)",
+    "barcode": "8682224007311",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260318145538270_HK-Madalyon-Mockup-on.jpg",
+    "productId": "69babce7a9eb6c10347bcf4d",
+    "barcodes": [
+      "8682224007311"
+    ]
+  },
+  {
+    "name": "Hello Kitty Stick Çikolata (50 g)",
+    "barcode": "8682224007670",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260318151016772_HK-Breadstick-Mockup-on.jpg",
+    "productId": "69bac0559bcb8b6e4bf6cfa9",
+    "barcodes": [
+      "8682224007670"
+    ]
+  },
+  {
+    "name": "My Little Pony Sürpriz Pack (8 g)",
+    "barcode": "8682224008622",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260318152017731_mlp-surpriz-urun-pack-on.jpg",
+    "productId": "69bac2afa4f7422b8cf51fea",
+    "barcodes": [
+      "8682224008622"
+    ]
+  },
+  {
+    "name": "Hello Kitty PVC Sürpriz Yumurta (17.5 g)",
+    "barcode": "8682224007342",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260318154513829_HK-PVC-YUM-on.jpg",
+    "productId": "69bac887cb6e884e4236685f",
+    "barcodes": [
+      "8682224007342"
+    ]
+  },
+  {
+    "name": "Hello Kitty Sürpriz Pack (15 g)",
+    "barcode": "8681305082421",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260703112259752_HK-Surpriz-Paket-on.jpg",
+    "productId": "69ca569456124486c8f791c5",
+    "barcodes": [
+      "8681305082421"
+    ]
+  },
+  {
+    "name": "Sek Protein Quark İçilebilir Kıvamda (250 ml)",
+    "barcode": "8692095347294",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260406133509636_sek.jpg",
+    "productId": "69d3b68cf2460c106665021f",
+    "barcodes": [
+      "8692095347294"
+    ]
+  },
+  {
+    "name": "Sinangil Kedi Dili Bisküvi (200 g)",
+    "barcode": "8697702983735",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260407141527270_sinangil-1.jpg",
+    "productId": "69d5117d64f4810bf75fab2e",
+    "barcodes": [
+      "8697702983735"
+    ]
+  },
+  {
+    "name": "Cipso İnce Bruschetta (125 g)",
+    "barcode": "8681506023902",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260407143511158_Cipso-Bruschetta.jpg",
+    "productId": "69d5161ef9397f2aadbeb664",
+    "barcodes": [
+      "8681506023902"
+    ]
+  },
+  {
+    "name": "Çerezos Ultra Dev Acı Biber (150 g)",
+    "barcode": "8681506023513",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260407144530502_getImage-_4_.jpg",
+    "productId": "69d5188946bb2849887c98f0",
+    "barcodes": [
+      "8681506023513"
+    ]
+  },
+  {
+    "name": "Heinz Spicy Ketchup (570 g)",
+    "barcode": "8696362806200",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260409134051376_KRAFT.2025.0021-570G-HOT-KETCAP-mockup-on.jpg",
+    "productId": "69d7ac59ebefb62069a54e98",
+    "barcodes": [
+      "8696362806200"
+    ]
+  },
+  {
+    "name": "Sek Laktozsuz Pastörize Süt (200 ml)",
+    "barcode": "8692095345825",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260414072026324_sek-200ml-laktozsuz-on.jpg",
+    "productId": "69ddeab6ebefb62069b26d60",
+    "barcodes": [
+      "8692095345825"
+    ]
+  },
+  {
+    "name": "Kent Missbon Tereyağlı Şekerleme (43 g)",
+    "barcode": "8690515116215",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260414123023830_MISSBON_STICK_2018_Tereyagli-02.jpg",
+    "productId": "69de335d32e5f8d5ff4fc923",
+    "barcodes": [
+      "8690515116215"
+    ]
+  },
+  {
+    "name": "Vernel Max Konsantre Çamaşır Yumuşatıcı Amber (1,44 L)",
+    "barcode": "9000101844146",
+    "imageUrl": "https://cdn-image.getir.com/market/product/e91a043b-5b04-4c75-9a2a-ea8ebdacc80b.jpg",
+    "productId": "69dfe19cb5b1cf05af3a31e3",
+    "barcodes": [
+      "9000101844146"
+    ]
+  },
+  {
+    "name": "Ozmo Ogopogo Çilekli Kek (30 g)",
+    "barcode": "8691707059839",
+    "imageUrl": "https://cdn-image.getir.com/market/product/d53063a4-9bb3-4c16-ada0-cae823be0d4d.jpg",
+    "productId": "69dff1fdcfe98411f8816531",
+    "barcodes": [
+      "8691707059839"
+    ]
+  },
+  {
+    "name": "Ozmo Burger (36 g)",
+    "barcode": "8691707057293",
+    "imageUrl": "https://cdn-image.getir.com/market/product/ec68728e-8583-4bff-86dc-0e2fb6e8b27f.jpg",
+    "productId": "69dff207f9397f2aadd68cdd",
+    "barcodes": [
+      "8691707057293"
+    ]
+  },
+  {
+    "name": "Ozmo Cornet Çilekli (25 g)",
+    "barcode": "8691707090344",
+    "imageUrl": "https://cdn-image.getir.com/market/product/dbf1afca-5e3a-4f83-b491-3ef5b496eead.jpg",
+    "productId": "69dff3006982cdeae074c9b6",
+    "barcodes": [
+      "8691707090344"
+    ]
+  },
+  {
+    "name": "Ozmo Hoppo Çikolatalı (90 g)",
+    "barcode": "8699141057138",
+    "imageUrl": "https://cdn-image.getir.com/market/product/581903c7-85a2-4bcc-8506-48880dfa2279.jpg",
+    "productId": "69dff30acfe98411f88167be",
+    "barcodes": [
+      "8699141057138"
+    ]
+  },
+  {
+    "name": "Tahsildaroğlu Geleneksel Tereyağı (300 g)",
+    "barcode": "8691225157918",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260416123607084_Tah_Geleneksel-Tereyagi_-300-g..jpg",
+    "productId": "69e0d8b7ed63056eaceef1cf",
+    "barcodes": [
+      "8691225157918"
+    ]
+  },
+  {
+    "name": "Bahçıvan Tereyağı (150 g)",
+    "barcode": "8690843097378",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260416133014385_bahcivan-on.jpg",
+    "productId": "69e0e471b5b1cf05af3bdc6c",
+    "barcodes": [
+      "8690843097378"
+    ]
+  },
+  {
+    "name": "Asperox Sparx Bulaşık Deterjanı Limon (650 ml)",
+    "barcode": "8697713823181",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260417090017669_asperox-sparx-limon-650ml-on.jpg",
+    "productId": "69e1f69f75920ceb932c0b48",
+    "barcodes": [
+      "8697713823181"
+    ]
+  },
+  {
+    "name": "Asperox Sparx Bulaşık Deterjanı Elma (650 ml)",
+    "barcode": "8697713823174",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260417101011518_asperox_sparx_elma_650ml-on.jpg",
+    "productId": "69e207014d74c6a0072ddbc7",
+    "barcodes": [
+      "8697713823174"
+    ]
+  },
+  {
+    "name": "Biscolata Ice & Fire (40 g)",
+    "barcode": "8699141058814",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260420101525447_biscolata-ice-fire-on.jpg",
+    "productId": "69e5fcbb6982cdeae081056f",
+    "barcodes": [
+      "8699141058814"
+    ]
+  },
+  {
+    "name": "Bebeto Gourmet Gummies Elmalı Jelly (140 g)",
+    "barcode": "8690146178446",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260420121012448_16024534-01.jpg",
+    "productId": "69e617a206a9deb340a94d64",
+    "barcodes": [
+      "8690146178446"
+    ]
+  },
+  {
+    "name": "Bebeto Gourmet Gummies Portakallı Jelly (140 g)",
+    "barcode": "8690146178453",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260420122602550_bebeto-1.jpg",
+    "productId": "69e61b58ea0379b2f3575af8",
+    "barcodes": [
+      "8690146178453"
+    ]
+  },
+  {
+    "name": "Bebeto Caffe Edition Espresso Jelly (70 g)",
+    "barcode": "8690146193456",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260420123020129_16029666-on.jpg",
+    "productId": "69e61c5aaa3bdbda464af277",
+    "barcodes": [
+      "8690146193456"
+    ]
+  },
+  {
+    "name": "Olips Soothers Bal Limon Aromalı Şeker (45 g)",
+    "barcode": "7622202383687",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260420131728927_olips-extra-on.jpg",
+    "productId": "69e62819a8ede75f130ea1eb",
+    "barcodes": [
+      "7622202383687"
+    ]
+  },
+  {
+    "name": "Falım Karanfil Aromalı 5'li Sakız (35 g)",
+    "barcode": "7622202382345",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260420132519175_falim-karanfil-on.jpg",
+    "productId": "69e6293c69d00aa48ab6eb94",
+    "barcodes": [
+      "7622202382345"
+    ]
+  },
+  {
+    "name": "Olips Soothers Şeftali Ahududu Aromalı Şeker (45 g)",
+    "barcode": "7622202383649",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260420134524827_olips-extra-on.jpg",
+    "productId": "69e62defa8ede75f130eb06e",
+    "barcodes": [
+      "7622202383649"
+    ]
+  },
+  {
+    "name": "Olips Soothers Çilek Aromalı Şeker (45 G)",
+    "barcode": "7622202382901",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260420134659071_olips-on.jpg",
+    "productId": "69e62f14d94159f94d8621ce",
+    "barcodes": [
+      "7622202382901"
+    ]
+  },
+  {
+    "name": "Pin Ekşi Elma Yeşil Çay Aromalı İçecek (1 L)",
+    "barcode": "8684508124455",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260421083025558_pin.jpg",
+    "productId": "69e735a07fd9d667c12e11cf",
+    "barcodes": [
+      "8684508124455"
+    ]
+  },
+  {
+    "name": "Pin Ekşi Çilek Hibiscuslu Aromalı İçecek (1 L)",
+    "barcode": "8684508124462",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260421083525665_pin-eksi-cilek-on.jpg",
+    "productId": "69e736cc45c39707c3b2a219",
+    "barcodes": [
+      "8684508124462"
+    ]
+  },
+  {
+    "name": "Colgate Gentle Clean 2+1 Diş Fırçası (1 Adet)",
+    "barcode": "8718951690332",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260426115517190_8718951690332_R1CB~COLGATE-sensitive-gentle-clean.jpg",
+    "productId": "69edfd231d86ca4a83e7dd46",
+    "barcodes": [
+      "8718951690332"
+    ]
+  },
+  {
+    "name": "Colgate Max White Purple Diş Macunu (75 ml)",
+    "barcode": "6920354837746",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260426120010878_6920354837746_R1CA~Colgate-Max-White-Purple-1.jpg",
+    "productId": "69edfe48f0be70633042c84c",
+    "barcodes": [
+      "6920354837746"
+    ]
+  },
+  {
+    "name": "Palmolive Tangerine Sıvı Sabun (500 ml)",
+    "barcode": "8718951799110",
+    "imageUrl": "https://cdn-image.getir.com/market/product/be74bac1-7f5f-41d3-98bd-c795323d4bd8.jpg",
+    "productId": "69edff8e34fdf3424ef48d7d",
+    "barcodes": [
+      "8718951799110"
+    ]
+  },
+  {
+    "name": "Palmolive Tangerine Sabun (4 x 90 g)",
+    "barcode": "8718951799141",
+    "imageUrl": "https://cdn-image.getir.com/market/product/b9f13c22-805d-4c75-a3f8-831703b7e4f6.png",
+    "productId": "69edff9e66abe4923c539fdc",
+    "barcodes": [
+      "8718951799141"
+    ]
+  },
+  {
+    "name": "Palmolive Tangerine Duş Jeli (500 ml)",
+    "barcode": "8718951779112",
+    "imageUrl": "https://cdn-image.getir.com/market/product/00ba44cb-0673-46d3-823c-703d59bdbff5.jpg",
+    "productId": "69ee00a5ff0a622b57f60ad6",
+    "barcodes": [
+      "8718951779112"
+    ]
+  },
+  {
+    "name": "FELIX Kedi Çorbası Tavuklu (48 g)",
+    "barcode": "8445290571243",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260428071536412_Felix-Soup-Tavuk-Etli_On-Yuz.jpg",
+    "productId": "69f05e9638ae76c300ee2e50",
+    "barcodes": [
+      "8445290571243"
+    ]
+  },
+  {
+    "name": "Züber Nutzilla Fındık Kreması (315 g)",
+    "barcode": "8681630799919",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260428102034383_1_copy.jpg",
+    "productId": "69f089eeb60c8674a8b7cb91",
+    "barcodes": [
+      "8681630799919"
+    ]
+  },
+  {
+    "name": "Morfose Ultra Strong Saç Spreyi (250 ml)",
+    "barcode": "3564354386817",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260428122521690_8681701003150-MORFOSE-SAC-SEKILLENDIRICI-SPREY-ULTRA-STRONG--250-ML-2.jpg",
+    "productId": "69f0a72e4fe4d8a68cca1698",
+    "barcodes": [
+      "3564354386817"
+    ]
+  },
+  {
+    "name": "Bebeto Baklava Marshmallow (60 g)",
+    "barcode": "8690146194118",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260428142546929_16029721-_3_.jpg",
+    "productId": "69f0c36820f2bb1d565f9c3d",
+    "barcodes": [
+      "8690146194118"
+    ]
+  },
+  {
+    "name": "Bebeto Caffe Edition Latte Jelly (70 g)",
+    "barcode": "8690146191704",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260602132440754_16029667-_1_-_1_.jpg",
+    "productId": "69f0c59d9ad2ce32f8b0af57",
+    "barcodes": [
+      "8690146191704"
+    ]
+  },
+  {
+    "name": "Bebeto Gourmet Gummies Çilekli Jelly (140 g)",
+    "barcode": "8690146178439",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260428143530584_16024549-_1_.jpg",
+    "productId": "69f0c5af59a469db15e48c75",
+    "barcodes": [
+      "8690146178439"
+    ]
+  },
+  {
+    "name": "Pepsi Limon Aromalı Kola (330 ml)",
+    "barcode": "8690574119189",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260428145517487_pepsi-limon-330ml-on.jpg",
+    "productId": "69f0ca52132c85a99da7b848",
+    "barcodes": [
+      "8690574119189"
+    ]
+  },
+  {
+    "name": "Pepsi Limon Aromalı Kola (1 L)",
+    "barcode": "8690574119141",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260428150033315_Pepsi-Limon-Pet-1L-_1_.jpg",
+    "productId": "69f0cb8f59a469db15e49cda",
+    "barcodes": [
+      "8690574119141"
+    ]
+  },
+  {
+    "name": "Kıvırcık Paket (1 Adet)",
+    "barcode": "8684990863313",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260430070030906_kivircik.jpg",
+    "productId": "69f2fe0a668ac76474463331",
+    "barcodes": [
+      "8684990863313"
+    ]
+  },
+  {
+    "name": "Luppo Mini Brownie (162 g)",
+    "barcode": "8699141013370",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260504120510955_1337-Luppo-Mini-brwnie-_1_.jpg",
+    "productId": "69f88b74d10e5fe38cd21230",
+    "barcodes": [
+      "8699141013370"
+    ]
+  },
+  {
+    "name": "Protein Ocean High Protein Bar Tiramisu (50 g)",
+    "barcode": "8682696740440",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260504131025711_tiramisu.jpg",
+    "productId": "69f89abe41d053e8db6e3466",
+    "barcodes": [
+      "8682696740440"
+    ]
+  },
+  {
+    "name": "Protein Ocean High Protein Bar Hindistan Cevizi (50 g)",
+    "barcode": "8682696000698",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260504132016665_Coconut.jpg",
+    "productId": "69f89d0dcf432e9f85686356",
+    "barcodes": [
+      "8682696000698"
+    ]
+  },
+  {
+    "name": "Protein Ocean High Protein Bar Çikolata Fındık (50 g)",
+    "barcode": "8682696000704",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260504133025514_ChocolateHazelnut.jpg",
+    "productId": "69f89f6e8f54a391b7b1adc0",
+    "barcodes": [
+      "8682696000704"
+    ]
+  },
+  {
+    "name": "Protein Ocean High Protein Bar Cookie Cream (50 g)",
+    "barcode": "8682696000674",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260504133043205_CookieCream.jpg",
+    "productId": "69f89f808fb43bac3c6cb383",
+    "barcodes": [
+      "8682696000674"
+    ]
+  },
+  {
+    "name": "Züber Çilekli Hi Protein Bar (45 g)",
+    "barcode": "8681630755441",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260505063018457_hiprotein_cilek_on.jpg",
+    "productId": "69f98e77741406eaab33b7bd",
+    "barcodes": [
+      "8681630755441"
+    ]
+  },
+  {
+    "name": "Züber Fındıklı Sütlü Çikolata (42 g)",
+    "barcode": "8681630793146",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260702134556025_cikolata_mockup_findik-3-_1_.jpg",
+    "productId": "69f990c9afe84ed1cd11e601",
+    "barcodes": [
+      "8681630793146"
+    ]
+  },
+  {
+    "name": "Züber Bitter Çikolata (42 g)",
+    "barcode": "8681630793115",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260709100323644_zuber-5.jpg",
+    "productId": "69f991faa98a57a86165d4ed",
+    "barcodes": [
+      "8681630793115"
+    ]
+  },
+  {
+    "name": "Züber Antep Fıstıklı Sütlü Çikolata (42 g)",
+    "barcode": "8681630793122",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260709100320149_zuber-3.jpg",
+    "productId": "69f99329cb01c7fa6536e953",
+    "barcodes": [
+      "8681630793122"
+    ]
+  },
+  {
+    "name": "Züber Pirinç Patlaklı Sütlü Çikolata (35 g)",
+    "barcode": "8681630793108",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260703070542791_zuber-1.jpg",
+    "productId": "69f9933a599b24b1f357bd06",
+    "barcodes": [
+      "8681630793108"
+    ]
+  },
+  {
+    "name": "Züber Sütlü Çikolata (42 g)",
+    "barcode": "8681630793160",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260505065442759_zuber-1.jpg",
+    "productId": "69f99452741406eaab33c597",
+    "barcodes": [
+      "8681630793160"
+    ]
+  },
+  {
+    "name": "Züber Muzlu Hi Protein Bar (45 g)",
+    "barcode": "8681630755380",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260505065346218_Zuber-Muzlu-Hi-Protein-Bar.jpg",
+    "productId": "69f9946e1278d9b4a3813509",
+    "barcodes": [
+      "8681630755380"
+    ]
+  },
+  {
+    "name": "Purina ONE Somonlu Kısırlaştırılmış Kedi Maması (750 g)",
+    "barcode": "8445291815209",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260505082014345_Kisirlastirilmis-Somonlu-750g-20260421-095448-on.jpg",
+    "productId": "69f9a83ccb01c7fa65371b80",
+    "barcodes": [
+      "8445291815209"
+    ]
+  },
+  {
+    "name": "Purina ONE Tavuklu Yavru Kuru Kedi Maması (750 g)",
+    "barcode": "8445291815261",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260505084016585_Tavuklu-Yavru-Kedi-750g-20260421-095442-on.jpg",
+    "productId": "69f9aceec8493e16833c2591",
+    "barcodes": [
+      "8445291815261"
+    ]
+  },
+  {
+    "name": "Nane Paket (1 Adet)",
+    "barcode": "8684990863320",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260505123016967_nane.jpg",
+    "productId": "69f9e2d6ff62e21896766fdf",
+    "barcodes": [
+      "8684990863320"
+    ]
+  },
+  {
+    "name": "Roka Demet (1 Adet)",
+    "barcode": "8684990863337",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260505123516855_roka.jpg",
+    "productId": "69f9e402657cfdff14cf540d",
+    "barcodes": [
+      "8684990863337"
+    ]
+  },
+  {
+    "name": "Taze Soğan Paket (1 Adet)",
+    "barcode": "8684990863344",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260505124020035_taze-sogan.jpg",
+    "productId": "69f9e531a132a0722c81e00b",
+    "barcodes": [
+      "8684990863344"
+    ]
+  },
+  {
+    "name": "Bebeto XS Burger Jelly (10.5 g)",
+    "barcode": "8690146186878",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260505141016756_16024466-_3_-_2_.jpg",
+    "productId": "69f9fa46cb01c7fa653825bd",
+    "barcodes": [
+      "8690146186878"
+    ]
+  },
+  {
+    "name": "ETİ Çikolata Bol Sütlü Mini Tablet (32 g)",
+    "barcode": "8690526713809",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260506064032685_8690526713809.jpg",
+    "productId": "69fae25e72f04761ca53683d",
+    "barcodes": [
+      "8690526713809"
+    ]
+  },
+  {
+    "name": "Asperox Lavabo Açıcı Granül (2 x 50 g)",
+    "barcode": "8697713821842",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260506065016231_Asperox-Lavabo-Acici-Granul-2x50_On-_1_.jpg",
+    "productId": "69fae4a61278d9b4a3840b46",
+    "barcodes": [
+      "8697713821842"
+    ]
+  },
+  {
+    "name": "Asperox Lavabo Açıcı Jel (1 L)",
+    "barcode": "8697713821828",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260506104533420_Asperox-Lavabo-Acici-Jel_On-_1_.jpg",
+    "productId": "69fb1bcb44544cb5a4483f93",
+    "barcodes": [
+      "8697713821828"
+    ]
+  },
+  {
+    "name": "Seyidoğlu Yaz Helva Cevizli (350 g)",
+    "barcode": "8698529312135",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260506124017931_cevizlihelva-350.png",
+    "productId": "69fb36afff62e218967941c3",
+    "barcodes": [
+      "8698529312135"
+    ]
+  },
+  {
+    "name": "Velamints Yeşil Nane Aromalı Küp Sakız (40 g)",
+    "barcode": "8690840173792",
+    "imageUrl": "https://cdn-image.getir.com/market/product/e45fad99-bc6a-4c43-b05e-c78d8b540ea4.jpg",
+    "productId": "69fba85c599b24b1f35d3923",
+    "barcodes": [
+      "8690840173792"
+    ]
+  },
+  {
+    "name": "Raya Organik Siyah Zeytin (310 g)",
+    "barcode": "8680596220116",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260507081014809_Raya-Organik-Siyah-Zeytin.png",
+    "productId": "69fc48e43ea80b873ae60c6e",
+    "barcodes": [
+      "8680596220116"
+    ]
+  },
+  {
+    "name": "Raya Organik Yeşil Çizik Zeytin (300 g)",
+    "barcode": "8680596220123",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260507081521230_Raya-Organik-Yesil-Cizik-Zeytin.png",
+    "productId": "69fc4a179804db47a9d50255",
+    "barcodes": [
+      "8680596220123"
+    ]
+  },
+  {
+    "name": "Raya Organik Siyah Zeytin Ezmesi (180 g)",
+    "barcode": "8680596224701",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260507082019103_Raya-Organik-Siyah-Zeytin-Ezmesi.png",
+    "productId": "69fc4b4086d85ed5a4308aa1",
+    "barcodes": [
+      "8680596224701"
+    ]
+  },
+  {
+    "name": "Cif Infinite Clean Anti Toz Sprey Misket Limonu & Limon Otu (280 ml)",
+    "barcode": "8683130137154",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260508134520014_8683130137154_1.jpg",
+    "productId": "69fde8ee5eada5b70335c5a5",
+    "barcodes": [
+      "8683130137154"
+    ]
+  },
+  {
+    "name": "Cif Infinite Clean Sprey Lotus Deniz Tuzu (280 ml)",
+    "barcode": "8683130139189",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260508135025262_8683130139189_1.jpg",
+    "productId": "69fdea1f99f56201304aae27",
+    "barcodes": [
+      "8683130139189"
+    ]
+  },
+  {
+    "name": "Old Spice Süper Mario Deodorant Stick (50 ml)",
+    "barcode": "8700216946377",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260511114021654_MMM_Stick_50ml_Luigi.jpg",
+    "productId": "6a01c0239975aa6961dbbe8c",
+    "barcodes": [
+      "8700216946377"
+    ]
+  },
+  {
+    "name": "Old Spice Süper Mario 3'ü 1 Arada Duş Jeli (400 ml)",
+    "barcode": "8006540842454",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260511115019865_MMM_SG_400ml_Luigi-_1_.jpg",
+    "productId": "6a01c2798f495f0b3cbde43e",
+    "barcodes": [
+      "8006540842454"
+    ]
+  },
+  {
+    "name": "Hero Baby Plus Çilekli Yoğurtlu (120 g)",
+    "barcode": "8681080555981",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260511131517170_Hero-Baby-Plus-Cilekli-Yogurtlu-2025-_2_.png",
+    "productId": "6a01d663dcf6a8eec15eb40a",
+    "barcodes": [
+      "8681080555981"
+    ]
+  },
+  {
+    "name": "Hero Goodies Yaban Mersini Muz Yulaf Havuç (100 g)",
+    "barcode": "8691080555232",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260511132519609_hero-goodies-yaban-mersinli-on.jpg",
+    "productId": "6a01d8bd9975aa6961dc0a6d",
+    "barcodes": [
+      "8691080555232"
+    ]
+  },
+  {
+    "name": "Nivea Aydınlatıcı Micellar Makyaj Temizleme Suyu (400 ml)",
+    "barcode": "4006000076607",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260512124525054_nivea-4006000076607-01.jpg",
+    "productId": "6a0320e2f87aafc4ae3a70b9",
+    "barcodes": [
+      "4006000076607"
+    ]
+  },
+  {
+    "name": "Prima Aktif Bebek Mega Fırsat Paketi 7 Beden (54'lü)",
+    "barcode": "8006530361552",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260512141020047_8006530361552-on.jpg",
+    "productId": "6a0334c95432296829991efb",
+    "barcodes": [
+      "8006530361552"
+    ]
+  },
+  {
+    "name": "Prima Aktif Bebek Mega Fırsat Paketi 6 Beden (76'lı)",
+    "barcode": "8006530331166",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260512141524101_8006530331166-on.jpg",
+    "productId": "6a0335fa5eada5b7034108e0",
+    "barcodes": [
+      "8006530331166"
+    ]
+  },
+  {
+    "name": "Prima Aktif Bebek Mega Fırsat Paketi 5 Beden (92'li)",
+    "barcode": "8006530331142",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260512141541527_8006530331142-on.jpg",
+    "productId": "6a03360b7edb72f88e5f2d7f",
+    "barcodes": [
+      "8006530331142"
+    ]
+  },
+  {
+    "name": "Prima Aktif Bebek Mega Fırsat Paketi 4 Beden (104'lü)",
+    "barcode": "8006530331104",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260512142015570_8006530331104-on.jpg",
+    "productId": "6a03371da2069d66b2ea30ee",
+    "barcodes": [
+      "8006530331104"
+    ]
+  },
+  {
+    "name": "Prima Aktif Bebek Mega Fırsat Paketi 3 Beden (116'lı)",
+    "barcode": "8006530331128",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260512142033040_8006530331128-on.jpg",
+    "productId": "6a03372ef87aafc4ae3ab354",
+    "barcodes": [
+      "8006530331128"
+    ]
+  },
+  {
+    "name": "Prima Aktif Bebek Süper Paket 8 Beden (27'li)",
+    "barcode": "8006530361460",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260512142526976_8006530361460-on.jpg",
+    "productId": "6a03385496911894f85b3035",
+    "barcodes": [
+      "8006530361460"
+    ]
+  },
+  {
+    "name": "Prima Aktif Bebek Süper Paket 6 Beden (38'li)",
+    "barcode": "8006530331050",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260512143023226_8006530331050-on.jpg",
+    "productId": "6a03397d5eada5b703411387",
+    "barcodes": [
+      "8006530331050"
+    ]
+  },
+  {
+    "name": "Prima Aktif Bebek Süper Paket 7 Beden (30'lu)",
+    "barcode": "8006530361514",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260512143043109_8006530361514-on.jpg",
+    "productId": "6a0339907edb72f88e5f39ae",
+    "barcodes": [
+      "8006530361514"
+    ]
+  },
+  {
+    "name": "Prima Aktif Bebek Süper Paket 5 Beden (46'lı)",
+    "barcode": "8006530331074",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260512143529544_8006530331074-on.jpg",
+    "productId": "6a033aaf5b57cc7888b8ba0b",
+    "barcodes": [
+      "8006530331074"
+    ]
+  },
+  {
+    "name": "Patos Sticks Mexican Chilli Acı Plus (35 g)",
+    "barcode": "8681506024411",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260512145012873_patos-sticks-mexican-on.jpg",
+    "productId": "6a033e23fca923f13e9a1f48",
+    "barcodes": [
+      "8681506024411"
+    ]
+  },
+  {
+    "name": "Patos Sticks Peynirli (35 g)",
+    "barcode": "8681506024435",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260512145526085_patos-sticks-peynir-on.jpg",
+    "productId": "6a033f5cf87aafc4ae3ad18f",
+    "barcodes": [
+      "8681506024435"
+    ]
+  },
+  {
+    "name": "Cipso Tırtıklı Kokoreç Cips (125 g)",
+    "barcode": "8681506019561",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260512150027234_cipso-kokorec-on.jpg",
+    "productId": "6a0340885b57cc7888b8c8d6",
+    "barcodes": [
+      "8681506019561"
+    ]
+  },
+  {
+    "name": "Dankek Karaorman Yaş Pasta (245 g)",
+    "barcode": "8690504066835",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260513064510401_DK_YAS_PASTA_3D_04_ON.png",
+    "productId": "6a041df48f495f0b3cc293c3",
+    "barcodes": [
+      "8690504066835"
+    ]
+  },
+  {
+    "name": "Heinz Cheddar Sos (230 g)",
+    "barcode": "8696362806224",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260513081536459_heinz-cheddar-on.jpg",
+    "productId": "6a04343b7edb72f88e60d9e3",
+    "barcodes": [
+      "8696362806224"
+    ]
+  },
+  {
+    "name": "Clear FIFA World Cup Şampuan (330 ml)",
+    "barcode": "8683130139646",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260513121018862_8683130139646.01_11zon.jpg",
+    "productId": "6a046a29ea97fdd81c8486ce",
+    "barcodes": [
+      "8683130139646"
+    ]
+  },
+  {
+    "name": "Clear Scalp Maxcharge Şampuan (330 ml)",
+    "barcode": "8683130120057",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260513125018813_8683130120057_1.jpg",
+    "productId": "6a047389e23222b30a9e2e56",
+    "barcodes": [
+      "8683130120057"
+    ]
+  },
+  {
+    "name": "FELIX Kedi Çorbası Sığır Etli (48 g)",
+    "barcode": "8445290571625",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260514070011581_getImage__24_.jpeg",
+    "productId": "6a0572f92e274d998b48fd47",
+    "barcodes": [
+      "8445290571625"
+    ]
+  },
+  {
+    "name": "Altınbaşak Tahıl Cipsi Taco & Kinoa (50 g)",
+    "barcode": "8690504011378",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260514073024318_113-7_altinbasak_tahil_cipsi_taco_50gr_3D_final-2.jpg",
+    "productId": "6a057a0ea4bd407ef097e71e",
+    "barcodes": [
+      "8690504011378"
+    ]
+  },
+  {
+    "name": "Altınbaşak Tahıl Cipsi Yoğurt Mevsim Yeşillikleri (120 g)",
+    "barcode": "8690504011361",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260514073415319_113-6_altinbasak_tahil_cipsi_yogurt_120gr_3D_final-_1_.jpg",
+    "productId": "6a057b2f3f1ee22ad8954247",
+    "barcodes": [
+      "8690504011361"
+    ]
+  },
+  {
+    "name": "Garnier Ambre Solaire SPF50 Nemlendirici Losyon (50 ml)",
+    "barcode": "3600542625081",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260515103408272_garniere-ambre-solaire-on.jpg",
+    "productId": "6a06f6dc8971de924dc6425b",
+    "barcodes": [
+      "3600542625081"
+    ]
+  },
+  {
+    "name": "Ruffles Biftek Aromalı Cips Süper Boy (115 g)",
+    "barcode": "8690624106398",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260520143522005_RUFFLES_ARGENTINA_SUPER_105-115G_3D_FRONT.jpg",
+    "productId": "6a0dc6a8c1e58b4e1a3a4ec0",
+    "barcodes": [
+      "8690624106398"
+    ]
+  },
+  {
+    "name": "Cheetos Pizza Aromalı Mısır Çerezi Süper Boy (80 g)",
+    "barcode": "8690624305517",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260520144034087_CHEETOS_PIZZA_LEZZETINDE_3D_FRONT.jpg",
+    "productId": "6a0dc7e0c1e58b4e1a3a5490",
+    "barcodes": [
+      "8690624305517"
+    ]
+  },
+  {
+    "name": "Doritos Twist Cheddar Peyniri Aromalı Süper Boy (115 g)",
+    "barcode": "8690624305487",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260520212944965_DORITOS_TWIST_CHEEDAR_PEYNIR_115G_R42DTCS115100_3D_FRONT.jpg",
+    "productId": "6a0e27f5346e884b2b2368d8",
+    "barcodes": [
+      "8690624305487"
+    ]
+  },
+  {
+    "name": "Yörsan Yarım Yağlı Süt (1 L)",
+    "barcode": "8684000450946",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260521130016028_11010232_1-74192d-1650x1650.jpg",
+    "productId": "6a0f01dda368e3ad7d5e2748",
+    "barcodes": [
+      "8684000450946"
+    ]
+  },
+  {
+    "name": "Lipton Ice Tea Sparkling Limon Yuzu Kutu (330 ml)",
+    "barcode": "8690574118779",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260521135013679_Sparkling-Lemon-Yuzu-Kutu-330-ml-On-Yuz.jpg",
+    "productId": "6a0f0d93518452b7bb11f4d1",
+    "barcodes": [
+      "8690574118779"
+    ]
+  },
+  {
+    "name": "Lipton Ice Tea Sparkling Tropikal Meyve Kutu (330 ml)",
+    "barcode": "8690574118793",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260521135526449_Sparkling-Tropikal-Kutu-330ml-On-Yuz.jpg",
+    "productId": "6a0f0eccc921c29d882f6546",
+    "barcodes": [
+      "8690574118793"
+    ]
+  },
+  {
+    "name": "Lipton Ice Tea Sparkling Limon Yuzu (1 L)",
+    "barcode": "8690574118786",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260521141532438_Sparkling-Lemon-Yuzu-Pet-1L-On-Yuz.jpg",
+    "productId": "6a0f1382db85d84b1209e4e5",
+    "barcodes": [
+      "8690574118786"
+    ]
+  },
+  {
+    "name": "Lipton Ice Tea Sparkling Tropikal Meyve (1 L)",
+    "barcode": "8690574118809",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260521142032651_Sparkling-Tropikal-Pet-1L-On-Yuz.jpg",
+    "productId": "6a0f14aee69e86029f5a76b6",
+    "barcodes": [
+      "8690574118809"
+    ]
+  },
+  {
+    "name": "Banvit Çıtır Tavuk Parçaları (300 g)",
+    "barcode": "8690451717699",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260522115022187_banvit.jpg",
+    "productId": "6a1042fc16632eb3b131a238",
+    "barcodes": [
+      "8690451717699"
+    ]
+  },
+  {
+    "name": "Monster Aussie Lemonade (500 ml)",
+    "barcode": "5056784903414",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260522141529340_monster-aussie-on.jpg",
+    "productId": "6a1064ffe69e86029f5c1b38",
+    "barcodes": [
+      "5056784903414"
+    ]
+  },
+  {
+    "name": "Fanta Nar (1 L)",
+    "barcode": "5000112695410",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260522142034619_fanta-nar-1L-on.jpg",
+    "productId": "6a106630fc1fd33c045588d3",
+    "barcodes": [
+      "5000112695410"
+    ]
+  },
+  {
+    "name": "Karadut Frenk Üzümü Mineralli Gazlı İçecek (6 x 200 ml)",
+    "barcode": "8692813005659",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260601071517593_kizilay-karadut-frenk-on.jpg",
+    "productId": "6a1d3183096fb31300caffa5",
+    "barcodes": [
+      "8692813005659"
+    ]
+  },
+  {
+    "name": "Sırma İsabella Aromalı Maden Suyu (6 x 200 ml)",
+    "barcode": "8693593110298",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260601072511095_SIRMA_Isabella_shrink_6x200ml_2026-_1_.jpg",
+    "productId": "6a1d33d45586f57349a1bbcd",
+    "barcodes": [
+      "8693593110298"
+    ]
+  },
+  {
+    "name": "Sırma C Vitaminli Yeşil Erik Maden Suyu (6 x 200 ml)",
+    "barcode": "8691058008913",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260601073023868_SIRMA_Erik_shrink_6x200ml_2026.jpg",
+    "productId": "6a1d350d681590b6d7a26967",
+    "barcodes": [
+      "8691058008913"
+    ]
+  },
+  {
+    "name": "Dimes Ananas İçeceği (200 ml)",
+    "barcode": "8690558031698",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260601075509877_dimes-anans-200ml-on.jpg",
+    "productId": "6a1d3adbfd17084fab4df155",
+    "barcodes": [
+      "8690558031698"
+    ]
+  },
+  {
+    "name": "Dimes Karışık Nektar (1 L)",
+    "barcode": "8690558013236",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260601080510535_dimes-karisik-1L-on.jpg",
+    "productId": "6a1d3d347026038dd152cd42",
+    "barcodes": [
+      "8690558013236"
+    ]
+  },
+  {
+    "name": "Obsesso Creamy Vanilya (250 ml)",
+    "barcode": "8690558042595",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260601081512376_onsesso-creamy-latte-vanilya-on.jpg",
+    "productId": "6a1d3f8ee9345336c130cf8b",
+    "barcodes": [
+      "8690558042595"
+    ]
+  },
+  {
+    "name": "Obsesso Creamy Antep Fıstıklı (250 ml)",
+    "barcode": "8690558042625",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260601082513578_obsesso-creamy-latte-antep-fistigi-on.jpg",
+    "productId": "6a1d41e716632eb3b140bc68",
+    "barcodes": [
+      "8690558042625"
+    ]
+  },
+  {
+    "name": "Dimes Cool Ekşi Yeşil Elma (310 ml)",
+    "barcode": "8690558042854",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260601083521483_dimes-cool-eksi-on.jpg",
+    "productId": "6a1d4447681590b6d7a28225",
+    "barcodes": [
+      "8690558042854"
+    ]
+  },
+  {
+    "name": "Haribo Futbool (160 g)",
+    "barcode": "8691216116016",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260601133035627_haribo-football-01.jpg",
+    "productId": "6a1d89798db0ba4285ae0484",
+    "barcodes": [
+      "8691216116016"
+    ]
+  },
+  {
+    "name": "Yayla Haşlanmış Keten Tohumlu Salata Toping (150 g)",
+    "barcode": "8693374280509",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260602114544804_yayla-salata-toping-01.jpg",
+    "productId": "6a1ec2673d1c3a406a031b4b",
+    "barcodes": [
+      "8693374280509"
+    ]
+  },
+  {
+    "name": "Calve Sarımsaklı Mayonez (400 g)",
+    "barcode": "8683130231784",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260602121043418_calve-8683130231784-on.jpg",
+    "productId": "6a1ec841c5b354d2fd7b4f6b",
+    "barcodes": [
+      "8683130231784"
+    ]
+  },
+  {
+    "name": "Signal Best Defender Diş Macunu (75 ml)",
+    "barcode": "8999999617691",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260602145010640_8999999617691.01.jpg",
+    "productId": "6a1eeda1cf87e69dcb0d3b90",
+    "barcodes": [
+      "8999999617691"
+    ]
+  },
+  {
+    "name": "Signal Best Defender Diş Fırçası (1 Adet)",
+    "barcode": "8683130145258",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260602145512097_8683130145258_2.jpg",
+    "productId": "6a1eeece04ee19e21daf9aec",
+    "barcodes": [
+      "8683130145258"
+    ]
+  },
+  {
+    "name": "Yayla Gönen Baldo Pirinç (1 kg)",
+    "barcode": "8693374264523",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260603181529206_GONEN-BALDO-PIRINC_1-KG_DIK_ON_50-_1_.jpg",
+    "productId": "6a206f3ecddd2d2428ddf56b",
+    "barcodes": [
+      "8693374264523"
+    ]
+  },
+  {
+    "name": "Yayla Osmancık Yerli Pirinç Zenginleştirilmiş D Vitaminli (1 kg)",
+    "barcode": "8693374264547",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260603183518628_OSMANCIK-YERLI-PIRINC_1KG_DIK_ON_50-_1_.jpg",
+    "productId": "6a2073e4d09e01cd3a7f62b3",
+    "barcodes": [
+      "8693374264547"
+    ]
+  },
+  {
+    "name": "Yayla Onlife Hurmalı Elmalı Granola (200 g)",
+    "barcode": "8693374282657",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260603191547019_yayla-on-life-granola-hurma-elma-01.jpg",
+    "productId": "6a207d6190c866d1a7af6d65",
+    "barcodes": [
+      "8693374282657"
+    ]
+  },
+  {
+    "name": "Yayla Onlife Kuru Meyveli Fındıklı Müsli (350 g)",
+    "barcode": "8693374282558",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260603192016696_yayla-onlife-musli-01.jpg",
+    "productId": "6a207e6e703e87cccb92a267",
+    "barcodes": [
+      "8693374282558"
+    ]
+  },
+  {
+    "name": "Yayla Yulaf Ezmesi (500 g)",
+    "barcode": "8693374283456",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260603192547171_yayla-on-life-yulaf-ezmesi-01.jpg",
+    "productId": "6a207fb8c5b354d2fd7de9d9",
+    "barcodes": [
+      "8693374283456"
+    ]
+  },
+  {
+    "name": "Yayla Onlife İnce Öğütülmüş Yulaf Ezmesi (350 g)",
+    "barcode": "8693374283463",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260603193037301_yayla-on-life-ince-ogutulmus-yulaf-ezmesi-01.jpg",
+    "productId": "6a2080da98d620a07ea9d99d",
+    "barcodes": [
+      "8693374283463"
+    ]
+  },
+  {
+    "name": "Everest EFN11 900 mAh (Beyaz)",
+    "barcode": "8680096147067",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260702104118697_hero.jpg",
+    "productId": "6a231a68dc06e8ae10a322f8",
+    "barcodes": [
+      "8680096147067"
+    ]
+  },
+  {
+    "name": "Emotion Deo Evertone (150 ml)",
+    "barcode": "8690506567422",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260608085054722_emotion-c.jpg",
+    "productId": "6a26826c02dca0da12f01fcc",
+    "barcodes": [
+      "8690506567422"
+    ]
+  },
+  {
+    "name": "Emotion Soothing Deo (150 ml)",
+    "barcode": "8690506567439",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260608085112892_getImage---2026-06-02T115542.161.jpg",
+    "productId": "6a26827d3e44a2f26dbd3b80",
+    "barcodes": [
+      "8690506567439"
+    ]
+  },
+  {
+    "name": "7 Days Çilekli Kruvasan (60 g)",
+    "barcode": "7622202365355",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260608131011540_7DAYS_KRUVASAN_CILEK_60G_3D-_1_.jpg",
+    "productId": "6a26bf31b577370dcf1a9e6a",
+    "barcodes": [
+      "7622202365355"
+    ]
+  },
+  {
+    "name": "Magnum Cone Badem (140 ml)",
+    "barcode": "8721274647327",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260608142049559_magnum_cone_front.jpg",
+    "productId": "6a26cfbf19fe68daddc07cce",
+    "barcodes": [
+      "8721274647327"
+    ]
+  },
+  {
+    "name": "Doğanay Limonata Sade (1 L)",
+    "barcode": "8693354001346",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260608194106359_Sade-1-Lt-beyaz-arka-plan.jpg",
+    "productId": "6a271ad057c2a50d81830ef0",
+    "barcodes": [
+      "8693354001346"
+    ]
+  },
+  {
+    "name": "Doğanay Limonata Şekersiz (1 L)",
+    "barcode": "8693354001186",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260608194529082_Sekersiz-1LT-beyaz-arka-plan.jpg",
+    "productId": "6a271bd79289b9c298118264",
+    "barcodes": [
+      "8693354001186"
+    ]
+  },
+  {
+    "name": "Solo Ultra Tuvalet Kağıdı (12'li)",
+    "barcode": "8690530078611",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260609140021481_8690530078611.jpg",
+    "productId": "6a281c7340ea6662b32a127b",
+    "barcodes": [
+      "8690530078611"
+    ]
+  },
+  {
+    "name": "Solo Ultra Tuvalet Kağıdı (16'lı)",
+    "barcode": "8690530078628",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260609140515292_8690530078628.jpg",
+    "productId": "6a281d987db77a1209555bed",
+    "barcodes": [
+      "8690530078628"
+    ]
+  },
+  {
+    "name": "Solo Ultra Kağıt Havlu (6'lı)",
+    "barcode": "8690530078710",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260609141010190_8690530078710.jpg",
+    "productId": "6a281ec09af31d825b34784c",
+    "barcodes": [
+      "8690530078710"
+    ]
+  },
+  {
+    "name": "Sensodyne Çok Yönlü Koruma Diş Macunu (2 x 50 ml)",
+    "barcode": "8681291341250",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260630063532786_8681291341250.jpg",
+    "productId": "6a282cebc1b111d39b835f7f",
+    "barcodes": [
+      "8681291341250"
+    ]
+  },
+  {
+    "name": "Dr. Oetker Cool Dream Çilek Aromalı (64 g)",
+    "barcode": "8690629451554",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260610104541189_dr-oetker-cool-dream-01.jpg",
+    "productId": "6a294044e359639e7803bd03",
+    "barcodes": [
+      "8690629451554"
+    ]
+  },
+  {
+    "name": "Dr. Oetker Cool Dream Kakaolu (83 g)",
+    "barcode": "8690629451592",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260610105032857_dr-oetker-cool-dream-kakaolu-01.jpg",
+    "productId": "6a29417652206f18b306fc41",
+    "barcodes": [
+      "8690629451592"
+    ]
+  },
+  {
+    "name": "Dr. Oetker Cool Dream Vanilyalı (63 g)",
+    "barcode": "8690629451578",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260610105519554_dr-oetker-cool-dream-vanilya-01.jpg",
+    "productId": "6a2942953c57aa53c206c330",
+    "barcodes": [
+      "8690629451578"
+    ]
+  },
+  {
+    "name": "Tat Zeytinyağlı Ton Balığı (2 x 140 g)",
+    "barcode": "8690635210411",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260619074204437_ZeytinyagliTonBaligiKartonet140x2-_1_.jpg",
+    "productId": "6a2abf7c30d6a7fc0208edeb",
+    "barcodes": [
+      "8690635210411"
+    ]
+  },
+  {
+    "name": "Tat Ayçiçek Yağlı Ton Balığı (2 x 140 g)",
+    "barcode": "8690635210435",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260619074146483_TonBaligiKartonet140x2.jpg",
+    "productId": "6a2abf8bd0bc0d13aa3f8e12",
+    "barcodes": [
+      "8690635210435"
+    ]
+  },
+  {
+    "name": "Tat Ayçiçek Yağlı Ton Balığı (3 x 75 g)",
+    "barcode": "8690635210459",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260619074125777_TonBaligiKartonet75x3-_1_.jpg",
+    "productId": "6a2ac0c6cebe029a9bee9df2",
+    "barcodes": [
+      "8690635210459"
+    ]
+  },
+  {
+    "name": "Nescafé Xpress Pear Cookie Crush (250 ml)",
+    "barcode": "8690632771366",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260611161019720_Nescafe_lte_1_5_4_armut_3D_small.jpg",
+    "productId": "6a2adde90d0ebac942a2b310",
+    "barcodes": [
+      "8690632771366"
+    ]
+  },
+  {
+    "name": "Nescafé Xpress Choco Cherry Splash (250 ml)",
+    "barcode": "8690632768809",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260611161606062_Nescafe_lte_1_5_4_visne_3D_small.jpg",
+    "productId": "6a2adf43408fc8f5f9f3427d",
+    "barcodes": [
+      "8690632768809"
+    ]
+  },
+  {
+    "name": "Ülker Mini All Star Futbol Özel Seri (1 Adet)",
+    "barcode": "8683508137076",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260615114643217_ulker.png",
+    "productId": "6a2ae3cba713dc5e1caf6ca3",
+    "barcodes": [
+      "8683508137076"
+    ]
+  },
+  {
+    "name": "Eti Lifalif Yer Fıstıklı ve Hurmalı Müsli (350 g)",
+    "barcode": "8690526014548",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260612125013476_8690526014548.jpg",
+    "productId": "6a2c00826b6a743f719ec906",
+    "barcodes": [
+      "8690526014548"
+    ]
+  },
+  {
+    "name": "Oando Sade Plombır Dondurma (120 ml)",
+    "barcode": "8721274820362",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260612134529000_8721274820362_1.png",
+    "productId": "6a2c0d77eccbaff7fb1950e8",
+    "barcodes": [
+      "8721274820362"
+    ]
+  },
+  {
+    "name": "Elseve Collagen Lifter Şampuan (300 ml)",
+    "barcode": "3600524251468",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260616075013671_3600524251468-01.jpg",
+    "productId": "6a3100330238aaf10882b2ca",
+    "barcodes": [
+      "3600524251468"
+    ]
+  },
+  {
+    "name": "Elseve Collagen Lifter Saç Kremi (250 ml)",
+    "barcode": "3600524251574",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260616080011622_3600524251574-01.jpg",
+    "productId": "6a31028912741f43cf12a0a0",
+    "barcodes": [
+      "3600524251574"
+    ]
+  },
+  {
+    "name": "Elseve Collagen Lifter Saç Spreyi (200 ml)",
+    "barcode": "3600524250232",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260616080224002_3600524250232-01.jpg",
+    "productId": "6a3103bab80cc2189c05f07b",
+    "barcodes": [
+      "3600524250232"
+    ]
+  },
+  {
+    "name": "Patislove Enjoy Patates Cipsli ve Fındık Kremalı Dolgulu Sütlü Çikolata (100 g)",
+    "barcode": "8683280733541",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260618134125051_patis-love-patato-chips-01.jpg",
+    "productId": "6a31536706c71d331ccfe105",
+    "barcodes": [
+      "8683280733541"
+    ]
+  },
+  {
+    "name": "Gol Sütlü Çikolata Kaplı Fındık Draje (125 g)",
+    "barcode": "8683417000829",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260616135513587_Gol-125g-yeni.jpg",
+    "productId": "6a3155bfeb09c74d5baddcd2",
+    "barcodes": [
+      "8683417000829"
+    ]
+  },
+  {
+    "name": "Eti Lifalif Kırmızı Meyveli Meyve Bar (35 g)",
+    "barcode": "8690526346069",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260701103117284_8690526346069-_1_.jpg",
+    "productId": "6a324aaecebe029a9bf6672a",
+    "barcodes": [
+      "8690526346069"
+    ]
+  },
+  {
+    "name": "Eti Lifalif Kayısılı, Yer Fıstıklı, Kakaolu Meyve Bar (35 g)",
+    "barcode": "8690526232348",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260617072031963_8690526232348.png",
+    "productId": "6a324abddd18a30081b6338c",
+    "barcodes": [
+      "8690526232348"
+    ]
+  },
+  {
+    "name": "Eti Lifalif Üzümlü, Fındıklı, Kakaolu Meyve Bar (35 g)",
+    "barcode": "8690526576862",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260701072022337_8690526576862-01.jpg",
+    "productId": "6a324bd80238aaf108841e29",
+    "barcodes": [
+      "8690526576862"
+    ]
+  },
+  {
+    "name": "Eduscho Caffe Crema Strong (500 g)",
+    "barcode": "4061445292364",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260617132014765_Eduscho-Caffe-Crema-Strong-Cekirdek-Kahve-500g-On-Gorsel-_1_.jpg",
+    "productId": "6a329f0cbb9df4c3e6ffe758",
+    "barcodes": [
+      "4061445292364"
+    ]
+  },
+  {
+    "name": "Ice Break Latte (375 ml)",
+    "barcode": "8692971434544",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260617143515068_ice-break-latte-01.jpg",
+    "productId": "6a32b0a056412e0a5462f495",
+    "barcodes": [
+      "8692971434544"
+    ]
+  },
+  {
+    "name": "Ice Break Şekersiz Latte (375 ml)",
+    "barcode": "8692971436180",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260617144017694_ice-break-seker-ilavesiz-latte-01.jpg",
+    "productId": "6a32b1cf58a38c94b48393b5",
+    "barcodes": [
+      "8692971436180"
+    ]
+  },
+  {
+    "name": "Ice Break Mocha (375 ml)",
+    "barcode": "8692971434308",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260617144035546_ice-break-mocha-01.jpg",
+    "productId": "6a32b1e024d92e61b625d9d6",
+    "barcodes": [
+      "8692971434308"
+    ]
+  },
+  {
+    "name": "Ice Break Vanilyalı Latte (375 ml)",
+    "barcode": "8692971435794",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260617144514974_ice-break-vanilya-latte-01.jpg",
+    "productId": "6a32b2f84f30003b6a8365a4",
+    "barcodes": [
+      "8692971435794"
+    ]
+  },
+  {
+    "name": "Ice Break Toffee Nut Latte (375 ml)",
+    "barcode": "8692971436012",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260617145018242_ice-break-toffee-nut-latte-01.jpg",
+    "productId": "6a32b427126e848384fc8e50",
+    "barcodes": [
+      "8692971436012"
+    ]
+  },
+  {
+    "name": "Lipton Portakal Mango Ice Tea (1 L)",
+    "barcode": "8690574118748",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260617152014560_Lipton-Orange-Mango-1L.jpg",
+    "productId": "6a32bb2cb0ab0d7fbe71a31f",
+    "barcodes": [
+      "8690574118748"
+    ]
+  },
+  {
+    "name": "Lipton Portakal Mango Ice Tea (330 ml)",
+    "barcode": "8690574118731",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260617152517612_Lipton-Orange-Mango-Can-330-ml.jpg",
+    "productId": "6a32bc5bca2d308f1758ebdd",
+    "barcodes": [
+      "8690574118731"
+    ]
+  },
+  {
+    "name": "La Felicita Kedidili Bisküvi (200 g)",
+    "barcode": "8684981985109",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260618145236656_la-felicita-kedi-dili-01.jpg",
+    "productId": "6a3406d1c80946e445f302b5",
+    "barcodes": [
+      "8684981985109"
+    ]
+  },
+  {
+    "name": "Kahve Dünyası 3'ü 1 Arada Klasik Hazır Kahve (8'li)",
+    "barcode": "8697447043701",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260619135016708_kahve-dunyasi-3u1.jpg",
+    "productId": "6a3549161b2a92eea2036622",
+    "barcodes": [
+      "8697447043701"
+    ]
+  },
+  {
+    "name": "Kahve Dünyası 2'si 1 Arada Klasik Hazır Kahve (8'li)",
+    "barcode": "8697447043756",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260619135033714_kahve-dunyasi-2si1.jpg",
+    "productId": "6a354927e374d902e857fd52",
+    "barcodes": [
+      "8697447043756"
+    ]
+  },
+  {
+    "name": "First Sour Patch Kids Kırmızı Meyve Aromalı Şekersiz Sakız (27 g)",
+    "barcode": "7622202350511",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260619143017223_FIRST_SPK_REDBERRY-3d.jpg",
+    "productId": "6a355276a47ac0e947dff1d5",
+    "barcodes": [
+      "7622202350511"
+    ]
+  },
+  {
+    "name": "First Sour Patch Kids Ahududu Aromalı Şekersiz Sakız (27 g)",
+    "barcode": "7622202350474",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260619143034843_FIRST_SPK_RASPBERRY-3d.jpg",
+    "productId": "6a3552872939df6d58ec33d4",
+    "barcodes": [
+      "7622202350474"
+    ]
+  },
+  {
+    "name": "First Sour Patch Kids Misket Limonu Aromalı Şekersiz Sakız (27 g)",
+    "barcode": "7622202350436",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260619143522584_FIRST_SPK_LIME-3d.jpg",
+    "productId": "6a3553a71361547de4b26b50",
+    "barcodes": [
+      "7622202350436"
+    ]
+  },
+  {
+    "name": "Master Farm İç Kabak Çekirdeği Çiğ (150 g)",
+    "barcode": "8683717472104",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260622101516987_Master-Farm_Ic-Kabak-Cekirdegi_A.jpg",
+    "productId": "6a390b335bcfdaea6185b598",
+    "barcodes": [
+      "8683717472104"
+    ]
+  },
+  {
+    "name": "Master Farm Günkuru Kayısı (140 g)",
+    "barcode": "8683717470599",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260622102522667_Master-Farm_Gun-Kusuru-Kayisi_Ambalaj-3D.jpg",
+    "productId": "6a390d9067110a859e0cc7c3",
+    "barcodes": [
+      "8683717470599"
+    ]
+  },
+  {
+    "name": "Master Nut Siirt Fıstığı (125 g)",
+    "barcode": "8683717470193",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260622103031219_Master-Nut-Siirt-Fistigi-125-gr.jpg",
+    "productId": "6a390ec47d11498f92040d19",
+    "barcodes": [
+      "8683717470193"
+    ]
+  },
+  {
+    "name": "Tadelle Küp Gofret Kakao Kremalı (200 g)",
+    "barcode": "8683417001512",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260622104012787_Tadelle-Kup-Kakao-Kremali-_1_.jpg",
+    "productId": "6a39110a8393c828a742d3bb",
+    "barcodes": [
+      "8683417001512"
+    ]
+  },
+  {
+    "name": "Tadelle Küp Gofret Fındık Kremalı (200 g)",
+    "barcode": "8683417001543",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260622105014789_Tadelle-Kup-Findik-Kremali.jpg",
+    "productId": "6a3913645bcfdaea6185bf34",
+    "barcodes": [
+      "8683417001543"
+    ]
+  },
+  {
+    "name": "Tadelle Küp Gofret Bitter Kremalı (200 g)",
+    "barcode": "8683417001574",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260622105530797_Tadelle-Kup-Bitter.jpg",
+    "productId": "6a3914a0169bfde55cfc697a",
+    "barcodes": [
+      "8683417001574"
+    ]
+  },
+  {
+    "name": "Sütaş Dilimli Burger Peyniri (225 G)",
+    "barcode": "8681324002066",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260622135109064_sutas-dilimli-burger-peynir-01.jpg",
+    "productId": "6a393dcb8393c828a743204d",
+    "barcodes": [
+      "8681324002066"
+    ]
+  },
+  {
+    "name": "Sensodyne Hassasiyet ve Çürüklere Karşı Diş Macunu (75 ml)",
+    "barcode": "8681291342431",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260623075017724_8681291342431-01.jpg",
+    "productId": "6a3a3ab7b569784bde7308a7",
+    "barcodes": [
+      "8681291342431"
+    ]
+  },
+  {
+    "name": "Sensodyne Promine 6+ Yaş Çocuk Diş Fırçası Yumuşak (1 Adet)",
+    "barcode": "8681291340734",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260623075515236_8681291340734-01.jpg",
+    "productId": "6a3a3be033811a9d74ec179b",
+    "barcodes": [
+      "8681291340734"
+    ]
+  },
+  {
+    "name": "Parodontax Aktif Diş Eti Onarımı Beyazlatıcı Diş Macunu (75 ml)",
+    "barcode": "8681291005398",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260623080013986_8681291005398-01.jpg",
+    "productId": "6a3a3d0923afd4cb8a56af34",
+    "barcodes": [
+      "8681291005398"
+    ]
+  },
+  {
+    "name": "Sensodyne Klinik Onarım Beyazlatıcı Diş Macunu (75  ml)",
+    "barcode": "8681291341335",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260623133014268_8681291341335-01.jpg",
+    "productId": "6a3a8a63d5903e9ba8cafb6a",
+    "barcodes": [
+      "8681291341335"
+    ]
+  },
+  {
+    "name": "Sensodyne Promine 0-6 Yaş Çocuk Diş Macunu (50 ml)",
+    "barcode": "8681291342417",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260623145524043_8681291342417-01.jpg",
+    "productId": "6a3a9e58e44156cab8476b8d",
+    "barcodes": [
+      "8681291342417"
+    ]
+  },
+  {
+    "name": "Parodontax Ekstra Ferah Alkolsüz Ağız Suyu (500 ml)",
+    "barcode": "8681291341311",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260623151521562_8681291341311-01.jpg",
+    "productId": "6a3aa306c21bd4faf500375c",
+    "barcodes": [
+      "8681291341311"
+    ]
+  },
+  {
+    "name": "Parodontax Diş Eti Güçlendirme ve Koruma Beyazlatıcı Diş Macunu (75 ml)",
+    "barcode": "8681291341298",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260623152228749_8681291341298-01.jpg",
+    "productId": "6a3aa5574a70244bfa9a4489",
+    "barcodes": [
+      "8681291341298"
+    ]
+  },
+  {
+    "name": "Sensodyne Tam Koruma Beyazlatıcı Diş Macunu (2 x 75 ml)",
+    "barcode": "8681291340437",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260703104156589_8681291340437-_1_.jpg",
+    "productId": "6a3aa565d59d8c29df472b25",
+    "barcodes": [
+      "8681291340437"
+    ]
+  },
+  {
+    "name": "Eti Benim’O Kombo Kremalı Bisküvi (96 g)",
+    "barcode": "8690526932767",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260624132204947_8690526932767-_1_.jpg",
+    "productId": "6a3aad977e29db16c1d29c8a",
+    "barcodes": [
+      "8690526932767"
+    ]
+  },
+  {
+    "name": "Eti Cicibebe Şekersiz Ekmek (125 g)",
+    "barcode": "8690526330310",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260701111513447_8690526330310-_1_.jpg",
+    "productId": "6a3ab3736ca32d2b12f8d284",
+    "barcodes": [
+      "8690526330310"
+    ]
+  },
+  {
+    "name": "Eti Etibör Çifte Kavrulmuş Bisküvi (400 g)",
+    "barcode": "8690526061146",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260701072124415_eti-etibor-8690526061146-01.jpg",
+    "productId": "6a3ab4a2cb55d9e1520ad210",
+    "barcodes": [
+      "8690526061146"
+    ]
+  },
+  {
+    "name": "Eti Petito Çilekli Kremalı Gofret (25.5 g)",
+    "barcode": "8690526892955",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260701111534123_8690526892955_1_-_1_.jpg",
+    "productId": "6a3ab5d184f444cc714995b4",
+    "barcodes": [
+      "8690526892955"
+    ]
+  },
+  {
+    "name": "Eti Hoşbeş Sütlü Kakaolu Gofret (142 g)",
+    "barcode": "8690526170657",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260701072403387_eti-hosbes-kakao-8690526170657-01.jpg",
+    "productId": "6a3ab8259b082156ffb1e9ee",
+    "barcodes": [
+      "8690526170657"
+    ]
+  },
+  {
+    "name": "Petit Beurre Muzlu Kremalı Kakaolu (270 g)",
+    "barcode": "8690526882727",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260701111554655_8690526882727.jpg",
+    "productId": "6a3ab835719b01891cd77a88",
+    "barcodes": [
+      "8690526882727"
+    ]
+  },
+  {
+    "name": "Eti Canga Yer Fıstığı Kaplı Kakaolu Kremalı Gofret (34 g)",
+    "barcode": "8690526418087",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260701111613360_8690526418087.jpg",
+    "productId": "6a3ab94a596211ef283d0694",
+    "barcodes": [
+      "8690526418087"
+    ]
+  },
+  {
+    "name": "Eti Benim’O Kombo Fındıklı Kremalı Bisküvi (84 g)",
+    "barcode": "8690526512198",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260701111739872_8690526512198-_1_.jpg",
+    "productId": "6a3aba836feff9144d9241f9",
+    "barcodes": [
+      "8690526512198"
+    ]
+  },
+  {
+    "name": "Eti Browni Hindistan Cevizli Çikolatalı Kek (45 g)",
+    "barcode": "8690526427621",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260701112350479_8690526427621.jpg",
+    "productId": "6a3abbab8e02aa53bc613d07",
+    "barcodes": [
+      "8690526427621"
+    ]
+  },
+  {
+    "name": "Eti Cin Çilekli (114 g)",
+    "barcode": "8690526508979",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260624132238050_8690526508979.jpg",
+    "productId": "6a3abbbbf9dee1ab8f293068",
+    "barcodes": [
+      "8690526508979"
+    ]
+  },
+  {
+    "name": "Uni Baby Newborn & Premature Islak Mendil (3 x 40'lı)",
+    "barcode": "8690530069008",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260728140648596_uni-baby-2.jpg",
+    "productId": "6a3bb664d5903e9ba8cc2078",
+    "barcodes": [
+      "8690530069008"
+    ]
+  },
+  {
+    "name": "Uni Baby Soft Care Hindistan Cevizli Şampuan (700 ml)",
+    "barcode": "8690530079618",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260728140609285_uni-baby-3.jpg",
+    "productId": "6a3bb7a3f9dee1ab8f2a01cf",
+    "barcodes": [
+      "8690530079618"
+    ]
+  },
+  {
+    "name": "Uni Baby Sensitive Şampuan (900 ml)",
+    "barcode": "8690530077669",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260728140528534_uni-baby-5.jpg",
+    "productId": "6a3bc47384f444cc714a7f0a",
+    "barcodes": [
+      "8690530077669"
+    ]
+  },
+  {
+    "name": "Uni Baby Atopy & Extra Sensitive Islak Mendil (40’lı)",
+    "barcode": "8690530068889",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260703104126121_7907270.jpg",
+    "productId": "6a3bc6c984f444cc714a818b",
+    "barcodes": [
+      "8690530068889"
+    ]
+  },
+  {
+    "name": "Uni Baby Sensitive Islak Mendil (3 x 50'li)",
+    "barcode": "8690530068933",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260624121530099_uni-baby-sensitive-01.jpg",
+    "productId": "6a3bca5ffdefb038cb0f8df8",
+    "barcodes": [
+      "8690530068933"
+    ]
+  },
+  {
+    "name": "Uni Baby Soft Care Hindistan Cevizi Yağlı Islak Mendil (3 x 50'li)",
+    "barcode": "8690530069572",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260624125529996_uni-baby-soft-care-01.jpg",
+    "productId": "6a3bd3bf84f444cc714a94f1",
+    "barcodes": [
+      "8690530069572"
+    ]
+  },
+  {
+    "name": "Uni Baby Sensitive Bambu & Pamuk Özlü Islak Mendil (3 x 50'li)",
+    "barcode": "8690530079137",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260703104010198_7907276.jpg",
+    "productId": "6a3bd4ddfdefb038cb0fa147",
+    "barcodes": [
+      "8690530079137"
+    ]
+  },
+  {
+    "name": "Garnier C Vitamini Sorbet Nemlendirici Yüz Kremi (85 ml)",
+    "barcode": "3600542663069",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260710084906081_3600542663069-01.jpg",
+    "productId": "6a3ce392fdefb038cb10a7a2",
+    "barcodes": [
+      "3600542663069"
+    ]
+  },
+  {
+    "name": "Heinz Sosluk Set (4'lü)",
+    "barcode": "8685191800206",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260728104517244_heinz-sosluk-on-01.jpg",
+    "productId": "6a3cecf8e44156cab849807f",
+    "barcodes": [
+      "8685191800206"
+    ]
+  },
+  {
+    "name": "Yayla Hitos Acı Chili Biber & Lime Aromalı Mısır Çerezi (100 g)",
+    "barcode": "8693374283524",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260707140346865_yayla-hitos-hot-chili-lime-01.jpg",
+    "productId": "6a3d020977d42308ca23cdb6",
+    "barcodes": [
+      "8693374283524"
+    ]
+  },
+  {
+    "name": "Yayla Hitos Ekşi Krema & Soğan Çeşnili Patates Çerezi (100 g)",
+    "barcode": "8693374283494",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260707140422295_yayla-hitos-eksi-krema-sogan-01.jpg",
+    "productId": "6a3d0460d5903e9ba8cd81e0",
+    "barcodes": [
+      "8693374283494"
+    ]
+  },
+  {
+    "name": "Yayla Bal & Hardal Çeşnili Üçgen Mısır & Pirinç Cipsi (80 g)",
+    "barcode": "8693374282787",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260707140447788_yayla-popnays-bal-hardal-01.jpg",
+    "productId": "6a3d058cc753b94e0e0ab407",
+    "barcodes": [
+      "8693374282787"
+    ]
+  },
+  {
+    "name": "Yayla Hitos Yoğurt & Mevsim Yeşillikleri Çeşnili Patates Çerezi (100 g)",
+    "barcode": "8693374283487",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260707140511058_yayla.jpg",
+    "productId": "6a3d059c26b8f69d75eb1f32",
+    "barcodes": [
+      "8693374283487"
+    ]
+  },
+  {
+    "name": "Yayla Hitos Deniz Tuzlu Patates Çerezi (60 g)",
+    "barcode": "8693374283470",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260706071421198_yayla-deniz-tuzu.jpg",
+    "productId": "6a3d06b926b8f69d75eb21fd",
+    "barcodes": [
+      "8693374283470"
+    ]
+  },
+  {
+    "name": "Yayla Nohut Patlağı (102 g)",
+    "barcode": "8693374282886",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260707140533529_yayla-nohut-patlagi-01.jpg",
+    "productId": "6a3d07f78f028f46e840ee9b",
+    "barcodes": [
+      "8693374282886"
+    ]
+  },
+  {
+    "name": "Yayla Notto Fıstık Ezmeli & Ballı Protein Cipsi (50 g)",
+    "barcode": "8693374281209",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260707140615988_yayla-fistik-ezmeli.jpg",
+    "productId": "6a3d091ceeb42df59c1aae78",
+    "barcodes": [
+      "8693374281209"
+    ]
+  },
+  {
+    "name": "Yayla Notto Süt Mısır Çeşnili Kinoa Cipsi (30 g)",
+    "barcode": "8693374281148",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260707140644407_yayla.jpg",
+    "productId": "6a3d0b781bf46122101f032b",
+    "barcodes": [
+      "8693374281148"
+    ]
+  },
+  {
+    "name": "Yayla Fresh Herbs Pirinç Patlağı (80 g)",
+    "barcode": "8693374284330",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260819103012224_yayla.jpg",
+    "productId": "6a3d18547e29db16c1d510a4",
+    "barcodes": [
+      "8693374284330"
+    ]
+  },
+  {
+    "name": "Yayla Elma Tarçınlı Pirinç Patlağı (80 g)",
+    "barcode": "8693374284279",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260709105136487_yayla-3.jpg",
+    "productId": "6a3d27a6bd4da0882d9de86f",
+    "barcodes": [
+      "8693374284279"
+    ]
+  },
+  {
+    "name": "Defans Natura Bitkisel İçerikli Koruyucu Vücut Spreyi (50 ml)",
+    "barcode": "8690530078765",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260626072014136_31095.jpg",
+    "productId": "6a3e282b1da5da2520a996ef",
+    "barcodes": [
+      "8690530078765"
+    ]
+  },
+  {
+    "name": "Algida Oreo Bisküvi Parçacıklı Dondurma (430 ml)",
+    "barcode": "8721274618280",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260626141531430_oreo.jpg",
+    "productId": "6a3e89818c2fb2865881ec92",
+    "barcodes": [
+      "8721274618280"
+    ]
+  },
+  {
+    "name": "Magnum Sandwich Mini Karamel & Badem (400 ml)",
+    "barcode": "8721274648201",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260626142015141_8721274648201_2.jpg",
+    "productId": "6a3e8a9c2f4f84fcb656f630",
+    "barcodes": [
+      "8721274648201"
+    ]
+  },
+  {
+    "name": "Pampers Aqua Soft Touch Bebek Islak Havlu (60 Yaprak)",
+    "barcode": "8006530140171",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260709163650681_8006530140171-01.jpg",
+    "productId": "6a42286a24e4d0aeb2870095",
+    "barcodes": [
+      "8006530140171"
+    ]
+  },
+  {
+    "name": "Pampers Aqua Soft Touch Bebek Islak Havlu (3 x 60 Yaprak)",
+    "barcode": "8006530139953",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260710111841911_8006530139953-01.jpg",
+    "productId": "6a422d106ea6b2f20d06950c",
+    "barcodes": [
+      "8006530139953"
+    ]
+  },
+  {
+    "name": "Koroplast Orkide Kokulu Büyük Boy Çöp Torbası (10 Adet)",
+    "barcode": "8690741704071",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260629085512525_koroplast-orkide-extra-guclu-01.jpg",
+    "productId": "6a4232ee26b8f69d75f0ce6e",
+    "barcodes": [
+      "8690741704071"
+    ]
+  },
+  {
+    "name": "Patos Magnus Hot Chilli Parti (185 g)",
+    "barcode": "8681506024220",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260629165534552_magnus.jpg",
+    "productId": "6a42a3841d37b18a9470964c",
+    "barcodes": [
+      "8681506024220"
+    ]
+  },
+  {
+    "name": "Tibers Frambuaz Dolgulu Pankek (55 g)",
+    "barcode": "8685063370080",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260630071518102_tibers-pancake-frambuaz-01.jpg",
+    "productId": "6a436d03e930d62d3fade663",
+    "barcodes": [
+      "8685063370080"
+    ]
+  },
+  {
+    "name": "Haribo Friends & Party (650 g)",
+    "barcode": "8691216115095",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260703104713326_haribo.jpg",
+    "productId": "6a4379e4cdbef2f47a038837",
+    "barcodes": [
+      "8691216115095"
+    ]
+  },
+  {
+    "name": "Red Bull Yellow Edition (250 ml)",
+    "barcode": "90496158",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260630083029240_TR_SL_250ml_AC_The-Yellow-Edition_COUNTRY_RGB_PACKRQ-4110_Ambient_Closed_Front_DRES.jpg",
+    "productId": "6a437ea2a3f230d90516d525",
+    "barcodes": [
+      "90496158"
+    ]
+  },
+  {
+    "name": "Alkan Soyulmuş Enginar Kavanozu (530 g)",
+    "barcode": "8682101007014",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260701115655408_enginar.jpg",
+    "productId": "6a450165bbaa916d5809777d",
+    "barcodes": [
+      "8682101007014"
+    ]
+  },
+  {
+    "name": "Pakmaya Orman Meyveli Sos (300 g)",
+    "barcode": "8690770335772",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260703061840924_pakmaya-1.jpg",
+    "productId": "6a467018b3f74659e3e9dac1",
+    "barcodes": [
+      "8690770335772"
+    ]
+  },
+  {
+    "name": "Pakmaya Karamelli Sos (300 g)",
+    "barcode": "8690770335765",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260703061910111_pakmaya-3.jpg",
+    "productId": "6a467028efbf01784b7536cd",
+    "barcodes": [
+      "8690770335765"
+    ]
+  },
+  {
+    "name": "Pakmaya Çikolatalı Sos (300 g)",
+    "barcode": "8690770335758",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260703061932874_pakmaya-5.jpg",
+    "productId": "6a4672705d1df03245356647",
+    "barcodes": [
+      "8690770335758"
+    ]
+  },
+  {
+    "name": "Bahs. Chickos Cheddar Aromalı Nohut Cipsi (50 g)",
+    "barcode": "8684834428395",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260703121041982_cheddar-aromali-_1_.jpg",
+    "productId": "6a47a6bfb8c9b91d42ea92cb",
+    "barcodes": [
+      "8684834428395"
+    ]
+  },
+  {
+    "name": "Bahs. Chickos Ketçap Aromalı Nohut Cipsi (50 g)",
+    "barcode": "8684834428401",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260703121100303_ketcap-aromali-_1_.jpg",
+    "productId": "6a47a6d1f14a386e237d33ba",
+    "barcodes": [
+      "8684834428401"
+    ]
+  },
+  {
+    "name": "Bahs. Chickos Ranch Aromalı Nohut Cipsi (50 g)",
+    "barcode": "8684834428418",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260703121550544_ranch-aromali-_1_.jpg",
+    "productId": "6a47a7f4f367d4efb557e2c0",
+    "barcodes": [
+      "8684834428418"
+    ]
+  },
+  {
+    "name": "Bahs. Chocolate Brownie Whey Protein Tozu (406 g)",
+    "barcode": "8684834428098",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260703124011188_bahs-7.jpg",
+    "productId": "6a47ada8b8c9b91d42eaa081",
+    "barcodes": [
+      "8684834428098"
+    ]
+  },
+  {
+    "name": "Ülker Sürmix Peynirli Ballı Sürme (180 g)",
+    "barcode": "8691375603402",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260703132020593_ulker-peynirli-balli.jpg",
+    "productId": "6a47b7137a418b7b29493d00",
+    "barcodes": [
+      "8691375603402"
+    ]
+  },
+  {
+    "name": "Ülker Sürmix Peynirli Zeytin Ezmeli Sürme (180 g)",
+    "barcode": "8691375603518",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260703132535655_Ulker-Surmix-Zeytinli-Govde-_1_.jpg",
+    "productId": "6a47b84d013e8aefcec2c853",
+    "barcodes": [
+      "8691375603518"
+    ]
+  },
+  {
+    "name": "Sancak İzmir Tulum Peyniri (250 g)",
+    "barcode": "8684232447134",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260706114551578__Dekupeli--Sancak-Izmir-Tulum-Peyniri.jpg",
+    "productId": "6a4b956c016b8ad95bf7ba3e",
+    "barcodes": [
+      "8684232447134"
+    ]
+  },
+  {
+    "name": "Eti Süt Burger Yaban Mersinli Kek (35 g)",
+    "barcode": "8690526696379",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260707091018818_sut-burger.jpg",
+    "productId": "6a4cc278e9db1c834002d554",
+    "barcodes": [
+      "8690526696379"
+    ]
+  },
+  {
+    "name": "Go Ahead Protein Cipsi Taco (55 g)",
+    "barcode": "8690504107453",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260707092524889_ulker-1.jpg",
+    "productId": "6a4cc603bc5849c0a15cee00",
+    "barcodes": [
+      "8690504107453"
+    ]
+  },
+  {
+    "name": "Fanta Nar Kutu (330 ml)",
+    "barcode": "5000112695403",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260707103544902_FANTA_NAR_DUAL_CAN_330ML-_2_.jpg",
+    "productId": "6a4cd67e4a0a66221a0e0dd1",
+    "barcodes": [
+      "5000112695403"
+    ]
+  },
+  {
+    "name": "Go Ahead Protein Cipsi Yer Fıstığı (55 g)",
+    "barcode": "8690504107446",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260707111032843_ulker-3.jpg",
+    "productId": "6a4cdea7322ff38c1d405cf2",
+    "barcodes": [
+      "8690504107446"
+    ]
+  },
+  {
+    "name": "Peyman Matcha Bar (27 g)",
+    "barcode": "8695876209095",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260708102547082_MATCHA-BAR-_1_.jpg",
+    "productId": "6a4e25a8f4121eae34ec4326",
+    "barcodes": [
+      "8695876209095"
+    ]
+  },
+  {
+    "name": "bahs. Domatesli ve Fesleğenli Noodle (90 g)",
+    "barcode": "8684834428234",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260708104035097_bahs-1.jpg",
+    "productId": "6a4e291d68839ea7835b28e4",
+    "barcodes": [
+      "8684834428234"
+    ]
+  },
+  {
+    "name": "bahs. Kremalı ve Körili Noodle (90 g)",
+    "barcode": "8684834428241",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260708104521259_bahs-3.jpg",
+    "productId": "6a4e2a3fcad5191906969060",
+    "barcodes": [
+      "8684834428241"
+    ]
+  },
+  {
+    "name": "bahs. Kremalı ve Tavuk Aromalı Noodle (90 g)",
+    "barcode": "8684834428265",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260708105039203_bahs-5.jpg",
+    "productId": "6a4e2b7c2d89b820086510ec",
+    "barcodes": [
+      "8684834428265"
+    ]
+  },
+  {
+    "name": "Bahs. Cookies Choco Whey Protein Tozu (406 g)",
+    "barcode": "8684834428128",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260709093016088_bahs-1.jpg",
+    "productId": "6a4f6a25c238b4bd66ea71b7",
+    "barcodes": [
+      "8684834428128"
+    ]
+  },
+  {
+    "name": "5 To Go Italian Sparkling Espresso (250 ml)",
+    "barcode": "5941938600014",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260716102011880_7.jpg",
+    "productId": "6a58b059229853b980b7bb3c",
+    "barcodes": [
+      "5941938600014"
+    ]
+  },
+  {
+    "name": "Gold Selection Ölçü Kaşığı (1 Adet)",
+    "barcode": "4061445429906",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260720070512087_KAS%CC%A7IK.jpg",
+    "productId": "6a5dc8a5407bcc57a4a4549b",
+    "barcodes": [
+      "4061445429906"
+    ]
+  },
+  {
+    "name": "Domestos Dual Action Kireç Karşıtı Çamaşır Suyu (750 ml)",
+    "barcode": "8683130143186",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260720072015181_domestos-4.jpg",
+    "productId": "6a5dcc2ce7c5a3777098a460",
+    "barcodes": [
+      "8683130143186"
+    ]
+  },
+  {
+    "name": "Bref Self Active Duo Çamaşır Suyu (2 x 50 g)",
+    "barcode": "9000101854664",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260720072513108_bref-3.jpg",
+    "productId": "6a5dcd563b1d8f034f2dbfa8",
+    "barcodes": [
+      "9000101854664"
+    ]
+  },
+  {
+    "name": "Dalin Peri Masalı Kolonya (150 ml)",
+    "barcode": "8690605088705",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260720083014889_dalin-peri-masali-01.jpg",
+    "productId": "6a5ddc940159f3bfa5f7b694",
+    "barcodes": [
+      "8690605088705"
+    ]
+  },
+  {
+    "name": "Eti Süt Burger Sütlü Kakaolu Kek (35 g)",
+    "barcode": "8690526220659",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260720102011396_sut-burger-kakaolu-01.jpg",
+    "productId": "6a5df6592e2424338f8e013a",
+    "barcodes": [
+      "8690526220659"
+    ]
+  },
+  {
+    "name": "Eti Canga Antep Fıstıklı (40 g)",
+    "barcode": "8690526420905",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260720103513381_eti-canga-antep-fistikli-01.jpg",
+    "productId": "6a5df9dfe50517d5390dfb7b",
+    "barcodes": [
+      "8690526420905"
+    ]
+  },
+  {
+    "name": "Eti Canga Gold Yer Fıstıklı Karamelli Nuga Bar (40 g)",
+    "barcode": "8690526837437",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260720104013315_eti-canga-gold-yer-fistikli-01.jpg",
+    "productId": "6a5dfb0a1c48584db4693fe6",
+    "barcodes": [
+      "8690526837437"
+    ]
+  },
+  {
+    "name": "Eti Canga Bitter (40 g)",
+    "barcode": "8690526732503",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260720104514385_eti-canga-bitter-01.jpg",
+    "productId": "6a5dfc3729284ae92465e910",
+    "barcodes": [
+      "8690526732503"
+    ]
+  },
+  {
+    "name": "Nutella Dondurulmuş Tatlı (470 ml)",
+    "barcode": "8000500425183",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260806133550567_nutella.jpg",
+    "productId": "6a5e1ab41c48584db4697333",
+    "barcodes": [
+      "8000500425183"
+    ]
+  },
+  {
+    "name": "Termal Piknik Çantası 35x20x20 cm (1 Adet)",
+    "barcode": "8682995269260",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260727112515875_piknik-cantasi-01.jpg",
+    "productId": "6a6740184860a9b55fd50a09",
+    "barcodes": [
+      "8682995269260"
+    ]
+  },
+  {
+    "name": "Bizim Bitkisel Krema %20 Yağlı (200 ml)",
+    "barcode": "8691375608742",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260727120015885_bizim-bitkisel-yagli-krema-sos-01.jpg",
+    "productId": "6a67484d3f8e2eaafbec6a8a",
+    "barcodes": [
+      "8691375608742"
+    ]
+  },
+  {
+    "name": "Asperox Retro Arap Sabunu & Sirke (1 L)",
+    "barcode": "8697713823662",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260727141022642_asperox-retro-8697713823662-01.jpg",
+    "productId": "6a6766cc406dc6f84cf8f3ab",
+    "barcodes": [
+      "8697713823662"
+    ]
+  },
+  {
+    "name": "Asperox Retro Limon Tuzu & Sirke (1 L)",
+    "barcode": "8697713823709",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260731143846431_asperox.jpg",
+    "productId": "6a6767f2e532701a0681c2d4",
+    "barcodes": [
+      "8697713823709"
+    ]
+  },
+  {
+    "name": "Felix Doubly Delicious Çifte Lezzet Kuru Kedi Maması Sığır Etli (400 g)",
+    "barcode": "8445291675605",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260729105015110_Sigir-Etli_400g_8445291675605-20260710-062343.jpg",
+    "productId": "6a69dae3bc9c6e3c23989719",
+    "barcodes": [
+      "8445291675605"
+    ]
+  },
+  {
+    "name": "Felix Doubly Delicious Çifte Lezzet Kuru Kedi Maması Balıklı (400 g)",
+    "barcode": "8445291675810",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260729105517866_Balikli_400g_8445291675810-20260710-062345.jpg",
+    "productId": "6a69dc12a4e14f592cceebd5",
+    "barcodes": [
+      "8445291675810"
+    ]
+  },
+  {
+    "name": "Perwoll Yumuşatıcı Derin Ferahlık (1,2 L)",
+    "barcode": "9000101866599",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260729142028688_perwoll-3.jpg",
+    "productId": "6a6a0c2ae532701a06845483",
+    "barcodes": [
+      "9000101866599"
+    ]
+  },
+  {
+    "name": "Calve Acılı Mayonez Orta Acı (380 g)",
+    "barcode": "8683130233948",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260730122012575_calve-acili-mayonez-8683130233948-01.jpg",
+    "productId": "6a6b417aa682763b4d064a9f",
+    "barcodes": [
+      "8683130233948"
+    ]
+  },
+  {
+    "name": "Cheetos Değiş Tokuş Taco Baharatlı (100 g)",
+    "barcode": "8690624305524",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260731121512773_cheetos.jpg",
+    "productId": "6a6c91cf97dc9c851caab004",
+    "barcodes": [
+      "8690624305524"
+    ]
+  },
+  {
+    "name": "Doritos Değiş Tokuş Biftek ve Soğan Aromalı (115 g)",
+    "barcode": "8690624204445",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260731121528880_doritos.jpg",
+    "productId": "6a6c91df416e575b2361583b",
+    "barcodes": [
+      "8690624204445"
+    ]
+  },
+  {
+    "name": "Lipton English Breakfast Tea Bardak Poşet Çay (25'li)",
+    "barcode": "5063305010322",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260731130513105_lipton-english-breakfast-01.jpg",
+    "productId": "6a6c9d86dd5acc8eeafa1492",
+    "barcodes": [
+      "5063305010322"
+    ]
+  },
+  {
+    "name": "Lipton Golden Ceylon Tea Bardak Poşet Çay (25'li)",
+    "barcode": "5063305011510",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260731132012637_lipton-golden-ceylon-01.jpg",
+    "productId": "6a6ca10ac87145ecc52147cb",
+    "barcodes": [
+      "5063305011510"
+    ]
+  },
+  {
+    "name": "Lipton Orman Meyveli Bardak Poşet Çay 15'li (22.5 g)",
+    "barcode": "5063305009814",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260731132518082_lipton-kirmizi-meyve-ruyasi-01.jpg",
+    "productId": "6a6ca23b0d2ad4aa36fecf43",
+    "barcodes": [
+      "5063305009814"
+    ]
+  },
+  {
+    "name": "Lipton Vanilya Karamelli Bardak Poşet Çay 15'li (22.5 g)",
+    "barcode": "5063305009838",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260731133027329_lipton-vanilya-karamel-tutkusu-01.jpg",
+    "productId": "6a6ca371a68a4370428a7f55",
+    "barcodes": [
+      "5063305009838"
+    ]
+  },
+  {
+    "name": "Su Organik Yumurta M Boy (10'lu)",
+    "barcode": "8681105064290",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260731142018928_yumurta-10.jpg",
+    "productId": "6a6caf200b8c1bc91532bb97",
+    "barcodes": [
+      "8681105064290"
+    ]
+  },
+  {
+    "name": "Teksüt Olgunlaştırılmış Tam Yağlı Beyaz Peynir (350 g)",
+    "barcode": "8690158120440",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260806075729169_TEKSUT-BEYAZ-PEYNIR-01.jpg",
+    "productId": "6a743f18efa6ee73df1710a2",
+    "barcodes": [
+      "8690158120440"
+    ]
+  },
+  {
+    "name": "Sofia 3 Katlı Tuvalet Kağıdı (16'lı)",
+    "barcode": "8698996009590",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260806122514530_sofia.jpg",
+    "productId": "6a747d2846517839aa1e22c3",
+    "barcodes": [
+      "8698996009590"
+    ]
+  },
+  {
+    "name": "Knorr Çabuk Makarna Mac & Cheese Acı Chili Heat (212 g)",
+    "barcode": "8683130233412",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260806132011002_knorr-mac-and-cheesee-chili-heat-8683130233412-01.jpg",
+    "productId": "6a748a09728c651e52d8a50a",
+    "barcodes": [
+      "8683130233412"
+    ]
+  },
+  {
+    "name": "Knorr Çabuk Bardak Makarna Napoletana Fusilli (65 g)",
+    "barcode": "8683130133934",
+    "imageUrl": "https://vsrm-cdn.erp.getirapi.com/docs/20260807121017073_knorr.jpg",
+    "productId": "6a75cb26d5f66da2065791cf",
+    "barcodes": [
+      "8683130133934"
+    ]
   }
 ]

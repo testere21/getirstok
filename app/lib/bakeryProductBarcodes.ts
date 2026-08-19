@@ -46,6 +46,7 @@ export interface BakeryResolvedRow {
   displayName: string;
   inCatalog: boolean;
   imageUrl?: string;
+  productId?: string;
 }
 
 /**
@@ -64,6 +65,7 @@ export function resolveBakeryProducts(
         displayName: match.name,
         inCatalog: true,
         imageUrl: match.imageUrl,
+        productId: match.productId,
       };
     }
     return {

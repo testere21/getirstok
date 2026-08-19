@@ -54,6 +54,15 @@ import {
 import { getBakeryFullImageUrl } from "@/app/lib/bakeryFullImage";
 import { catalogProductMatchesBarcode } from "@/app/lib/catalogBarcodeMatch";
 import {
+  BAKE_SLOT_LABELS,
+  currentSuggestedBakeQty,
+  findSuggestionForProduct,
+  getCurrentBakeSlot,
+  shouldShowBakeMeAlert,
+  type BakeSlotKey,
+  type BakeryBakeSuggestionItem,
+} from "@/app/lib/bakeryBakeSuggestions";
+import {
   filterCatalogProductsForHesaplama,
   filterHesaplamaCandidatesBySearch,
   findCatalogProductByBarcode,
@@ -835,11 +844,11 @@ export default function Home() {
     }
     
     // Normal arama: name veya barcode içinde arama yap
-    return items.filter(
+      return items.filter(
       (item) =>
         item.name.toLowerCase().includes(q) ||
         item.barcode.toLowerCase().includes(q)
-    );
+      );
   }, [items, debouncedSearchQuery, selectedCatalogProduct]);
 
   /**
@@ -928,6 +937,19 @@ export default function Home() {
   const [bakeryRafSort, setBakeryRafSort] = useState<
     "default" | "asc" | "desc"
   >("default");
+  const [bakeryBakeItems, setBakeryBakeItems] = useState<
+    BakeryBakeSuggestionItem[]
+  >([]);
+  const [bakeryBakeSlot, setBakeryBakeSlot] = useState<BakeSlotKey | null>(
+    () => getCurrentBakeSlot()
+  );
+  const [bakeryBakeSlotLabel, setBakeryBakeSlotLabel] = useState<string | null>(
+    () => {
+      const s = getCurrentBakeSlot();
+      return s ? BAKE_SLOT_LABELS[s] : null;
+    }
+  );
+  const bakeryAudioCtxRef = useRef<AudioContext | null>(null);
 
   const bakeryStocksKey = useMemo(
     () => bakeryRows.map((r) => r.barcode).join("\u0000"),
@@ -1060,6 +1082,47 @@ export default function Home() {
   }, [activeTab]);
 
   useEffect(() => {
+    if (activeTab !== "bakery") return;
+    let cancelled = false;
+
+    const load = async () => {
+      try {
+        const res = await fetch("/api/bakery-suggestions");
+        const data = (await res.json()) as {
+          items?: BakeryBakeSuggestionItem[];
+          currentSlot?: BakeSlotKey | null;
+          currentSlotLabel?: string | null;
+        };
+        if (cancelled || !res.ok) return;
+        setBakeryBakeItems(Array.isArray(data.items) ? data.items : []);
+        setBakeryBakeSlot(data.currentSlot ?? getCurrentBakeSlot());
+        setBakeryBakeSlotLabel(
+          data.currentSlotLabel ??
+            (data.currentSlot ? BAKE_SLOT_LABELS[data.currentSlot] : null)
+        );
+      } catch {
+        if (!cancelled) {
+          setBakeryBakeSlot(getCurrentBakeSlot());
+        }
+      }
+    };
+
+    void load();
+    const poll = window.setInterval(() => void load(), 5000);
+    const tick = window.setInterval(() => {
+      const s = getCurrentBakeSlot();
+      setBakeryBakeSlot(s);
+      setBakeryBakeSlotLabel(s ? BAKE_SLOT_LABELS[s] : null);
+    }, 60000);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(poll);
+      window.clearInterval(tick);
+    };
+  }, [activeTab]);
+
+  useEffect(() => {
     if (activeTab !== "bakery") setBakeryRafSort("default");
   }, [activeTab]);
 
@@ -1124,6 +1187,19 @@ export default function Home() {
     );
   }, []);
 
+  const bakeryBakeQtyByBarcode = useMemo(() => {
+    const m = new Map<string, number>();
+    const slot = bakeryBakeSlot ?? getCurrentBakeSlot();
+    for (const row of bakeryRows) {
+      const sug = findSuggestionForProduct(bakeryBakeItems, {
+        displayName: row.displayName,
+        productId: row.productId,
+      });
+      m.set(row.barcode, currentSuggestedBakeQty(sug, slot));
+    }
+    return m;
+  }, [bakeryRows, bakeryBakeItems, bakeryBakeSlot]);
+
   const bakeryDisplayRows = useMemo(() => {
     const rows = [...bakeryRows];
     const idx = (r: BakeryResolvedRow) =>
@@ -1135,15 +1211,19 @@ export default function Home() {
       return typeof v === "number" ? v : null;
     };
 
+    const needsBake = (r: BakeryResolvedRow) =>
+      shouldShowBakeMeAlert(
+        bakeryBakeQtyByBarcode.get(r.barcode) ?? 0,
+        numericShelf(r)
+      );
+
     if (bakeryRafSort === "default") {
       if (bakeryStocksLoadingForUi) return rows;
       rows.sort((a, b) => {
-        const sa = numericShelf(a);
-        const sb = numericShelf(b);
-        const aZero = sa === 0;
-        const bZero = sb === 0;
-        if (aZero && !bZero) return -1;
-        if (!aZero && bZero) return 1;
+        const aNeed = needsBake(a);
+        const bNeed = needsBake(b);
+        if (aNeed && !bNeed) return -1;
+        if (!aNeed && bNeed) return 1;
         return idx(a) - idx(b);
       });
       return rows;
@@ -1176,6 +1256,7 @@ export default function Home() {
     bakeryStocksForUi,
     bakeryStocksLoadingForUi,
     bakeryRafSort,
+    bakeryBakeQtyByBarcode,
   ]);
 
   /** Raf stoğu > 0 olan fırın satırları (sıra: liste sıralamasıyla aynı) */
@@ -1185,6 +1266,74 @@ export default function Home() {
       return typeof s === "number" && s > 0;
     });
   }, [bakeryDisplayRows, bakeryStocksForUi]);
+
+  const bakeryCookAlertCount = useMemo(() => {
+    if (bakeryStocksLoadingForUi) return 0;
+    let n = 0;
+    for (const row of bakeryRows) {
+      const shelf = bakeryStocksForUi[row.barcode];
+      const qty = bakeryBakeQtyByBarcode.get(row.barcode) ?? 0;
+      if (
+        shouldShowBakeMeAlert(
+          qty,
+          typeof shelf === "number" ? shelf : null
+        )
+      ) {
+        n += 1;
+      }
+    }
+    return n;
+  }, [
+    bakeryRows,
+    bakeryStocksForUi,
+    bakeryStocksLoadingForUi,
+    bakeryBakeQtyByBarcode,
+  ]);
+
+  useEffect(() => {
+    if (activeTab !== "bakery" || bakeryCookAlertCount === 0) return;
+
+    const play = () => {
+      try {
+        const AC =
+          window.AudioContext ||
+          (
+            window as unknown as {
+              webkitAudioContext?: typeof AudioContext;
+            }
+          ).webkitAudioContext;
+        if (!AC) return;
+        if (!bakeryAudioCtxRef.current) {
+          bakeryAudioCtxRef.current = new AC();
+        }
+        const ctx = bakeryAudioCtxRef.current;
+        if (ctx.state === "suspended") void ctx.resume();
+        const beep = (freq: number, start: number) => {
+          const o = ctx.createOscillator();
+          const g = ctx.createGain();
+          o.type = "square";
+          o.frequency.value = freq;
+          g.gain.setValueAtTime(0.14, ctx.currentTime + start);
+          g.gain.exponentialRampToValueAtTime(
+            0.01,
+            ctx.currentTime + start + 0.2
+          );
+          o.connect(g);
+          g.connect(ctx.destination);
+          o.start(ctx.currentTime + start);
+          o.stop(ctx.currentTime + start + 0.22);
+        };
+        beep(880, 0);
+        beep(1174, 0.24);
+      } catch {
+        /* ses yoksa sessiz */
+      }
+    };
+
+    play();
+    const id = window.setInterval(play, 9000);
+    return () => window.clearInterval(id);
+  }, [activeTab, bakeryCookAlertCount]);
 
   const handleStartBakeryExit = useCallback(() => {
     if (bakeryExitQueue.length === 0) {
@@ -1528,7 +1677,7 @@ export default function Home() {
     async (item: StockItemWithId, options?: { skipConfirm?: boolean }) => {
       if (!options?.skipConfirm && !confirm("Bu ürünü silmek istediğinize emin misiniz?"))
         return;
-      try {
+    try {
       setDeletingId(item.id);
       await deleteStockItem(item.id);
       setSuccessModalMessage("Ürün başarıyla silindi.");
@@ -1788,7 +1937,7 @@ export default function Home() {
             <div className="overflow-hidden rounded-xl border border-zinc-200 dark:border-zinc-700">
               <div className="min-h-[120px]">
                 {isShortSearchQuery ? (
-                  <EmptyState
+        <EmptyState
                     title="Arama için daha fazla karakter yazın"
                     message={`En az ${MIN_SEARCH_LENGTH} karakter yazmalısın.`}
                     icon={PackageSearch}
@@ -2163,7 +2312,7 @@ export default function Home() {
               // Yaklaşan SKT sekmesi
               <div className="max-h-[55vh] min-h-[8rem] overflow-auto">
                 {expiringProductsLoading ? (
-                  <ListSkeleton />
+              <ListSkeleton />
                 ) : expiringProducts.length === 0 ? (
                   <EmptyState
                     title="Yaklaşan SKT kaydı yok"
@@ -2188,7 +2337,7 @@ export default function Home() {
                       {expiringProducts.map((product) => {
                         const status = getExpiringStatus(product.removalDate);
                         const imageUrl = getCatalogProductImage(product.barcode);
-                        return (
+                      return (
                           <li
                             key={product.id}
                             className="transition-colors duration-150 hover:bg-zinc-50 dark:hover:bg-zinc-800/50"
@@ -2231,8 +2380,8 @@ export default function Home() {
                                 </p>
                               </div>
                               <div className="flex gap-2">
-                                <button
-                                  type="button"
+                        <button
+                          type="button"
                                   onClick={(e) => {
                                     e.stopPropagation();
                                     setEditingExpiringProduct(product);
@@ -2258,7 +2407,7 @@ export default function Home() {
                             {/* Desktop görünüm: Tablo satırı */}
                             <div
                               className="hidden sm:grid gap-4 px-4 py-3 text-sm"
-                              style={{
+                          style={{ 
                                 gridTemplateColumns:
                                   "minmax(0,1.4fr) minmax(8rem,10rem) minmax(8rem,10rem) minmax(8rem,10rem) minmax(6rem,8rem) minmax(5rem,6rem)",
                               }}
@@ -2338,6 +2487,14 @@ export default function Home() {
                             NEXT_PUBLIC_DEV_BAKERY_MOCK_RAF_STOCK=true
                           </code>
                           ).
+                        </div>
+                      )}
+                      {bakeryBakeSlotLabel && (
+                        <div className="shrink-0 border-b border-violet-300/50 bg-violet-50 px-3 py-1.5 text-center text-[11px] font-medium text-violet-900 dark:border-violet-800/50 dark:bg-violet-950/40 dark:text-violet-100">
+                          Pişirme aralığı: {bakeryBakeSlotLabel}
+                          {bakeryBakeItems.length === 0
+                            ? " — öneri henüz yok (depo paneli → Pişirme Önerileri sayfasını açın)"
+                            : null}
                         </div>
                       )}
                       <div className="shrink-0 border-b border-amber-900/25 bg-amber-50/90 px-3 py-2 dark:border-amber-900/40 dark:bg-amber-950/35">
@@ -2447,9 +2604,17 @@ export default function Home() {
                             const shelf = bakeryStocksForUi[row.barcode];
                             const shelfText = bakeryStocksLoadingForUi
                               ? "…"
-                              : shelf === null || shelf === undefined
-                                ? "—"
-                                : String(shelf);
+                              : typeof shelf === "number"
+                                ? String(shelf)
+                                : "—";
+                            const bakeQty =
+                              bakeryBakeQtyByBarcode.get(row.barcode) ?? 0;
+                            const needsBake =
+                              !bakeryStocksLoadingForUi &&
+                              shouldShowBakeMeAlert(
+                                bakeQty,
+                                typeof shelf === "number" ? shelf : null
+                              );
                             const hasBakeryFullImage = bakeryImageBarcodes.has(
                               row.barcode.trim()
                             );
@@ -2486,15 +2651,11 @@ export default function Home() {
                                 <ChefHat className="size-5 text-zinc-400" />
                               </span>
                             );
-                            const isRafZeroRow =
-                              !bakeryStocksLoadingForUi &&
-                              typeof shelf === "number" &&
-                              shelf === 0;
                             return (
                               <li
                                 key={row.barcode}
                                 className={`transition-colors duration-150 ${
-                                  isRafZeroRow
+                                  needsBake
                                     ? "mx-2 my-1.5 overflow-hidden rounded-xl border-2 border-red-300/90 bg-red-50 shadow-sm hover:bg-red-100/95 dark:border-red-800/85 dark:bg-red-950/50 dark:shadow-none dark:hover:bg-red-950/65"
                                     : "hover:bg-zinc-50 dark:hover:bg-zinc-800/50"
                                 }`}
@@ -2540,7 +2701,7 @@ export default function Home() {
                                       Raf stok (Getir):{" "}
                                       <span
                                         className={`font-semibold tabular-nums ${
-                                          isRafZeroRow
+                                          needsBake
                                             ? "text-red-700 dark:text-red-300"
                                             : ""
                                         }`}
@@ -2551,7 +2712,7 @@ export default function Home() {
                                     <p className="mt-0.5 text-xs text-zinc-500">
                                       Donuk stok: —
                                     </p>
-                                  </div>
+                              </div>
                                 </div>
                                 <div
                                   className="hidden w-full items-center gap-4 px-4 py-3 text-sm sm:grid"
@@ -2576,8 +2737,8 @@ export default function Home() {
                                       <span className="rounded-lg">
                                         {thumbLg}
                                       </span>
-                                    )}
-                                  </span>
+                            )}
+                          </span>
                                   <div
                                     role="button"
                                     tabIndex={0}
@@ -2598,53 +2759,53 @@ export default function Home() {
                                   >
                                     <span className="line-clamp-2 min-w-0 font-medium text-zinc-900 dark:text-zinc-100">
                                       {row.displayName}
-                                    </span>
+                          </span>
                                     <span className="min-w-0 break-all tabular-nums text-zinc-600 dark:text-zinc-300">
                                       {row.barcode}
-                                    </span>
+                          </span>
                                     <span
                                       className={`tabular-nums text-zinc-800 dark:text-zinc-200 ${
-                                        isRafZeroRow
+                                        needsBake
                                           ? "font-semibold text-red-700 dark:text-red-300"
                                           : ""
                                       }`}
                                     >
                                       {shelfText}
-                                    </span>
+                            </span>
                                     <span className="text-zinc-500 dark:text-zinc-500">
                                       —
-                                    </span>
+                          </span>
                                   </div>
                                   <div className="hidden min-w-0 justify-end sm:flex">
-                                    {isRafZeroRow && (
+                                    {needsBake && (
                                       <div
                                         className="bakery-cook-alert-banner inline-flex items-center rounded-lg border border-red-300/80 bg-gradient-to-r from-red-100/95 via-amber-50/95 to-red-100/95 px-2.5 py-1 text-center dark:border-red-800/70 dark:from-red-950/90 dark:via-amber-950/35 dark:to-red-950/90"
                                         role="status"
                                       >
                                         <span className="bakery-cook-alert-text text-[11px] font-black uppercase text-red-900 dark:text-amber-100">
-                                          BENİ PİŞİRİN !
-                                        </span>
+                                          Beni pişir ({bakeQty})
+                            </span>
                                       </div>
                                     )}
                                   </div>
                                 </div>
-                                {isRafZeroRow && (
+                                {needsBake && (
                                   <div
                                     className="bakery-cook-alert-banner border-t border-red-300/80 bg-gradient-to-r from-red-100/95 via-amber-50/95 to-red-100/95 px-3 py-1.5 text-center sm:hidden dark:border-red-800/70 dark:from-red-950/90 dark:via-amber-950/35 dark:to-red-950/90"
                                     role="status"
                                   >
                                     <span className="bakery-cook-alert-text text-[11px] font-black uppercase text-red-900 dark:text-amber-100">
-                                      BENİ PİŞİRİN !
-                                    </span>
+                                      Beni pişir ({bakeQty})
+                          </span>
                                   </div>
                                 )}
                               </li>
-                            );
-                        })}
+                      );
+                    })}
                       </ul>
                     </>
                   )}
-                </div>
+                  </div>
               )
             ) : activeTab === "hesaplama" ? (
               <div
@@ -2699,8 +2860,8 @@ export default function Home() {
                   ) : hesaplamaSearchResults.length === 0 ? (
                     <div className="flex flex-1 items-center justify-center px-4 py-10 text-center text-sm text-zinc-500 dark:text-zinc-400">
                       Aday ürünler arasında eşleşme yok.
-                    </div>
-                  ) : (
+                </div>
+              ) : (
                     <ul
                       role="list"
                       className="max-h-[min(45vh,22rem)] divide-y divide-zinc-200 overflow-y-auto overscroll-contain dark:divide-zinc-700"
@@ -3244,7 +3405,7 @@ export default function Home() {
                                 className="tabular-nums text-zinc-600 dark:text-zinc-300"
                               >
                                 {text}
-                              </span>
+                        </span>
                             );
                           }
                           const value =
@@ -3260,7 +3421,7 @@ export default function Home() {
                           return (
                             <span key={col.key} className={cellClass}>
                               {value}
-                            </span>
+                        </span>
                           );
                         })}
                         <span className="flex items-center justify-end gap-1">

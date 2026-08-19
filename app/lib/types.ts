@@ -53,7 +53,10 @@ export const ACTIVE_WAREHOUSE_TOKEN_DOC_ID = "active_warehouse"; // Depo paneli 
 /** Eski aktif token doküman ID'si (geriye dönük uyumluluk için) */
 export const ACTIVE_TOKEN_DOC_ID = "active";
 
-/** Varsayılan warehouse ID (Getir panelinde seçili olan warehouse) */
+/** Aktif depo ID dokümanı (eklenti Mevcut Stok isteğinden yakalar) */
+export const ACTIVE_WAREHOUSE_ID_DOC_ID = "active_warehouse_id";
+
+/** Varsayılan warehouse ID — eklenti henüz ID yakalamadıysa yedek */
 export const DEFAULT_WAREHOUSE_ID = "5dc32d8b734a192200caddf8";
 
 /** Barkod -> Ürün ID mapping (Firestore'da saklanan) */

@@ -1,19 +1,22 @@
 // Background Service Worker - Token yakalama ve API'ye gönderme
 // Hem Getir Bayi Paneli hem de Getir Depo Paneli token'larını yakalar
 
-// API endpoint - Production URL (farklı bilgisayarlarda çalışması için)
-// Development için localhost kullanmak isterseniz bu satırı değiştirin:
-// const API_ENDPOINT = "http://localhost:3000/api/token/save";
-const API_ENDPOINT = "https://getirstok.netlify.app/api/token/save";
+// Local test: true → localhost:3000 | Netlify deploy sonrası false yap
+const USE_LOCAL_API = false;
+const API_BASE = USE_LOCAL_API
+  ? "http://localhost:3000"
+  : "https://getirware.netlify.app";
+const API_ENDPOINT = `${API_BASE}/api/token/save`;
+const WAREHOUSE_ID_ENDPOINT = `${API_BASE}/api/warehouse-id/save`;
 
 const PANEL_URL_PATTERNS = [
-  "https://getirstok.netlify.app/*",
+  "https://getirware.netlify.app/*",
   "http://localhost:3000/*",
   "http://127.0.0.1:3000/*",
 ];
 
 function buildPanelUrlWithQuery(query) {
-  const base = "https://getirstok.netlify.app/";
+  const base = "https://getirware.netlify.app/";
   const u = new URL(base);
   if (query && String(query).trim()) {
     u.searchParams.set("q", String(query).trim());
@@ -109,6 +112,44 @@ chrome.runtime.onMessage.addListener((msg, _sender, _sendResponse) => {
   return true;
 });
 
+chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+  if (!msg || msg.type !== "BAKERY_SUGGESTIONS_SAVE") return;
+  const items = Array.isArray(msg.items) ? msg.items : [];
+  if (items.length === 0) {
+    sendResponse({ ok: false, error: "empty" });
+    return true;
+  }
+  (async () => {
+    try {
+      const response = await fetch(`${API_BASE}/api/bakery-suggestions/save`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ items }),
+      });
+      const text = await response.text();
+      if (response.ok) {
+        console.log(
+          "[Getir Token Yakalayıcı] Pişirme önerileri kaydedildi:",
+          items.length,
+          API_BASE
+        );
+        sendResponse({ ok: true, count: items.length });
+      } else {
+        console.error(
+          "[Getir Token Yakalayıcı] Pişirme önerileri kaydedilemedi:",
+          response.status,
+          text
+        );
+        sendResponse({ ok: false, error: text, status: response.status });
+      }
+    } catch (e) {
+      console.error("[Getir Token Yakalayıcı] Pişirme önerileri API hatası:", e);
+      sendResponse({ ok: false, error: String(e && e.message ? e.message : e) });
+    }
+  })();
+  return true;
+});
+
 // Token yakalama - webRequest API kullanarak
 chrome.webRequest.onBeforeSendHeaders.addListener(
   function(details) {
@@ -171,6 +212,95 @@ chrome.webRequest.onBeforeSendHeaders.addListener(
   },
   ["requestHeaders"]
 );
+
+const OBJECT_ID_RE = /^[a-fA-F0-9]{24}$/;
+
+function decodeRequestBodyJson(requestBody) {
+  if (!requestBody || !requestBody.raw || !requestBody.raw[0] || !requestBody.raw[0].bytes) {
+    return null;
+  }
+  try {
+    const decoded = new TextDecoder("utf-8").decode(new Uint8Array(requestBody.raw[0].bytes));
+    return JSON.parse(decoded);
+  } catch {
+    return null;
+  }
+}
+
+function extractWarehouseIdFromUrl(url) {
+  const match = String(url || "").match(/\/warehouse\/([a-fA-F0-9]{24})(?:\/|\?|$)/);
+  return match ? match[1] : null;
+}
+
+function extractWarehouseIdFromBody(body) {
+  if (!body || !Array.isArray(body.warehouseIds) || body.warehouseIds.length === 0) {
+    return null;
+  }
+  const id = String(body.warehouseIds[0] || "").trim();
+  return OBJECT_ID_RE.test(id) ? id : null;
+}
+
+let lastPostedWarehouseId = null;
+
+function captureWarehouseId(warehouseId) {
+  if (!warehouseId || !OBJECT_ID_RE.test(warehouseId)) return;
+  // Service worker yeniden başlayınca tekrar kaydet (local/prod API değişimi için)
+  if (lastPostedWarehouseId === warehouseId) return;
+  lastPostedWarehouseId = warehouseId;
+
+  chrome.storage.local.set({
+    lastWarehouseId: warehouseId,
+    lastWarehouseIdCapturedAt: new Date().toISOString(),
+  });
+  console.log("[Getir Token Yakalayıcı] Depo ID yakalandı:", warehouseId);
+  sendWarehouseIdToAPI(warehouseId);
+}
+
+chrome.webRequest.onBeforeRequest.addListener(
+  function (details) {
+    if (details.url.includes("franchise-api-gateway.getirapi.com/stocks")) {
+      const body = decodeRequestBodyJson(details.requestBody);
+      const fromBody = extractWarehouseIdFromBody(body);
+      if (fromBody) captureWarehouseId(fromBody);
+      return;
+    }
+
+    if (
+      details.url.includes("warehouse-panel-api-gateway.getirapi.com") &&
+      details.url.includes("/products")
+    ) {
+      const fromUrl = extractWarehouseIdFromUrl(details.url);
+      if (fromUrl) captureWarehouseId(fromUrl);
+    }
+  },
+  {
+    urls: [
+      "https://franchise-api-gateway.getirapi.com/stocks*",
+      "https://warehouse-panel-api-gateway.getirapi.com/*/products*",
+    ],
+  },
+  ["requestBody"]
+);
+
+async function sendWarehouseIdToAPI(warehouseId) {
+  try {
+    const response = await fetch(WAREHOUSE_ID_ENDPOINT, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ warehouseId }),
+    });
+    if (response.ok) {
+      console.log("[Getir Token Yakalayıcı] Depo ID kaydedildi:", warehouseId);
+    } else {
+      const error = await response.text();
+      console.error("[Getir Token Yakalayıcı] Depo ID kaydedilemedi:", error);
+      lastPostedWarehouseId = null;
+    }
+  } catch (error) {
+    console.error("[Getir Token Yakalayıcı] Depo ID API hatası:", error);
+    lastPostedWarehouseId = null;
+  }
+}
 
 // Token'ı Next.js API'ye gönderme (type bilgisi ile)
 async function sendTokenToAPI(token, type) {

@@ -3,6 +3,7 @@
 const franchiseStatusDiv = document.getElementById("franchiseStatus");
 const franchiseTokenInfoDiv = document.getElementById("franchiseTokenInfo");
 const franchiseLastCapturedDiv = document.getElementById("franchiseLastCaptured");
+const franchiseWarehouseIdDiv = document.getElementById("franchiseWarehouseId");
 const franchiseTestButton = document.getElementById("franchiseTestButton");
 
 const warehouseStatusDiv = document.getElementById("warehouseStatus");
@@ -10,14 +11,18 @@ const warehouseTokenInfoDiv = document.getElementById("warehouseTokenInfo");
 const warehouseLastCapturedDiv = document.getElementById("warehouseLastCaptured");
 const warehouseTestButton = document.getElementById("warehouseTestButton");
 
-// API endpoint - Production URL (farklı bilgisayarlarda çalışması için)
-// Development için localhost kullanmak isterseniz bu satırı değiştirin:
-// const API_ENDPOINT = "http://localhost:3000/api/token/save";
-const API_ENDPOINT = "https://getirstok.netlify.app/api/token/save";
+// Local test: true → localhost:3000 | Netlify deploy sonrası false yap
+const USE_LOCAL_API = false;
+const API_BASE = USE_LOCAL_API
+  ? "http://localhost:3000"
+  : "https://getirware.netlify.app";
+const API_ENDPOINT = `${API_BASE}/api/token/save`;
 
 // Bayi Paneli (Franchise) token durumunu yükle
 function loadFranchiseTokenStatus() {
-  chrome.storage.local.get(["lastToken_franchise", "lastCapturedAt_franchise"], (result) => {
+  chrome.storage.local.get(
+    ["lastToken_franchise", "lastCapturedAt_franchise", "lastWarehouseId", "lastWarehouseIdCapturedAt"],
+    (result) => {
     if (result.lastToken_franchise) {
       // Token var
       franchiseStatusDiv.className = "status success";
@@ -41,7 +46,18 @@ function loadFranchiseTokenStatus() {
       franchiseLastCapturedDiv.style.display = "none";
       franchiseTestButton.disabled = true;
     }
-  });
+
+    if (result.lastWarehouseId) {
+      franchiseWarehouseIdDiv.style.display = "block";
+      const when = result.lastWarehouseIdCapturedAt
+        ? ` (${new Date(result.lastWarehouseIdCapturedAt).toLocaleString("tr-TR")})`
+        : "";
+      franchiseWarehouseIdDiv.textContent = `Depo ID: ${result.lastWarehouseId}${when}`;
+    } else {
+      franchiseWarehouseIdDiv.style.display = "none";
+    }
+  }
+  );
 }
 
 // Depo Paneli (Warehouse) token durumunu yükle
@@ -80,7 +96,7 @@ loadWarehouseTokenStatus();
 // Storage değişikliklerini dinle (token yakalandığında otomatik güncelle)
 chrome.storage.onChanged.addListener((changes, areaName) => {
   if (areaName === "local") {
-    if (changes.lastToken_franchise || changes.lastCapturedAt_franchise) {
+    if (changes.lastToken_franchise || changes.lastCapturedAt_franchise || changes.lastWarehouseId) {
       loadFranchiseTokenStatus();
     }
     if (changes.lastToken_warehouse || changes.lastCapturedAt_warehouse) {
