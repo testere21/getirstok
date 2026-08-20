@@ -7,6 +7,7 @@ import {
   listActiveTelegramChatIds,
   markTelegramSubscriberInactive,
 } from "./telegramSubscriberService";
+import { formatYmdToTr } from "./utils";
 
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID;
@@ -20,11 +21,20 @@ interface TelegramAddStockItemParams {
   type: StockItemType;
 }
 
+export type SendTelegramOptions = {
+  /** true = sessiz bildirim. Acil SKT için false bırakın (cihaz sesi/titreşim). */
+  disableNotification?: boolean;
+  parseMode?: "HTML";
+};
+
 /**
  * Telegram Bot API'ye mesaj gönderen temel fonksiyon.
  * Env değişkenleri tanımlı değilse sessizce çıkar (panel çalışmaya devam eder).
  */
-export async function sendTelegramMessage(message: string): Promise<void> {
+export async function sendTelegramMessage(
+  message: string,
+  options?: SendTelegramOptions
+): Promise<void> {
   try {
     if (!TELEGRAM_BOT_TOKEN) {
       console.warn(
@@ -52,14 +62,19 @@ export async function sendTelegramMessage(message: string): Promise<void> {
     // Basit rate-limit: sırayla gönder (Telegram 429 riskini azaltır)
     for (const chatId of chatIds) {
       if (!chatId) continue;
+      const body: Record<string, unknown> = {
+        chat_id: chatId,
+        text: message,
+        disable_web_page_preview: true,
+        disable_notification: options?.disableNotification === true,
+      };
+      if (options?.parseMode) {
+        body.parse_mode = options.parseMode;
+      }
       const response = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          chat_id: chatId,
-          text: message,
-          disable_web_page_preview: true,
-        }),
+        body: JSON.stringify(body),
       });
 
       if (!response.ok) {
@@ -183,6 +198,67 @@ export function buildProductIssueMessage(
     lines.push(`Not: ${note}`);
   }
 
+  return lines.join("\n");
+}
+
+export interface ExpiringProductTelegramPayload {
+  productName: string;
+  barcode: string;
+  expiryDate: string;
+  removalDate: string;
+}
+
+/** Yaklaşan SKT eklendi bildirimi. */
+export function buildExpiringProductAddedMessage(
+  payload: ExpiringProductTelegramPayload
+): string {
+  const name = payload.productName.trim() || "-";
+  const barcode = payload.barcode.trim() || "-";
+  return [
+    "🟠 YAKLAŞAN SKT EKLENDİ",
+    `Ad: ${name}`,
+    `Barkod: ${barcode}`,
+    `SKT: ${formatYmdToTr(payload.expiryDate)}`,
+    `Çıkılması gereken: ${formatYmdToTr(payload.removalDate)}`,
+  ].join("\n");
+}
+
+/** Yaklaşan SKT silindi bildirimi. */
+export function buildExpiringProductDeletedMessage(
+  payload: ExpiringProductTelegramPayload
+): string {
+  const name = payload.productName.trim() || "-";
+  const barcode = payload.barcode.trim() || "-";
+  return [
+    "🔴 YAKLAŞAN SKT SİLİNDİ",
+    `Ad: ${name}`,
+    `Barkod: ${barcode}`,
+    `SKT: ${formatYmdToTr(payload.expiryDate)}`,
+    `Çıkılması gereken: ${formatYmdToTr(payload.removalDate)}`,
+  ].join("\n");
+}
+
+export interface BakeryBakeAlertItem {
+  name: string;
+  barcode: string;
+  bakeQty: number;
+}
+
+export function buildBakeryBakeAlertMessage(
+  items: BakeryBakeAlertItem[],
+  slotLabel?: string | null
+): string {
+  const lines = ["🔥 FIRIN UYARISI — PİŞİRİLMELİ"];
+  const slot = slotLabel?.trim();
+  if (slot) lines.push(`Aralık: ${slot}`);
+  lines.push("");
+  const total = items.reduce((n, it) => n + it.bakeQty, 0);
+  for (const it of items) {
+    const name = it.name.trim() || "-";
+    lines.push(`• ${name} — ${it.bakeQty} adet (raf: 0)`);
+  }
+  lines.push("");
+  lines.push(`Toplam pişirilecek: ${total}`);
   return lines.join("\n");
 }
 

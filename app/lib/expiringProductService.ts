@@ -111,6 +111,34 @@ export async function updateExpiringProduct(
   }
 }
 
+function mapExpiringProductDoc(
+  id: string,
+  data: Record<string, unknown>
+): ExpiringProductWithId {
+  return {
+    id,
+    barcode: (data.barcode as string) ?? "",
+    productName: (data.productName as string) ?? "",
+    expiryDate: (data.expiryDate as string) ?? "",
+    removalDate: (data.removalDate as string) ?? "",
+    createdAt: (data.createdAt as string) ?? new Date().toISOString(),
+    updatedAt: data.updatedAt as string | undefined,
+    isNotified: (data.isNotified as boolean) ?? false,
+  };
+}
+
+export async function getExpiringProductById(
+  id: string
+): Promise<ExpiringProductWithId | null> {
+  if (!id || typeof id !== "string" || id.trim().length === 0) {
+    throw new Error("Geçersiz id");
+  }
+  const docRef = doc(db, EXPIRING_PRODUCTS_COLLECTION, id.trim());
+  const snap = await getDoc(docRef);
+  if (!snap.exists()) return null;
+  return mapExpiringProductDoc(snap.id, snap.data() as Record<string, unknown>);
+}
+
 /**
  * Yaklaşan SKT kaydını siler.
  */

@@ -5,6 +5,10 @@ import {
   getExpiringProductsByRemovalDate,
   type AddExpiringProductParams,
 } from "@/app/lib/expiringProductService";
+import {
+  buildExpiringProductAddedMessage,
+  sendTelegramMessage,
+} from "@/app/lib/telegramService";
 
 /** CORS header'ları */
 const CORS_HEADERS = {
@@ -161,6 +165,15 @@ export async function POST(request: Request) {
 
     console.log("[Expiring Products API] Adding new product:", params);
     const id = await addExpiringProduct(params);
+
+    try {
+      await sendTelegramMessage(buildExpiringProductAddedMessage(params));
+    } catch (telegramErr) {
+      console.error(
+        "[Expiring Products API] Telegram bildirimi gönderilemedi:",
+        telegramErr
+      );
+    }
 
     return NextResponse.json(
       {

@@ -1,9 +1,14 @@
 import { NextResponse } from "next/server";
 import {
   deleteExpiringProduct,
+  getExpiringProductById,
   updateExpiringProduct,
   type UpdateExpiringProductParams,
 } from "@/app/lib/expiringProductService";
+import {
+  buildExpiringProductDeletedMessage,
+  sendTelegramMessage,
+} from "@/app/lib/telegramService";
 
 /** CORS header'ları */
 const CORS_HEADERS = {
@@ -156,7 +161,24 @@ export async function DELETE(
       );
     }
 
+    const existing = await getExpiringProductById(id);
+    if (!existing) {
+      return NextResponse.json(
+        { error: "Yaklaşan SKT kaydı bulunamadı", success: false },
+        { status: 404, headers: CORS_HEADERS }
+      );
+    }
+
     await deleteExpiringProduct(id);
+
+    try {
+      await sendTelegramMessage(buildExpiringProductDeletedMessage(existing));
+    } catch (telegramErr) {
+      console.error(
+        "[Expiring Products API] Telegram bildirimi gönderilemedi:",
+        telegramErr
+      );
+    }
 
     return NextResponse.json(
       {

@@ -1167,183 +1167,21 @@ export function AddProductModal({
           )}
 
           {isEditMode ? (
-            <>
-              <div>
-                <label htmlFor="add-product-name" className="mb-1 block text-sm font-medium text-zinc-700 dark:text-zinc-300">
-                  Ürün İsmi
-                </label>
-                <input
-                  ref={firstInputRef as React.RefObject<HTMLInputElement>}
-                  id="add-product-name"
-                  type="text"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-base text-zinc-900 focus:border-[var(--color-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--color-primary)] dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-100"
-                  aria-required="true"
-                />
-              </div>
-              <div>
-                <label htmlFor="add-product-barcode" className="mb-1 block text-sm font-medium text-zinc-700 dark:text-zinc-300">
-                  Barkod
-                </label>
-                <input
-                  id="add-product-barcode"
-                  type="text"
-                  value={barcode}
-                  onChange={(e) => setBarcode(e.target.value)}
-                  className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-base text-zinc-900 focus:border-[var(--color-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--color-primary)] dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-100"
-                  aria-required="true"
-                />
-              </div>
-              {/* Getir Stok Bilgisi (Düzenleme modu) */}
-              {isEditMode && initialItem && (
-                <div className="flex flex-col gap-2">
-                  <button
-                    type="button"
-                    onClick={handleGetGetirStock}
-                    disabled={getirStockLoading}
-                    className="flex items-center justify-center gap-2 rounded-lg border border-zinc-300 bg-white px-4 py-2 text-sm font-medium text-zinc-700 transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700"
-                  >
-                    {getirStockLoading ? (
-                      <>
-                        <RefreshCw className="size-4 animate-spin" />
-                        <span>Stok Getiriliyor...</span>
-                      </>
-                    ) : (
-                      <>
-                        <RefreshCw className="size-4" />
-                        <span>Getir Stokunu Getir</span>
-                      </>
-                    )}
-                  </button>
-
-                  {/* Stok Bilgisi Gösterimi */}
-                  {getirStock !== null && !getirStockError && !getirStockLoading && (
-                    <div className="rounded-lg border border-green-200 bg-green-50 p-3 dark:border-green-800 dark:bg-green-900/20">
-                      <p className="text-sm font-medium text-green-800 dark:text-green-300">
-                        Stok: <span className="text-lg font-semibold">{getirStock}</span>
-                      </p>
-                    </div>
-                  )}
-
-                  {/* Hata Mesajı */}
-                  {getirStockError && (
-                    <div className="rounded-lg border border-red-200 bg-red-50 p-3 dark:border-red-800 dark:bg-red-900/20">
-                      <p className="text-sm font-medium text-red-800 dark:text-red-300">
-                        {getirStockError}
-                      </p>
-                      {getirStockError.includes("Token") && (
-                        <p className="mt-1 text-xs text-red-600 dark:text-red-400">
-                          Lütfen Chrome eklentisini kullanarak franchise.getir.com'da yeni token ekleyin.
-                        </p>
-                      )}
-                    </div>
-                  )}
-
-                  {getirStockFetchComplete &&
-                    getirStock === null &&
-                    !getirStockError &&
-                    !getirStockLoading && (
-                      <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-3 text-sm text-zinc-600 dark:border-zinc-600 dark:bg-zinc-800/50 dark:text-zinc-400">
-                        Getir stoku şu an gösterilemiyor (eşleşme veya API yanıtı).
-                      </div>
-                    )}
-
-                  {/* Kaç Gün Önceden Çıkılacak — katalogda yoksa Getir’den çek */}
-                  {displaySupplierReturnDays === null && (
-                    <button
-                      type="button"
-                      onClick={handleGetSupplierReturnDate}
-                      disabled={supplierReturnDateLoading}
-                      className="flex items-center justify-center gap-2 rounded-lg border border-zinc-300 bg-white px-4 py-2 text-sm font-medium text-zinc-700 transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700"
-                    >
-                      {supplierReturnDateLoading ? (
-                        <>
-                          <RefreshCw className="size-4 animate-spin" />
-                          <span>Yükleniyor...</span>
-                        </>
-                      ) : (
-                        <>
-                          <RefreshCw className="size-4" />
-                          <span>Kaç Gün Önceden Çıkılacak</span>
-                        </>
-                      )}
-                    </button>
-                  )}
-
-                  {/* Tedarikçi İade Tarihi Gösterimi */}
-                  {displaySupplierReturnDays !== null && !supplierReturnDateError && (
-                    <div className="rounded-lg border border-green-200 bg-green-50 p-3 dark:border-green-800 dark:bg-green-900/20">
-                      <p className="text-sm font-medium text-green-800 dark:text-green-300">
-                        Tedarikçi İade:{" "}
-                        <span className="text-lg font-semibold">
-                          {displaySupplierReturnDays}
-                        </span>{" "}
-                        gün önceden çıkılacak
-                      </p>
-                    </div>
-                  )}
-
-                  {/* Tedarikçi İade Tarihi Hata Mesajı */}
-                  {supplierReturnDateError && (
-                    <div className="rounded-lg border border-red-200 bg-red-50 p-3 dark:border-red-800 dark:bg-red-900/20">
-                      <p className="text-sm font-medium text-red-800 dark:text-red-300">
-                        {supplierReturnDateError}
-                      </p>
-                      {supplierReturnDateError.includes("Token") && (
-                        <p className="mt-1 text-xs text-red-600 dark:text-red-400">
-                          Lütfen Chrome eklentisini kullanarak warehouse.getir.com'da yeni token ekleyin.
-                        </p>
-                      )}
-                    </div>
-                  )}
-
-                  {/* Yaklaşan SKT Olarak İşaretle */}
-                  {initialItem && (
-                    <div className="space-y-2">
-                      <button
-                        type="button"
-                        onClick={() => setExpiringProductModalOpen(true)}
-                        className="flex items-center justify-center gap-2 rounded-lg border border-zinc-300 bg-white px-4 py-2 text-sm font-medium text-zinc-700 transition hover:bg-zinc-50 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700"
-                      >
-                        <Calendar className="size-4" />
-                        <span>
-                          {existingExpiringProduct
-                            ? "Yaklaşan SKT'yi Düzenle"
-                            : "Yaklaşan SKT Olarak İşaretle"}
-                        </span>
-                      </button>
-
-                      {existingExpiringProduct && (
-                        <div className="rounded-lg border border-orange-200 bg-orange-50 p-3 dark:border-orange-800 dark:bg-orange-900/20">
-                          <p className="text-sm font-medium text-orange-800 dark:text-orange-300">
-                            <span className="font-semibold">SKT:</span> {existingExpiringProduct.expiryDate}
-                          </p>
-                          <p className="mt-1 text-sm font-medium text-orange-800 dark:text-orange-300">
-                            <span className="font-semibold">Çıkılması Gereken Tarih:</span>{" "}
-                            {existingExpiringProduct.removalDate}
-                          </p>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-              )}
-              {/* Tip bilgisi (sadece gösterim, değiştirilemez) */}
-              {initialItem && (
-                <div>
-                  <label className="mb-1 block text-sm font-medium text-zinc-700 dark:text-zinc-300">
-                    Tip
-                  </label>
-                  <div className="rounded-lg border border-zinc-300 bg-zinc-50 px-3 py-2 text-base text-zinc-600 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-400">
-                    {initialItem.type === "missing" ? "Eksik" : "Fazla"}
-                  </div>
-                  <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
-                    Ürün tipi değiştirilemez. Sadece miktar ve notlar düzenlenebilir.
-                  </p>
-                </div>
-              )}
-            </>
+            <div>
+              <label htmlFor="add-product-name" className="mb-1 block text-sm font-medium text-zinc-700 dark:text-zinc-300">
+                Ürün İsmi
+              </label>
+              <input
+                id="add-product-name"
+                type="text"
+                value={name}
+                readOnly
+                disabled
+                tabIndex={-1}
+                className="w-full cursor-not-allowed rounded-lg border border-zinc-300 bg-zinc-50 px-3 py-2 text-base text-zinc-600 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-400"
+                aria-readonly="true"
+              />
+            </div>
           ) : showFormFromCatalog && catalogProduct ? (
             <>
               {/* Katalog ürününden form görünümü: Ürün bilgileri sadece gösterilir, düzenlenemez */}
@@ -1455,7 +1293,11 @@ export function AddProductModal({
               Miktar
             </label>
             <input
-              ref={showFormFromCatalog ? (firstInputRef as React.RefObject<HTMLInputElement>) : undefined}
+              ref={
+                showFormFromCatalog || isEditMode
+                  ? (firstInputRef as React.RefObject<HTMLInputElement>)
+                  : undefined
+              }
               id="add-product-quantity"
               type="number"
               min={0}
