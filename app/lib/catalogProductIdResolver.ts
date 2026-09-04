@@ -12,11 +12,14 @@ import {
  * (`GET /api/products` ile aynı kaynak) barkoda karşılık gelen Getir productId'yi döndürür.
  * Firestore `barcode_product_mappings` dışındaki kaynak — stok sorgusunda hızlı yol için kullanılır.
  */
-export async function getProductIdFromMergedCatalog(
-  barcode: string
-): Promise<string | null> {
-  const key = normalizeCatalogBarcodeKey(barcode);
-  if (!key) return null;
+export async function getProductIdsFromMergedCatalog(
+  barcodes: readonly string[]
+): Promise<Map<string, string>> {
+  const result = new Map<string, string>();
+  const unique = [
+    ...new Set(barcodes.map((b) => b.trim()).filter((b) => b.length > 0)),
+  ];
+  if (unique.length === 0) return result;
 
   let jsonProducts: CatalogProduct[] = [];
   try {
@@ -36,9 +39,25 @@ export async function getProductIdFromMergedCatalog(
     console.warn("[catalogProductIdResolver] supplemental yüklenemedi:", e);
   }
 
-  const p = merged.find(
-    (x) => normalizeCatalogBarcodeKey(x.barcode) === key
-  );
-  const pid = p?.productId?.trim();
-  return pid || null;
+  const byNorm = new Map<string, string>();
+  for (const x of merged) {
+    const pid = x.productId?.trim();
+    const k = normalizeCatalogBarcodeKey(x.barcode);
+    if (!pid || !k) continue;
+    byNorm.set(k, pid);
+  }
+
+  for (const barcode of unique) {
+    const k = normalizeCatalogBarcodeKey(barcode);
+    const pid = k ? byNorm.get(k) : undefined;
+    if (pid) result.set(barcode, pid);
+  }
+  return result;
+}
+
+export async function getProductIdFromMergedCatalog(
+  barcode: string
+): Promise<string | null> {
+  const m = await getProductIdsFromMergedCatalog([barcode]);
+  return m.get(barcode.trim()) ?? null;
 }

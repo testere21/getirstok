@@ -89060,5 +89060,14 @@
     "barcodes": [
       "8683130133934"
     ]
+  },
+  {
+    "name": "Ekmek (200 g)",
+    "barcode": "F004200",
+    "imageUrl": "https://cdn-image.getir.com/market/product/fe56fbda-563f-4b6e-a7e8-c54ab765142c.webp",
+    "productId": "697b034c39df0939bb3128aa",
+    "barcodes": [
+      "F004200"
+    ]
   }
 ]

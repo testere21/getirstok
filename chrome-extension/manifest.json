@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Getir Token Yakalayıcı",
-  "version": "1.2.2",
+  "version": "1.2.4",
   "description": "Getir Bayi Paneli ve Depo Paneli Authorization token'larını ayrı ayrı yakalayıp getirware.netlify.app'a gönderir",
   "permissions": [
     "webRequest",

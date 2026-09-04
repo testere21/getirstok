@@ -72,7 +72,8 @@ export function mergeProductsJsonWithSupplemental(
 }
 
 export async function upsertSupplementalCatalogProduct(
-  product: CatalogProduct
+  product: CatalogProduct,
+  source: SupplementalCatalogProduct["source"] = "warehouse_shelf_label"
 ): Promise<void> {
   const key = normalizeCatalogBarcodeKey(product.barcode);
   if (!key || key.length < 6) {
@@ -86,15 +87,20 @@ export async function upsertSupplementalCatalogProduct(
     ? (existing.data() as SupplementalCatalogProduct)
     : null;
 
-  const payload: SupplementalCatalogProduct = {
+  const payload: Record<string, unknown> = {
     name: product.name.trim(),
     barcode: product.barcode.trim(),
-    imageUrl: product.imageUrl,
-    productId: product.productId,
-    source: "warehouse_shelf_label",
+    source: prev?.source ?? source,
     createdAt: prev?.createdAt ?? now,
     updatedAt: now,
   };
+  const imageUrl = product.imageUrl?.trim();
+  if (imageUrl) payload.imageUrl = imageUrl;
+  const productId = product.productId?.trim();
+  if (productId) payload.productId = productId;
+  if (typeof product.price === "number" && Number.isFinite(product.price)) {
+    payload.price = product.price;
+  }
 
   await setDoc(ref, payload, { merge: true });
 }

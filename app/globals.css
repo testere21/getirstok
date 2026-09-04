@@ -1,5 +1,12 @@
 @import "tailwindcss";
 
+/*
+ * Tailwind 4 varsayılanı: @media (hover: hover).
+ * Bazı Windows / dokunmatik dizüstülerde bu sorgu false kalır; hover: sınıfları hiç uygulanmaz.
+ */
+@custom-variant hover (&:hover);
+
+
 @keyframes skt-alert-blink {
   0% {
     transform: translateY(0) scale(1);

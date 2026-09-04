@@ -18,8 +18,10 @@ import {
   ChefHat,
   X,
   RefreshCw,
+  Plus,
 } from "lucide-react";
 import { AddProductModal } from "./components/AddProductModal";
+import { ManualAddProductModal } from "./components/ManualAddProductModal";
 import { BakeryExitWizard } from "./components/BakeryExitWizard";
 import { SearchBar } from "./components/SearchBar";
 import { BarcodeScanner } from "./components/BarcodeScanner";
@@ -60,6 +62,7 @@ import {
   type BakeSlotKey,
   type BakeryBakeSuggestionItem,
 } from "@/app/lib/bakeryBakeSuggestions";
+import { isBakeryQuietHours } from "@/app/lib/bakeryQuietHours";
 /** Buton merkezinden radyal — çok baloncuk, halkalar halinde mesafe çeşitliliği */
 const REF_WATER_AROUND_BUTTON_COUNT = 120;
 
@@ -242,6 +245,7 @@ export default function Home() {
   const [editingExpiringProduct, setEditingExpiringProduct] = useState<ExpiringProductWithId | null>(null);
   // "Ürün Yok Bildir" gönderiminde kısa süre buton devre dışı
   const [productIssueSending, setProductIssueSending] = useState(false);
+  const [manualAddProductOpen, setManualAddProductOpen] = useState(false);
   // Ekran ortasında başarı penceresi (Bildirim gönderildi / Ürün silindi vb.) — 2 sn
   const [successModalMessage, setSuccessModalMessage] = useState<string | null>(null);
   // Eksik/Fazla sekmesindeki listeden silme onayı
@@ -324,20 +328,19 @@ export default function Home() {
     return () => clearTimeout(t);
   }, [successModalMessage]);
 
+  const reloadCatalogProducts = useCallback(async () => {
+    const res = await fetch("/api/products");
+    const data = (await res.json()) as CatalogProduct[];
+    setCatalogProducts(Array.isArray(data) ? data : []);
+  }, []);
+
   // Katalog ürünlerini yükle
   useEffect(() => {
     setCatalogLoading(true);
-    fetch("/api/products")
-      .then((res) => res.json())
-      .then((data: CatalogProduct[]) => {
-        setCatalogProducts(Array.isArray(data) ? data : []);
-        setCatalogLoading(false);
-      })
-      .catch(() => {
-        setCatalogProducts([]);
-        setCatalogLoading(false);
-      });
-  }, []);
+    reloadCatalogProducts()
+      .catch(() => setCatalogProducts([]))
+      .finally(() => setCatalogLoading(false));
+  }, [reloadCatalogProducts]);
 
   useEffect(() => {
     let isFirstLoad = true;
@@ -651,6 +654,10 @@ export default function Home() {
     [catalogProducts]
   );
 
+  /** Deneme: sahte raf/donuk. Canlı Getir stoğu için `false`. */
+  const BAKERY_DEV_MOCK_STOCK = false;
+  const bakeryMockRafStock = BAKERY_DEV_MOCK_STOCK;
+
   const handleBakeryRowClick = useCallback(
     (row: BakeryResolvedRow) => {
       const product = catalogProducts.find((p) =>
@@ -712,30 +719,30 @@ export default function Home() {
   );
 
   const fetchBakeryStockEntries = useCallback(
-    async (rows: BakeryResolvedRow[]) =>
-      Promise.all(
-        rows.map(async (row) => {
-          try {
-            const res = await fetch(
-              `/api/getir-stock?barcode=${encodeURIComponent(row.barcode)}`
-            );
-            const data = (await res.json()) as { stock?: number | null };
-            if (res.ok && data && typeof data.stock === "number") {
-              return [row.barcode, data.stock] as const;
-            }
-            if (
-              res.ok &&
-              data &&
-              (data.stock === null || data.stock === undefined)
-            ) {
-              return [row.barcode, null] as const;
-            }
-            return [row.barcode, null] as const;
-          } catch {
-            return [row.barcode, null] as const;
-          }
-        })
-      ),
+    async (rows: BakeryResolvedRow[]) => {
+      const empty = rows.map((row) => [row.barcode, null] as const);
+      try {
+        const res = await fetch("/api/getir-stock", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            barcodes: rows.map((r) => r.barcode),
+          }),
+        });
+        const data = (await res.json()) as {
+          stocks?: Record<string, number | null>;
+        };
+        if (!data.stocks || typeof data.stocks !== "object") {
+          return empty;
+        }
+        return rows.map((row) => {
+          const v = data.stocks?.[row.barcode];
+          return [row.barcode, typeof v === "number" ? v : null] as const;
+        });
+      } catch {
+        return empty;
+      }
+    },
     []
   );
 
@@ -793,13 +800,21 @@ export default function Home() {
 
   const handleBakeryStockRefresh = useCallback(() => {
     if (bakeryRows.length === 0) return;
+    if (bakeryMockRafStock) {
+      setBakeryRafSort("asc");
+      return;
+    }
     void (async () => {
       await refreshBakeryLiveStocks({ silent: false, includeFrozen: true });
       setBakeryRafSort("asc");
     })();
-  }, [bakeryRows.length, refreshBakeryLiveStocks]);
+  }, [bakeryRows.length, bakeryMockRafStock, refreshBakeryLiveStocks]);
 
   useEffect(() => {
+    if (bakeryMockRafStock) {
+      setBakeryStocksLoading(false);
+      return;
+    }
     if (catalogLoading) return;
     if (bakeryRows.length === 0) {
       setBakeryStocks({});
@@ -807,28 +822,45 @@ export default function Home() {
       setBakeryStocksLoading(false);
       return;
     }
-    void refreshBakeryLiveStocks({
-      silent: false,
-      includeFrozen: activeTabRef.current === "bakery",
-    });
-    const id = window.setInterval(() => {
+
+    const runAuto = (silent: boolean) => {
+      if (isBakeryQuietHours()) return;
       void refreshBakeryLiveStocks({
-        silent: true,
+        silent,
         includeFrozen: activeTabRef.current === "bakery",
       });
-    }, 5 * 60_000);
+    };
+
+    runAuto(false);
+    const id = window.setInterval(() => runAuto(true), 5 * 60_000);
+
+    let wasQuiet = isBakeryQuietHours();
+    const quietTick = window.setInterval(() => {
+      const quiet = isBakeryQuietHours();
+      if (wasQuiet && !quiet) {
+        void refreshBakeryLiveStocks({
+          silent: true,
+          includeFrozen: activeTabRef.current === "bakery",
+        });
+      }
+      wasQuiet = quiet;
+    }, 30_000);
+
     return () => {
       window.clearInterval(id);
+      window.clearInterval(quietTick);
       bakeryStockFetchGenRef.current += 1;
     };
-  }, [catalogLoading, bakeryStocksKey, refreshBakeryLiveStocks]);
+  }, [catalogLoading, bakeryStocksKey, bakeryMockRafStock, refreshBakeryLiveStocks]);
 
   useEffect(() => {
+    if (bakeryMockRafStock) return;
+    if (isBakeryQuietHours()) return;
     if (activeTab !== "bakery" || catalogLoading || bakeryRows.length === 0) {
       return;
     }
     void refreshBakeryLiveStocks({ silent: true, includeFrozen: true });
-  }, [activeTab, catalogLoading, bakeryRows.length, refreshBakeryLiveStocks]);
+  }, [activeTab, catalogLoading, bakeryRows.length, bakeryMockRafStock, refreshBakeryLiveStocks]);
 
   useEffect(() => {
     if (activeTab !== "bakery") return;
@@ -928,24 +960,41 @@ export default function Home() {
   }, [bakeryRows]);
 
   /**
-   * Deneme: `.env.local` içine `NEXT_PUBLIC_DEV_BAKERY_MOCK_RAF_STOCK=true` yazınca
-   * Getir raf stoku yerine sabit sahte sayılar gösterilir (Fırın çık vb.).
+   * Deneme: Getir yerine sahte raf stoku (Fırın çık, sıralama, bildirim).
    */
-  const bakeryMockRafStock =
-    process.env.NEXT_PUBLIC_DEV_BAKERY_MOCK_RAF_STOCK === "true";
-
   const bakeryStocksLoadingForUi = bakeryMockRafStock ? false : bakeryStocksLoading;
 
   const bakeryStocksForUi = useMemo((): Record<string, number | null> => {
     if (!bakeryMockRafStock || bakeryRows.length === 0) {
       return bakeryStocks;
     }
+    const rafOptions = [0, 0, 1, 3, 6, 12];
     const mock: Record<string, number | null> = {};
-    bakeryRows.forEach((row, i) => {
-      mock[row.barcode] = (i % 5) + 2;
+    bakeryRows.forEach((row) => {
+      let h = 0;
+      for (let i = 0; i < row.barcode.length; i++) {
+        h = (h + row.barcode.charCodeAt(i) * (i + 1)) % rafOptions.length;
+      }
+      mock[row.barcode] = rafOptions[h];
     });
     return mock;
   }, [bakeryMockRafStock, bakeryRows, bakeryStocks]);
+
+  const bakeryFrozenStocksForUi = useMemo((): Record<string, number | null> => {
+    if (!bakeryMockRafStock || bakeryRows.length === 0) {
+      return bakeryFrozenStocks;
+    }
+    const frozenOptions = [0, 2, 5, 8, 15];
+    const mock: Record<string, number | null> = {};
+    bakeryRows.forEach((row) => {
+      let h = 3;
+      for (let i = 0; i < row.barcode.length; i++) {
+        h = (h + row.barcode.charCodeAt(i) * (i + 2)) % frozenOptions.length;
+      }
+      mock[row.barcode] = frozenOptions[h];
+    });
+    return mock;
+  }, [bakeryMockRafStock, bakeryRows, bakeryFrozenStocks]);
 
   const cycleBakeryRafSort = useCallback(() => {
     setBakeryRafSort((s) =>
@@ -1294,6 +1343,13 @@ export default function Home() {
   const isShortSearchQuery =
     trimmedSearchQuery.length > 0 && trimmedSearchQuery.length < MIN_SEARCH_LENGTH;
 
+  const manualAddInitial = useMemo(() => {
+    const q = searchQuery.trim();
+    const digits = q.replace(/\s/g, "");
+    if (/^\d{6,18}$/.test(digits)) return { barcode: digits, name: "" };
+    return { name: q, barcode: "" };
+  }, [searchQuery]);
+
   const handleSort = useCallback((field: StockListSortKey) => {
     if (field === "totalAmount") {
       if (sortField === "totalAmount") {
@@ -1396,6 +1452,14 @@ export default function Home() {
       <h1 className="text-xl font-semibold text-zinc-900 dark:text-zinc-50 sm:text-2xl">
         Stok Takip Paneli
       </h1>
+      <p className="-mt-4 text-sm">
+        <a
+          href="/sevkiyat-test"
+          className="text-zinc-500 underline-offset-2 hover:text-zinc-800 hover:underline dark:text-zinc-400 dark:hover:text-zinc-200"
+        >
+          Sevkiyat test
+        </a>
+      </p>
 
       {/* Firestore hata mesajı */}
       {firestoreError && (
@@ -1443,7 +1507,7 @@ export default function Home() {
           <button
             type="button"
             onClick={() => setBarkodOlusturucuOpen(true)}
-            className="flex w-full items-center justify-center gap-2 rounded-xl border-2 border-zinc-300 bg-white px-5 py-4 text-base font-medium text-zinc-800 shadow-sm transition-all duration-200 hover:border-zinc-400 hover:bg-zinc-50 hover:scale-[1.01] active:scale-[0.99] dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-100 dark:hover:border-zinc-500 dark:hover:bg-zinc-700 sm:py-5 sm:text-lg min-h-[44px]"
+            className="flex min-h-[44px] w-full items-center justify-center gap-2 rounded-xl border-2 border-zinc-300 bg-white px-5 py-4 text-base font-medium text-zinc-800 shadow-sm transition duration-200 hover:-translate-y-0.5 hover:border-zinc-400 hover:bg-zinc-50 hover:shadow-lg hover:shadow-zinc-400/25 active:translate-y-0 active:shadow-sm dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-100 dark:hover:border-zinc-400 dark:hover:bg-zinc-700 dark:hover:shadow-black/50 motion-reduce:transform-none motion-reduce:transition-none sm:py-5 sm:text-lg"
             aria-label="Barkod oluşturucuyu aç"
           >
             <Barcode className="size-6 shrink-0" aria-hidden />
@@ -1543,7 +1607,7 @@ export default function Home() {
           ) : (
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
             <div
-              className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-700 dark:bg-zinc-800"
+              className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm transition duration-200 hover:-translate-y-0.5 hover:border-zinc-300 hover:shadow-lg hover:shadow-zinc-400/20 dark:border-zinc-700 dark:bg-zinc-800 dark:hover:border-zinc-500 dark:hover:shadow-black/40 motion-reduce:transform-none motion-reduce:transition-none"
               role="group"
               aria-label="Toplam ürün çeşidi"
             >
@@ -1555,7 +1619,7 @@ export default function Home() {
               </p>
             </div>
             <div
-              className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-700 dark:bg-zinc-800"
+              className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm transition duration-200 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-[0_10px_24px_-8px_var(--color-missing)] dark:border-zinc-700 dark:bg-zinc-800 motion-reduce:transform-none motion-reduce:transition-none"
               style={{ borderTopWidth: "3px", borderTopColor: "var(--color-missing)" }}
               role="group"
               aria-label="Toplam eksik ürün miktarı"
@@ -1577,7 +1641,7 @@ export default function Home() {
               </p>
             </div>
             <div
-              className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-700 dark:bg-zinc-800"
+              className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm transition duration-200 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-[0_10px_24px_-8px_var(--color-extra)] dark:border-zinc-700 dark:bg-zinc-800 motion-reduce:transform-none motion-reduce:transition-none"
               style={{ borderTopWidth: "3px", borderTopColor: "var(--color-extra)" }}
               role="group"
               aria-label="Toplam fazla ürün miktarı"
@@ -1639,7 +1703,7 @@ export default function Home() {
                       // Renk kodlaması mantığı
                       let cardColorClass = ""; // Varsayılan: neutral/gri
                       let cardBorderColor = "";
-                      let hoverColorClass = "hover:bg-zinc-50 dark:hover:bg-zinc-800/50"; // Varsayılan hover
+                      let hoverColorClass = "hover:bg-zinc-100 dark:hover:bg-zinc-800/70"; // Varsayılan hover
                       if (hasExtra && !hasMissing) {
                         // Sadece fazla eklenmişse: Yeşil
                         cardColorClass = "bg-green-50 dark:bg-green-900/20";
@@ -1783,9 +1847,17 @@ export default function Home() {
                 <div className="flex flex-col gap-4 p-4">
                   <EmptyState
                     title="Arama sonucu bulunamadı"
-                    message={`"${searchQuery}" için sonuç bulunamadı. Farklı bir arama terimi deneyin.`}
+                    message={`"${searchQuery}" için sonuç bulunamadı. Yeni ürün ekleyebilir veya farklı bir arama deneyebilirsiniz.`}
                     icon={PackageSearch}
                   />
+                  <button
+                    type="button"
+                    onClick={() => setManualAddProductOpen(true)}
+                    className="flex items-center justify-center gap-2 rounded-lg bg-zinc-900 px-4 py-3 text-sm font-medium text-white transition hover:bg-zinc-800 min-h-[44px] dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-white"
+                  >
+                    <Plus className="size-5 shrink-0" aria-hidden />
+                    Yeni Ürün Ekleme
+                  </button>
                   {searchQuery.trim().length >= 6 && (
                     <button
                       type="button"
@@ -1846,10 +1918,10 @@ export default function Home() {
               aria-controls="panel-missing"
               id="tab-missing"
               onClick={() => setActiveTab("missing")}
-              className={`relative px-4 py-4 text-sm font-medium transition min-h-[44px] sm:px-6 sm:py-4 sm:text-base ${
+              className={`relative min-h-[44px] px-4 py-4 text-sm font-medium transition duration-200 sm:px-6 sm:py-4 sm:text-base motion-reduce:transition-none ${
                 activeTab === "missing"
-                  ? "text-[var(--color-missing)]"
-                  : "text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200"
+                  ? "text-[var(--color-missing)] hover:bg-red-50/80 dark:hover:bg-red-950/35"
+                  : "text-zinc-500 hover:bg-zinc-200/80 hover:text-zinc-800 active:bg-zinc-300 dark:text-zinc-400 dark:hover:bg-zinc-700/80 dark:hover:text-zinc-100 dark:active:bg-zinc-600"
               }`}
             >
               Eksik Ürünler
@@ -1867,10 +1939,10 @@ export default function Home() {
               aria-controls="panel-extra"
               id="tab-extra"
               onClick={() => setActiveTab("extra")}
-              className={`relative px-4 py-4 text-sm font-medium transition min-h-[44px] sm:px-6 sm:py-4 sm:text-base ${
+              className={`relative min-h-[44px] px-4 py-4 text-sm font-medium transition duration-200 sm:px-6 sm:py-4 sm:text-base motion-reduce:transition-none ${
                 activeTab === "extra"
-                  ? "text-[var(--color-extra)]"
-                  : "text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200"
+                  ? "text-[var(--color-extra)] hover:bg-green-50/80 dark:hover:bg-green-950/35"
+                  : "text-zinc-500 hover:bg-zinc-200/80 hover:text-zinc-800 active:bg-zinc-300 dark:text-zinc-400 dark:hover:bg-zinc-700/80 dark:hover:text-zinc-100 dark:active:bg-zinc-600"
               }`}
             >
               Fazla Ürünler
@@ -1888,10 +1960,10 @@ export default function Home() {
               aria-controls="panel-expiring"
               id="tab-expiring"
               onClick={() => setActiveTab("expiring")}
-              className={`relative px-4 py-4 text-sm font-medium transition min-h-[44px] sm:px-6 sm:py-4 sm:text-base ${
+              className={`relative min-h-[44px] px-4 py-4 text-sm font-medium transition duration-200 sm:px-6 sm:py-4 sm:text-base motion-reduce:transition-none ${
                 activeTab === "expiring"
-                  ? "text-orange-600 dark:text-orange-400"
-                  : "text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200"
+                  ? "text-orange-600 hover:bg-orange-50/80 dark:text-orange-400 dark:hover:bg-orange-950/35"
+                  : "text-zinc-500 hover:bg-zinc-200/80 hover:text-zinc-800 active:bg-zinc-300 dark:text-zinc-400 dark:hover:bg-zinc-700/80 dark:hover:text-zinc-100 dark:active:bg-zinc-600"
               }`}
             >
               Yaklaşan SKT
@@ -1909,10 +1981,10 @@ export default function Home() {
               aria-controls="panel-bakery"
               id="tab-bakery"
               onClick={() => setActiveTab("bakery")}
-              className={`relative px-4 py-4 text-sm font-medium transition min-h-[44px] sm:px-6 sm:py-4 sm:text-base ${
+              className={`relative min-h-[44px] px-4 py-4 text-sm font-medium transition duration-200 sm:px-6 sm:py-4 sm:text-base motion-reduce:transition-none ${
                 activeTab === "bakery"
-                  ? "text-amber-700 dark:text-amber-400"
-                  : "text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200"
+                  ? "text-amber-700 hover:bg-amber-50/90 dark:text-amber-400 dark:hover:bg-amber-950/45"
+                  : "text-zinc-500 hover:bg-amber-50 hover:text-amber-800 active:bg-amber-100 dark:text-zinc-400 dark:hover:bg-amber-950/50 dark:hover:text-amber-300 dark:active:bg-amber-950/70"
               }`}
               aria-label={
                 bakeryCookAlertQty > 0
@@ -2000,7 +2072,7 @@ export default function Home() {
                       return (
                           <li
                             key={product.id}
-                            className="transition-colors duration-150 hover:bg-zinc-50 dark:hover:bg-zinc-800/50"
+                            className="cursor-default transition-colors duration-150 hover:bg-zinc-100 dark:hover:bg-zinc-800/70"
                           >
                             {/* Mobil görünüm: Kart layout */}
                             <div className="flex gap-3 px-4 py-3 sm:hidden">
@@ -2142,11 +2214,11 @@ export default function Home() {
                           role="status"
                         >
                           <strong className="font-semibold">Deneme modu:</strong> raf
-                          stokları sahte (env:{" "}
+                          ve donuk stoklar sahte (Getir bağlı değil). API için{" "}
                           <code className="rounded bg-black/25 px-1 py-0.5 text-[10px]">
-                            NEXT_PUBLIC_DEV_BAKERY_MOCK_RAF_STOCK=true
-                          </code>
-                          ).
+                            BAKERY_DEV_MOCK_STOCK
+                          </code>{" "}
+                          = false.
                         </div>
                       )}
                       {bakeryBakeSlotLabel && (
@@ -2267,7 +2339,7 @@ export default function Home() {
                               : typeof shelf === "number"
                                 ? String(shelf)
                                 : "—";
-                            const frozen = bakeryFrozenStocks[row.barcode];
+                            const frozen = bakeryFrozenStocksForUi[row.barcode];
                             const frozenText = bakeryStocksLoadingForUi
                               ? "…"
                               : typeof frozen === "number"
@@ -2322,8 +2394,8 @@ export default function Home() {
                                 key={row.barcode}
                                 className={`transition-colors duration-150 ${
                                   needsBake
-                                    ? "mx-2 my-1.5 overflow-hidden rounded-xl border-2 border-red-300/90 bg-red-50 shadow-sm hover:bg-red-100/95 dark:border-red-800/85 dark:bg-red-950/50 dark:shadow-none dark:hover:bg-red-950/65"
-                                    : "hover:bg-zinc-50 dark:hover:bg-zinc-800/50"
+                                    ? "mx-2 my-1.5 cursor-pointer overflow-hidden rounded-xl border-2 border-red-300/90 bg-red-50 shadow-sm hover:bg-red-100/95 dark:border-red-800/85 dark:bg-red-950/50 dark:shadow-none dark:hover:bg-red-950/65"
+                                    : "cursor-pointer hover:bg-zinc-100 dark:hover:bg-zinc-800/70"
                                 }`}
                               >
                                 <div className="flex gap-3 px-4 py-3 sm:hidden">
@@ -2608,10 +2680,10 @@ export default function Home() {
                       <li
                         key={item.id}
                         onClick={() => handleItemClick(item)}
-                        className={`transition-colors duration-150 hover:bg-zinc-50 dark:hover:bg-zinc-800/50 cursor-pointer ${
+                        className={`cursor-pointer transition-colors duration-150 ${
                           selectedStockIds.has(item.id)
-                            ? "bg-zinc-100 dark:bg-zinc-800/80"
-                            : ""
+                            ? "bg-zinc-100 hover:bg-zinc-200/90 dark:bg-zinc-800/80 dark:hover:bg-zinc-700/80"
+                            : "hover:bg-zinc-100 dark:hover:bg-zinc-800/70"
                         }`}
                       >
                         {/* Mobil görünüm: Kart layout */}
@@ -2920,6 +2992,35 @@ export default function Home() {
         />
       )}
 
+      <ManualAddProductModal
+        isOpen={manualAddProductOpen}
+        onClose={() => setManualAddProductOpen(false)}
+        initial={manualAddInitial}
+        onSaved={(product) => {
+          setCatalogProducts((prev) => {
+            const exists = prev.some((p) => p.barcode === product.barcode);
+            if (exists) {
+              return prev.map((p) =>
+                p.barcode === product.barcode
+                  ? { ...p, name: product.name, imageUrl: product.imageUrl }
+                  : p
+              );
+            }
+            return [
+              {
+                name: product.name,
+                barcode: product.barcode,
+                imageUrl: product.imageUrl,
+              },
+              ...prev,
+            ];
+          });
+          setSearchQuery(product.barcode);
+          setSuccessModalMessage("Ürün kataloğa kaydedildi.");
+          void reloadCatalogProducts().catch(() => null);
+        }}
+      />
+
       {/* Eksik/Fazla sekmesi listeden silme onayı */}
       <ConfirmModal
         isOpen={!!listDeleteConfirmItem}
@@ -3029,7 +3130,7 @@ export default function Home() {
 
       {/* Referans su — sağ alt FAB; baloncuklar yalnızca buton merkezinden (yalnızca md+) */}
       <div className="pointer-events-none fixed inset-x-0 bottom-6 z-[48] hidden md:flex justify-end pr-4 sm:pr-6">
-        <div className="ref-water-fab-wrap pointer-events-auto relative flex h-36 w-36 shrink-0 items-center justify-center overflow-visible">
+        <div className="ref-water-fab-wrap pointer-events-auto relative flex h-12 w-12 shrink-0 items-center justify-center overflow-visible">
           {REF_WATER_HOVER_BUBBLE_STYLES.map((bubbleStyle, i) => (
             <span
               key={i}

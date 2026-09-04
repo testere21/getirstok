@@ -478,6 +478,20 @@ if (isWarehousePanel) {
   window.addEventListener("message", (event) => {
     if (event.source !== window) return;
     const data = event.data;
+    if (data && data.source === "getirstok-transfer-hook") {
+      try {
+        chrome.runtime.sendMessage({
+          type: "WAREHOUSE_TRANSFER_CAPTURE",
+          url: data.url,
+          method: data.method,
+          requestBody: data.requestBody,
+          summary: data.summary,
+        });
+      } catch {
+        /* ignore */
+      }
+      return;
+    }
     if (!data || data.source !== "getirstok-bake-hook") return;
     const map = {};
     walkBakeJson(data.json, map, null);

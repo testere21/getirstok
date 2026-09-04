@@ -53,11 +53,17 @@ export const ACTIVE_WAREHOUSE_TOKEN_DOC_ID = "active_warehouse"; // Depo paneli 
 /** Eski aktif token doküman ID'si (geriye dönük uyumluluk için) */
 export const ACTIVE_TOKEN_DOC_ID = "active";
 
-/** Aktif depo ID dokümanı (eklenti Mevcut Stok isteğinden yakalar) */
+/** Aktif depo ID dokümanı (eklenti Depo Paneli URL'sinden yakalar) */
 export const ACTIVE_WAREHOUSE_ID_DOC_ID = "active_warehouse_id";
 
-/** Varsayılan warehouse ID — eklenti henüz ID yakalamadıysa yedek */
+/** Varsayılan warehouse ID — eklenti henüz ID yakalamadıysa yedek (Depo Paneli) */
 export const DEFAULT_WAREHOUSE_ID = "5dc32d8b734a192200caddf8";
+
+/**
+ * Franchise (bayi) stok sorgusu — daima Soğukkuyu.
+ * Bostanlı / Ulupark seçimi panel stoğunu değiştirmez.
+ */
+export const FRANCHISE_WAREHOUSE_ID_SOGUKKUYU = "6113e59fbb8549d0f20e65f5";
 
 /** Barkod -> Ürün ID mapping (Firestore'da saklanan) */
 export interface BarcodeProductMapping {
@@ -156,7 +162,7 @@ export interface SupplementalCatalogProduct {
   imageUrl?: string;
   productId?: string;
   price?: number;
-  source: "warehouse_shelf_label";
+  source: "warehouse_shelf_label" | "manual_add";
   createdAt: string;
   updatedAt: string;
 }

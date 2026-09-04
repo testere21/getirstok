@@ -1,10 +1,15 @@
 import { NextResponse } from "next/server";
-import { getGetirStock, GetirApiError } from "@/app/lib/getirApiService";
+import {
+  GETIR_STOCK_BATCH_MAX,
+  GetirApiError,
+  getGetirStock,
+  getGetirStocksByBarcodes,
+} from "@/app/lib/getirApiService";
 
 /** CORS header'ları */
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "GET, OPTIONS",
+  "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
   "Access-Control-Allow-Headers": "Content-Type",
 };
 
@@ -70,6 +75,63 @@ export async function GET(request: Request) {
       {
         stock: null,
         error: error instanceof Error ? error.message : "Bilinmeyen hata oluştu",
+      },
+      { status: 500, headers: CORS_HEADERS }
+    );
+  }
+}
+
+/** Fırın toplu raf stoğu — tek Getir isteği */
+export async function POST(request: Request) {
+  try {
+    const body = (await request.json()) as { barcodes?: unknown };
+    const barcodes = Array.isArray(body?.barcodes)
+      ? body.barcodes.filter((b): b is string => typeof b === "string")
+      : [];
+
+    if (barcodes.length === 0) {
+      return NextResponse.json(
+        { stocks: {}, success: true },
+        { status: 200, headers: CORS_HEADERS }
+      );
+    }
+
+    if (barcodes.length > GETIR_STOCK_BATCH_MAX) {
+      return NextResponse.json(
+        {
+          stocks: {},
+          error: `En fazla ${GETIR_STOCK_BATCH_MAX} barkod gönderilebilir.`,
+          success: false,
+        },
+        { status: 400, headers: CORS_HEADERS }
+      );
+    }
+
+    const stocks = await getGetirStocksByBarcodes(barcodes);
+    return NextResponse.json(
+      { stocks, success: true },
+      { status: 200, headers: CORS_HEADERS }
+    );
+  } catch (error) {
+    if (error instanceof GetirApiError) {
+      const statusCode = error.statusCode || 500;
+      return NextResponse.json(
+        {
+          stocks: {},
+          error: error.message,
+          code: error.code,
+          success: false,
+        },
+        { status: statusCode, headers: CORS_HEADERS }
+      );
+    }
+
+    console.error("[Getir Stock API] Batch unexpected error:", error);
+    return NextResponse.json(
+      {
+        stocks: {},
+        error: error instanceof Error ? error.message : "Bilinmeyen hata oluştu",
+        success: false,
       },
       { status: 500, headers: CORS_HEADERS }
     );

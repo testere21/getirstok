@@ -18,7 +18,7 @@ export function SearchBar({
   placeholder = "Ürün ismi veya barkod ile ara",
 }: SearchBarProps) {
   return (
-    <label className="flex w-full items-center gap-2 rounded-xl border border-zinc-300 bg-white px-4 py-3 shadow-sm transition focus-within:border-[var(--color-primary)] focus-within:ring-2 focus-within:ring-[var(--color-primary)]/20 dark:border-zinc-600 dark:bg-zinc-800">
+    <label className="flex w-full items-center gap-2 rounded-xl border border-zinc-300 bg-white px-4 py-3 shadow-sm transition duration-200 hover:border-zinc-400 hover:shadow-md dark:border-zinc-600 dark:bg-zinc-800 dark:hover:border-zinc-500 dark:hover:shadow-lg dark:hover:shadow-black/40 focus-within:border-[var(--color-primary)] focus-within:shadow-md focus-within:ring-2 focus-within:ring-[var(--color-primary)]/20 focus-within:hover:border-[var(--color-primary)] motion-reduce:transition-none">
       <Search
         className="size-5 shrink-0 text-zinc-400 dark:text-zinc-500"
         aria-hidden
@@ -38,7 +38,7 @@ export function SearchBar({
             e.stopPropagation();
             onClear();
           }}
-          className="shrink-0 rounded-lg p-1 text-zinc-400 transition hover:bg-zinc-200 hover:text-zinc-600 dark:hover:bg-zinc-700 dark:hover:text-zinc-300"
+          className="shrink-0 rounded-lg p-1.5 text-zinc-400 transition duration-200 hover:bg-zinc-200 hover:text-zinc-800 dark:hover:bg-zinc-600 dark:hover:text-zinc-50"
           aria-label="Aramayı temizle"
           title="Temizle"
         >
@@ -52,7 +52,7 @@ export function SearchBar({
             e.stopPropagation();
             onScanClick();
           }}
-          className="shrink-0 rounded-lg p-1 text-zinc-400 transition hover:bg-zinc-200 hover:text-zinc-600 dark:hover:bg-zinc-700 dark:hover:text-zinc-300 min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0 flex items-center justify-center"
+          className="flex min-h-[44px] min-w-[44px] shrink-0 items-center justify-center rounded-lg p-1.5 text-zinc-400 transition duration-200 hover:bg-zinc-200 hover:text-zinc-800 dark:hover:bg-zinc-600 dark:hover:text-zinc-50 sm:min-h-0 sm:min-w-0"
           aria-label="Barkod tara"
           title="Barkod Tara"
         >

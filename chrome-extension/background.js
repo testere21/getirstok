@@ -8,6 +8,7 @@ const API_BASE = USE_LOCAL_API
   : "https://getirware.netlify.app";
 const API_ENDPOINT = `${API_BASE}/api/token/save`;
 const WAREHOUSE_ID_ENDPOINT = `${API_BASE}/api/warehouse-id/save`;
+const TRANSFER_CAPTURE_ENDPOINT = `${API_BASE}/api/warehouse-transfer/capture`;
 
 const PANEL_URL_PATTERNS = [
   "https://getirware.netlify.app/*",
@@ -99,6 +100,74 @@ async function focusOrOpenPanelAndSearch(query) {
   await chrome.tabs.create({ url, active: true });
 }
 
+let lastTransferCaptureKey = "";
+let lastTransferCaptureAt = 0;
+
+chrome.runtime.onMessage.addListener((msg) => {
+  if (!msg || msg.type !== "WAREHOUSE_TRANSFER_CAPTURE") return;
+  const url = String(msg.url || "");
+  if (!url.includes("warehouse-panel-api-gateway.getirapi.com") || !/transfer/i.test(url)) {
+    return;
+  }
+  const method = String(msg.method || "GET").toUpperCase();
+  const requestBody =
+    typeof msg.requestBody === "string" ? msg.requestBody : null;
+  const key = `${method} ${url} ${requestBody || ""}`;
+  const now = Date.now();
+  if (key === lastTransferCaptureKey && now - lastTransferCaptureAt < 4000) {
+    return;
+  }
+  lastTransferCaptureKey = key;
+  lastTransferCaptureAt = now;
+
+  const fromUrl = extractWarehouseIdFromUrl(url);
+  if (fromUrl) captureWarehouseId(fromUrl);
+
+  const payload = {
+    url,
+    method,
+    requestBody,
+    summary: msg.summary && typeof msg.summary === "object" ? msg.summary : null,
+  };
+  const endpoints = [TRANSFER_CAPTURE_ENDPOINT];
+  if (!USE_LOCAL_API) {
+    endpoints.push("http://localhost:3000/api/warehouse-transfer/capture");
+  }
+
+  (async () => {
+    let anyOk = false;
+    for (const endpoint of endpoints) {
+      try {
+        const response = await fetch(endpoint, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        if (response.ok) {
+          anyOk = true;
+          console.log(
+            "[Getir Token Yakalayıcı] Transfer isteği kaydedildi:",
+            method,
+            url,
+            endpoint
+          );
+        } else {
+          console.warn(
+            "[Getir Token Yakalayıcı] Transfer yakalama kaydı:",
+            response.status,
+            endpoint
+          );
+        }
+      } catch (e) {
+        console.warn("[Getir Token Yakalayıcı] Transfer yakalama API:", endpoint, e);
+      }
+    }
+    if (!anyOk) {
+      console.error("[Getir Token Yakalayıcı] Transfer yakalama hiçbir API'ye yazılamadı");
+    }
+  })();
+});
+
 chrome.runtime.onMessage.addListener((msg, _sender, _sendResponse) => {
   if (!msg || msg.type !== "GETIRSTOK_OPEN_SEARCH") return;
   // async işi background'da tamamla
@@ -162,9 +231,11 @@ chrome.webRequest.onBeforeSendHeaders.addListener(
       shouldCapture = true;
     }
     
-    // Getir Depo Paneli token'ı (warehouse-panel-api-gateway) - /products endpoint'i için
-    if (details.url.includes("warehouse-panel-api-gateway.getirapi.com") && 
-        details.url.includes("/products")) {
+    // Getir Depo Paneli token'ı — ürün ve transfer istekleri
+    if (
+      details.url.includes("warehouse-panel-api-gateway.getirapi.com") &&
+      (details.url.includes("/products") || /transfer/i.test(details.url))
+    ) {
       tokenType = "warehouse";
       shouldCapture = true;
     }
@@ -207,7 +278,8 @@ chrome.webRequest.onBeforeSendHeaders.addListener(
   {
     urls: [
       "https://franchise-api-gateway.getirapi.com/stocks*",
-      "https://warehouse-panel-api-gateway.getirapi.com/*/products*"
+      "https://warehouse-panel-api-gateway.getirapi.com/*/products*",
+      "https://warehouse-panel-api-gateway.getirapi.com/*transfer*"
     ]
   },
   ["requestHeaders"]
@@ -215,29 +287,9 @@ chrome.webRequest.onBeforeSendHeaders.addListener(
 
 const OBJECT_ID_RE = /^[a-fA-F0-9]{24}$/;
 
-function decodeRequestBodyJson(requestBody) {
-  if (!requestBody || !requestBody.raw || !requestBody.raw[0] || !requestBody.raw[0].bytes) {
-    return null;
-  }
-  try {
-    const decoded = new TextDecoder("utf-8").decode(new Uint8Array(requestBody.raw[0].bytes));
-    return JSON.parse(decoded);
-  } catch {
-    return null;
-  }
-}
-
 function extractWarehouseIdFromUrl(url) {
   const match = String(url || "").match(/\/warehouse\/([a-fA-F0-9]{24})(?:\/|\?|$)/);
   return match ? match[1] : null;
-}
-
-function extractWarehouseIdFromBody(body) {
-  if (!body || !Array.isArray(body.warehouseIds) || body.warehouseIds.length === 0) {
-    return null;
-  }
-  const id = String(body.warehouseIds[0] || "").trim();
-  return OBJECT_ID_RE.test(id) ? id : null;
 }
 
 let lastPostedWarehouseId = null;
@@ -258,16 +310,9 @@ function captureWarehouseId(warehouseId) {
 
 chrome.webRequest.onBeforeRequest.addListener(
   function (details) {
-    if (details.url.includes("franchise-api-gateway.getirapi.com/stocks")) {
-      const body = decodeRequestBodyJson(details.requestBody);
-      const fromBody = extractWarehouseIdFromBody(body);
-      if (fromBody) captureWarehouseId(fromBody);
-      return;
-    }
-
     if (
       details.url.includes("warehouse-panel-api-gateway.getirapi.com") &&
-      details.url.includes("/products")
+      (details.url.includes("/products") || /transfer/i.test(details.url))
     ) {
       const fromUrl = extractWarehouseIdFromUrl(details.url);
       if (fromUrl) captureWarehouseId(fromUrl);
@@ -275,11 +320,10 @@ chrome.webRequest.onBeforeRequest.addListener(
   },
   {
     urls: [
-      "https://franchise-api-gateway.getirapi.com/stocks*",
       "https://warehouse-panel-api-gateway.getirapi.com/*/products*",
+      "https://warehouse-panel-api-gateway.getirapi.com/*transfer*",
     ],
-  },
-  ["requestBody"]
+  }
 );
 
 async function sendWarehouseIdToAPI(warehouseId) {
