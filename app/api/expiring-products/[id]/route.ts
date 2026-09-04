@@ -6,6 +6,11 @@ import {
   type UpdateExpiringProductParams,
 } from "@/app/lib/expiringProductService";
 import {
+  assertCanSaveExpiringAgainstWarehouse,
+  httpStatusForWarehouseGuardError,
+} from "@/app/lib/expiringProductWarehouseGuard";
+import { GetirWarehouseApiError } from "@/app/lib/getirWarehouseApiService";
+import {
   buildExpiringProductDeletedMessage,
   sendTelegramMessage,
 } from "@/app/lib/telegramService";
@@ -113,6 +118,41 @@ export async function PUT(
     }
     if (isNotified !== undefined) {
       updateFields.isNotified = isNotified;
+    }
+
+    const datesChanging =
+      expiryDate !== undefined || removalDate !== undefined;
+    if (datesChanging) {
+      const existing = await getExpiringProductById(id);
+      if (!existing) {
+        return NextResponse.json(
+          { error: "Yaklaşan SKT kaydı bulunamadı", success: false },
+          { status: 404, headers: CORS_HEADERS }
+        );
+      }
+      const effectiveRemoval =
+        updateFields.removalDate?.trim() || existing.removalDate;
+      try {
+        await assertCanSaveExpiringAgainstWarehouse(
+          existing.barcode,
+          effectiveRemoval
+        );
+      } catch (error) {
+        if (error instanceof GetirWarehouseApiError) {
+          return NextResponse.json(
+            {
+              error: error.message,
+              code: error.code,
+              success: false,
+            },
+            {
+              status: httpStatusForWarehouseGuardError(error),
+              headers: CORS_HEADERS,
+            }
+          );
+        }
+        throw error;
+      }
     }
 
     console.log("[Expiring Products API] Updating product:", id, updateFields);

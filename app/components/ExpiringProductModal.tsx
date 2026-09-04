@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { X, Calendar } from "lucide-react";
 import type { ExpiringProductWithId } from "@/app/lib/types";
 
@@ -26,6 +26,14 @@ function subtractCalendarDays(isoYmd: string, days: number): string {
   const mm = String(dt.getMonth() + 1).padStart(2, "0");
   const dd = String(dt.getDate()).padStart(2, "0");
   return `${yy}-${mm}-${dd}`;
+}
+
+function apiErrorMessage(data: unknown, fallback: string): string {
+  if (data && typeof data === "object" && "error" in data) {
+    const raw = (data as { error?: unknown }).error;
+    if (typeof raw === "string" && raw.trim()) return raw;
+  }
+  return fallback;
 }
 
 /** Kayıttaki SKT ile çıkış tarihi arasındaki tam gün farkı */
@@ -55,6 +63,7 @@ export function ExpiringProductModal({
   const [removalDate, setRemovalDate] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const submitLockRef = useRef(false);
 
   const isEditMode = Boolean(existingProduct);
 
@@ -119,6 +128,7 @@ export function ExpiringProductModal({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (submitLockRef.current || isSubmitting) return;
     setError(null);
 
     if (!expiryDate.trim()) {
@@ -146,12 +156,14 @@ export function ExpiringProductModal({
       return;
     }
 
+    submitLockRef.current = true;
     setIsSubmitting(true);
 
     try {
       if (isEditMode && existingProduct) {
         if (!existingProduct.id || typeof existingProduct.id !== "string") {
-          throw new Error("Kayıt ID bulunamadı. Lütfen sayfayı yenileyip tekrar deneyin.");
+          setError("Kayıt ID bulunamadı. Lütfen sayfayı yenileyip tekrar deneyin.");
+          return;
         }
         const response = await fetch(`/api/expiring-products/${existingProduct.id}`, {
           method: "PUT",
@@ -171,11 +183,8 @@ export function ExpiringProductModal({
 
         const ok = data && typeof data === "object" && "success" in data && (data as { success?: boolean }).success;
         if (!response.ok || !ok) {
-          const msg =
-            data && typeof data === "object" && "error" in data
-              ? String((data as { error?: string }).error)
-              : `Güncelleme başarısız (HTTP ${response.status})`;
-          throw new Error(msg);
+          setError(apiErrorMessage(data, `Güncelleme başarısız (HTTP ${response.status})`));
+          return;
         }
 
         onSuccess?.("Yaklaşan SKT kaydı başarıyla güncellendi.");
@@ -201,20 +210,17 @@ export function ExpiringProductModal({
 
         const ok = data && typeof data === "object" && "success" in data && (data as { success?: boolean }).success;
         if (!response.ok || !ok) {
-          const msg =
-            data && typeof data === "object" && "error" in data
-              ? String((data as { error?: string }).error)
-              : `Kayıt başarısız (HTTP ${response.status})`;
-          throw new Error(msg);
+          setError(apiErrorMessage(data, `Kayıt başarısız (HTTP ${response.status})`));
+          return;
         }
 
         onSuccess?.("Yaklaşan SKT kaydı başarıyla eklendi.");
         onClose();
       }
-    } catch (err) {
-      console.error("Yaklaşan SKT kaydı işlemi başarısız:", err);
-      setError(err instanceof Error ? err.message : "Bir hata oluştu. Lütfen tekrar deneyin.");
+    } catch {
+      setError("Bir hata oluştu. Lütfen tekrar deneyin.");
     } finally {
+      submitLockRef.current = false;
       setIsSubmitting(false);
     }
   };

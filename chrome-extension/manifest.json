@@ -1,19 +1,21 @@
 {
   "manifest_version": 3,
   "name": "Getir Token Yakalayıcı",
-  "version": "1.2.4",
+  "version": "1.3.3",
   "description": "Getir Bayi Paneli ve Depo Paneli Authorization token'larını ayrı ayrı yakalayıp getirware.netlify.app'a gönderir",
   "permissions": [
     "webRequest",
     "tabs",
     "scripting",
-    "storage"
+    "storage",
+    "alarms"
   ],
   "host_permissions": [
     "https://franchise.getir.com/*",
     "https://franchise-api-gateway.getirapi.com/*",
     "https://warehouse.getir.com/*",
     "https://warehouse-panel-api-gateway.getirapi.com/*",
+    "https://stockid.getirapi.com/*",
     "https://getirware.netlify.app/*",
     "http://localhost:3000/*",
     "http://127.0.0.1:3000/*"

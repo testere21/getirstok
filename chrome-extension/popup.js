@@ -10,6 +10,12 @@ const warehouseStatusDiv = document.getElementById("warehouseStatus");
 const warehouseTokenInfoDiv = document.getElementById("warehouseTokenInfo");
 const warehouseLastCapturedDiv = document.getElementById("warehouseLastCaptured");
 const warehouseTestButton = document.getElementById("warehouseTestButton");
+const warehouseSessionDiv = document.getElementById("warehouseSession");
+const warehouseRefreshButton = document.getElementById("warehouseRefreshButton");
+const extensionVersionEl = document.getElementById("extensionVersion");
+if (extensionVersionEl) {
+  extensionVersionEl.textContent = `Sürüm ${chrome.runtime.getManifest().version}`;
+}
 
 // Local test: true → localhost:3000 | Netlify deploy sonrası false yap
 const USE_LOCAL_API = false;
@@ -62,7 +68,9 @@ function loadFranchiseTokenStatus() {
 
 // Depo Paneli (Warehouse) token durumunu yükle
 function loadWarehouseTokenStatus() {
-  chrome.storage.local.get(["lastToken_warehouse", "lastCapturedAt_warehouse"], (result) => {
+  chrome.storage.local.get(
+    ["lastToken_warehouse", "lastCapturedAt_warehouse", "lastRefreshedAt_warehouse"],
+    (result) => {
     if (result.lastToken_warehouse) {
       // Token var
       warehouseStatusDiv.className = "status success";
@@ -71,27 +79,68 @@ function loadWarehouseTokenStatus() {
       warehouseTokenInfoDiv.style.display = "block";
       warehouseTokenInfoDiv.textContent = `Token: ${result.lastToken_warehouse.substring(0, 30)}...`;
       
-      if (result.lastCapturedAt_warehouse) {
-        const date = new Date(result.lastCapturedAt_warehouse);
+      const stamps = [result.lastCapturedAt_warehouse, result.lastRefreshedAt_warehouse]
+        .filter(Boolean)
+        .map((s) => new Date(s))
+        .filter((d) => !Number.isNaN(d.getTime()))
+        .sort((a, b) => b - a);
+      if (stamps.length > 0) {
         warehouseLastCapturedDiv.style.display = "block";
-        warehouseLastCapturedDiv.textContent = `Yakalanma: ${date.toLocaleString("tr-TR")}`;
+        warehouseLastCapturedDiv.textContent = `Güncelleme: ${stamps[0].toLocaleString("tr-TR")}`;
       }
-      
+
       warehouseTestButton.disabled = false;
     } else {
       // Token yok
       warehouseStatusDiv.className = "status error";
-      warehouseStatusDiv.innerHTML = "⚠ Depo Paneli token henüz yakalanmadı<br><small>warehouse.getir.com'da products sayfasını açın</small>";
+      warehouseStatusDiv.innerHTML = "⚠ Depo Paneli token henüz yakalanmadı<br><small>warehouse.getir.com açıkken sayfayı yenileyin veya Transfer Teslimat Listesi / ürün listesini açın</small>";
       warehouseTokenInfoDiv.style.display = "none";
       warehouseLastCapturedDiv.style.display = "none";
       warehouseTestButton.disabled = true;
     }
-  });
+    }
+  );
+}
+
+// Depo oturumunun otomatik yenileme durumu
+function formatMinutes(ms) {
+  const minutes = Math.round(ms / 60000);
+  if (minutes < 60) return `${minutes} dk`;
+  const hours = Math.floor(minutes / 60);
+  return `${hours} sa ${minutes % 60} dk`;
+}
+
+function loadWarehouseSessionStatus() {
+  chrome.storage.local.get(
+    ["oidcRefreshToken", "oidcExpiresAt", "oidcRefreshExpiresAt", "oidcSessionEndedAt"],
+    (result) => {
+      const now = Date.now();
+      const refreshExpiresAt = Number(result.oidcRefreshExpiresAt) || 0;
+      const hasSession = !!result.oidcRefreshToken && refreshExpiresAt > now;
+
+      warehouseRefreshButton.disabled = !hasSession;
+      warehouseSessionDiv.style.display = "block";
+
+      if (!hasSession) {
+        warehouseSessionDiv.textContent = result.oidcSessionEndedAt
+          ? "Oturum sonlandı — depo paneline tekrar giriş yapın"
+          : "Otomatik yenileme pasif — depo paneline giriş yapın";
+        return;
+      }
+
+      const expiresAt = Number(result.oidcExpiresAt) || 0;
+      const tokenLeft = expiresAt > now ? formatMinutes(expiresAt - now) : "süresi doldu";
+      warehouseSessionDiv.textContent = `Otomatik yenileme aktif · Token: ${tokenLeft} · Oturum: ${formatMinutes(
+        refreshExpiresAt - now
+      )}`;
+    }
+  );
 }
 
 // İlk yükleme
 loadFranchiseTokenStatus();
 loadWarehouseTokenStatus();
+loadWarehouseSessionStatus();
 
 // Storage değişikliklerini dinle (token yakalandığında otomatik güncelle)
 chrome.storage.onChanged.addListener((changes, areaName) => {
@@ -99,10 +148,33 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
     if (changes.lastToken_franchise || changes.lastCapturedAt_franchise || changes.lastWarehouseId) {
       loadFranchiseTokenStatus();
     }
-    if (changes.lastToken_warehouse || changes.lastCapturedAt_warehouse) {
+    if (
+      changes.lastToken_warehouse ||
+      changes.lastCapturedAt_warehouse ||
+      changes.lastRefreshedAt_warehouse
+    ) {
       loadWarehouseTokenStatus();
     }
+    if (changes.oidcExpiresAt || changes.oidcRefreshToken || changes.oidcSessionEndedAt) {
+      loadWarehouseSessionStatus();
+    }
   }
+});
+
+// Depo token'ını elle yenile
+warehouseRefreshButton.addEventListener("click", () => {
+  warehouseRefreshButton.disabled = true;
+  warehouseRefreshButton.textContent = "Yenileniyor...";
+  chrome.runtime.sendMessage({ type: "WAREHOUSE_TOKEN_REFRESH_NOW" }, (res) => {
+    warehouseRefreshButton.textContent = "Token'ı Şimdi Yenile";
+    if (chrome.runtime.lastError) {
+      alert(`Yenileme kanalı hatası: ${chrome.runtime.lastError.message}`);
+    } else if (!res || !res.ok) {
+      alert(`Token yenilenemedi.\n\n${(res && res.detail) || "Bilinmeyen hata"}`);
+    }
+    loadWarehouseTokenStatus();
+    loadWarehouseSessionStatus();
+  });
 });
 
 // Bayi Paneli test butonu

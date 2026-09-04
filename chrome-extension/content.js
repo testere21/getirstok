@@ -478,6 +478,17 @@ if (isWarehousePanel) {
   window.addEventListener("message", (event) => {
     if (event.source !== window) return;
     const data = event.data;
+    if (data && data.source === "getirstok-oidc-hook") {
+      try {
+        chrome.runtime.sendMessage({
+          type: "WAREHOUSE_OIDC_TOKEN",
+          data: data.data,
+        });
+      } catch {
+        /* ignore */
+      }
+      return;
+    }
     if (data && data.source === "getirstok-transfer-hook") {
       try {
         chrome.runtime.sendMessage({

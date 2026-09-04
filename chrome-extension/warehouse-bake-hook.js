@@ -21,17 +21,60 @@
     window.postMessage({ source: "getirstok-bake-hook", url, json }, "*");
   }
 
+  // Keycloak token endpoint'i: hem giriş hem yenileme cevapları buradan geçer
+  function isOidcTokenUrl(url) {
+    return /\/protocol\/openid-connect\/token(\?|$)/.test(String(url || ""));
+  }
+
+  function publishOidcToken(url, json) {
+    if (!json || typeof json !== "object") return;
+    if (typeof json.access_token !== "string") return;
+    if (typeof json.refresh_token !== "string") return;
+    window.postMessage(
+      {
+        source: "getirstok-oidc-hook",
+        url: String(url || ""),
+        data: {
+          access_token: json.access_token,
+          refresh_token: json.refresh_token,
+          expires_in: json.expires_in,
+          refresh_expires_in: json.refresh_expires_in,
+        },
+      },
+      window.location.origin
+    );
+  }
+
   function isWarehouseTransferUrl(url) {
     const u = String(url || "");
-    return (
-      u.includes("warehouse-panel-api-gateway.getirapi.com") &&
-      /transfer/i.test(u)
-    );
+    if (!u.includes("warehouse-panel-api-gateway.getirapi.com")) return false;
+    if (/receiving-windows|transfer-orders/i.test(u)) return false;
+    if (/\/inbound\/transfer(\/|\?|$)/i.test(u)) return true;
+    return /\/inbound\//i.test(u) && /product|item|sku|pallet|line/i.test(u);
   }
 
   function stringifyFetchBody(body) {
     if (body == null) return null;
     if (typeof body === "string") return body.slice(0, 100000);
+    if (typeof Uint8Array !== "undefined" && body instanceof Uint8Array) {
+      try {
+        return new TextDecoder().decode(body).slice(0, 100000);
+      } catch {
+        return null;
+      }
+    }
+    if (typeof URLSearchParams !== "undefined" && body instanceof URLSearchParams) {
+      return body.toString().slice(0, 100000);
+    }
+    if (typeof Blob !== "undefined" && body instanceof Blob) return null;
+    if (typeof FormData !== "undefined" && body instanceof FormData) return null;
+    if (typeof body === "object") {
+      try {
+        return JSON.stringify(body).slice(0, 100000);
+      } catch {
+        return null;
+      }
+    }
     return null;
   }
 
@@ -66,7 +109,7 @@
       const text = JSON.stringify(json);
       return {
         byteLength: text.length,
-        preview: text.slice(0, 2500),
+        preview: text.slice(0, 12000),
         topKeys:
           json && typeof json === "object" && !Array.isArray(json)
             ? Object.keys(json).slice(0, 40)
@@ -94,11 +137,32 @@
   const origFetch = window.fetch;
   if (typeof origFetch === "function") {
     window.fetch = async function (...args) {
+      let capturedBody = null;
+      try {
+        const req = args[0];
+        const init = args[1] && typeof args[1] === "object" ? args[1] : {};
+        capturedBody = stringifyFetchBody(init.body);
+        if (!capturedBody && req && typeof req === "object" && typeof req.clone === "function") {
+          capturedBody = stringifyFetchBody(req.body);
+          if (!capturedBody) {
+            capturedBody = (await req.clone().text()).slice(0, 100000);
+          }
+        }
+      } catch {
+        capturedBody = null;
+      }
       const res = await origFetch.apply(this, args);
       try {
         const meta = getFetchMeta(args);
+        if (!meta.requestBody && capturedBody) meta.requestBody = capturedBody;
         const url = meta.url;
-        if (
+        if (isOidcTokenUrl(url)) {
+          res
+            .clone()
+            .json()
+            .then((json) => publishOidcToken(url, json))
+            .catch(() => {});
+        } else if (
           url.includes("warehouse-panel-api-gateway.getirapi.com") ||
           /bak(e|ing)|oven|suggest|recommend/i.test(url)
         ) {
@@ -128,9 +192,18 @@
       return origOpen.call(this, method, url, ...rest);
     };
     OrigXHR.prototype.send = function (...args) {
+      const rawBody = args[0];
+      this.__getirstokRequestBody =
+        typeof rawBody === "string"
+          ? rawBody.slice(0, 100000)
+          : stringifyFetchBody(rawBody);
       this.addEventListener("load", function () {
         try {
           const url = this.__getirstokUrl || "";
+          if (isOidcTokenUrl(url)) {
+            publishOidcToken(url, JSON.parse(this.responseText));
+            return;
+          }
           if (
             !url.includes("warehouse-panel-api-gateway.getirapi.com") &&
             !/bak(e|ing)|oven|suggest|recommend/i.test(url)
@@ -143,7 +216,7 @@
             {
               url,
               method: this.__getirstokMethod || "GET",
-              requestBody: null,
+              requestBody: this.__getirstokRequestBody || null,
             },
             json
           );

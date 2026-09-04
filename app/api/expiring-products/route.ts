@@ -1,10 +1,16 @@
 import { NextResponse } from "next/server";
 import {
   addExpiringProduct,
+  getExpiringProductByBarcode,
   getExpiringProducts,
   getExpiringProductsByRemovalDate,
   type AddExpiringProductParams,
 } from "@/app/lib/expiringProductService";
+import {
+  assertCanSaveExpiringAgainstWarehouse,
+  httpStatusForWarehouseGuardError,
+} from "@/app/lib/expiringProductWarehouseGuard";
+import { GetirWarehouseApiError } from "@/app/lib/getirWarehouseApiService";
 import {
   buildExpiringProductAddedMessage,
   sendTelegramMessage,
@@ -46,7 +52,6 @@ export async function GET(request: Request) {
     // Eğer barcode query param'ı varsa, o barkod için kayıt kontrolü yap
     if (barcode) {
       console.log("[Expiring Products API] Fetching product by barcode:", barcode);
-      const { getExpiringProductByBarcode } = await import("@/app/lib/expiringProductService");
       const product = await getExpiringProductByBarcode(barcode);
       return NextResponse.json(
         {
@@ -163,9 +168,46 @@ export async function POST(request: Request) {
       removalDate: removalDate.trim(),
     };
 
+    const alreadyOnPanel = await getExpiringProductByBarcode(params.barcode);
+    if (alreadyOnPanel) {
+      return NextResponse.json(
+        {
+          id: null,
+          error: "Bu barkod zaten yaklaşan SKT listesinde var.",
+          code: "ALREADY_ON_PANEL_LIST",
+          success: false,
+        },
+        { status: 400, headers: CORS_HEADERS }
+      );
+    }
+
+    try {
+      await assertCanSaveExpiringAgainstWarehouse(
+        params.barcode,
+        params.removalDate
+      );
+    } catch (error) {
+      if (error instanceof GetirWarehouseApiError) {
+        return NextResponse.json(
+          {
+            id: null,
+            error: error.message,
+            code: error.code,
+            success: false,
+          },
+          {
+            status: httpStatusForWarehouseGuardError(error),
+            headers: CORS_HEADERS,
+          }
+        );
+      }
+      throw error;
+    }
+
     console.log("[Expiring Products API] Adding new product:", params);
     const id = await addExpiringProduct(params);
 
+    // Liste / Telegram yalnızca Firestore yazıldıktan sonra
     try {
       await sendTelegramMessage(buildExpiringProductAddedMessage(params));
     } catch (telegramErr) {

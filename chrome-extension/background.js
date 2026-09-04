@@ -106,9 +106,12 @@ let lastTransferCaptureAt = 0;
 chrome.runtime.onMessage.addListener((msg) => {
   if (!msg || msg.type !== "WAREHOUSE_TRANSFER_CAPTURE") return;
   const url = String(msg.url || "");
-  if (!url.includes("warehouse-panel-api-gateway.getirapi.com") || !/transfer/i.test(url)) {
-    return;
-  }
+  if (!url.includes("warehouse-panel-api-gateway.getirapi.com")) return;
+  if (/receiving-windows|transfer-orders/i.test(url)) return;
+  const isInboundTransfer = /\/inbound\/transfer(\/|\?|$)/i.test(url);
+  const isInboundProductish =
+    /\/inbound\//i.test(url) && /product|item|sku|pallet|line/i.test(url);
+  if (!isInboundTransfer && !isInboundProductish) return;
   const method = String(msg.method || "GET").toUpperCase();
   const requestBody =
     typeof msg.requestBody === "string" ? msg.requestBody : null;
@@ -268,6 +271,11 @@ chrome.webRequest.onBeforeSendHeaders.addListener(
             
             // Token'ı API'ye gönder (type bilgisi ile)
             sendTokenToAPI(bearerToken, tokenType);
+
+            // Gateway'in kullandığı Bearer gerçekten Keycloak access_token'ı mı?
+            if (tokenType === "warehouse") {
+              checkOidcBearerMatch(bearerToken);
+            }
           } else {
             console.warn(`[Getir Token Yakalayıcı] Geçersiz token formatı:`, bearerToken.substring(0, 20) + "...");
           }
@@ -348,57 +356,419 @@ async function sendWarehouseIdToAPI(warehouseId) {
 
 // Token'ı Next.js API'ye gönderme (type bilgisi ile)
 async function sendTokenToAPI(token, type) {
-  try {
-    const response = await fetch(API_ENDPOINT, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ 
-        token,
-        type: type // "franchise" veya "warehouse"
-      }),
-    });
+  const endpoints = [API_ENDPOINT];
+  if (!USE_LOCAL_API) {
+    endpoints.push("http://localhost:3000/api/token/save");
+  }
+  const panelName = type === "franchise" ? "Bayi Paneli" : "Depo Paneli";
+  const body = JSON.stringify({ token, type });
+  let anyOk = false;
 
-    if (response.ok) {
-      const data = await response.json();
-      const panelName = type === "franchise" ? "Bayi Paneli" : "Depo Paneli";
-      console.log(`[Getir Token Yakalayıcı] ${panelName} token başarıyla kaydedildi:`, data);
-      
-      // Badge'e başarı işareti göster
-      chrome.action.setBadgeText({ text: "✓" });
-      chrome.action.setBadgeBackgroundColor({ color: "#10b981" }); // Yeşil
-      
-      // 3 saniye sonra badge'i temizle
-      setTimeout(() => {
-        chrome.action.setBadgeText({ text: "" });
-      }, 3000);
-    } else {
-      const error = await response.text();
-      const panelName = type === "franchise" ? "Bayi Paneli" : "Depo Paneli";
-      console.error(`[Getir Token Yakalayıcı] ${panelName} token kaydedilemedi:`, error);
-      
-      // Badge'e hata işareti göster
-      chrome.action.setBadgeText({ text: "✗" });
-      chrome.action.setBadgeBackgroundColor({ color: "#ef4444" }); // Kırmızı
-      
-      setTimeout(() => {
-        chrome.action.setBadgeText({ text: "" });
-      }, 3000);
+  for (const endpoint of endpoints) {
+    try {
+      const response = await fetch(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body,
+      });
+      if (response.ok) {
+        anyOk = true;
+        const data = await response.json();
+        console.log(
+          `[Getir Token Yakalayıcı] ${panelName} token kaydedildi:`,
+          endpoint,
+          data
+        );
+      } else {
+        const error = await response.text();
+        console.warn(
+          `[Getir Token Yakalayıcı] ${panelName} token kaydı:`,
+          endpoint,
+          error
+        );
+      }
+    } catch (error) {
+      console.warn(`[Getir Token Yakalayıcı] ${panelName} API:`, endpoint, error);
     }
-  } catch (error) {
-    const panelName = type === "franchise" ? "Bayi Paneli" : "Depo Paneli";
-    console.error(`[Getir Token Yakalayıcı] ${panelName} API hatası:`, error);
-    
-    // Badge'e hata işareti göster
+  }
+
+  if (anyOk) {
+    chrome.action.setBadgeText({ text: "✓" });
+    chrome.action.setBadgeBackgroundColor({ color: "#10b981" });
+    setTimeout(() => {
+      chrome.action.setBadgeText({ text: "" });
+    }, 3000);
+  } else {
+    console.error(`[Getir Token Yakalayıcı] ${panelName} token hiçbir API'ye yazılamadı`);
     chrome.action.setBadgeText({ text: "✗" });
     chrome.action.setBadgeBackgroundColor({ color: "#ef4444" });
-    
     setTimeout(() => {
       chrome.action.setBadgeText({ text: "" });
     }, 3000);
   }
 }
+
+// -----------------------------
+// Depo paneli oturum koruyucu (Keycloak)
+// access_token 15 dk, refresh_token 3 saat yaşıyor. Access token bitmeden
+// refresh_token ile yenileyip zinciri sürdürüyoruz; böylece kullanıcının
+// token tazelemek için depo panelini yenilemesi gerekmiyor.
+// -----------------------------
+
+const OIDC_TOKEN_ENDPOINT =
+  "https://stockid.getirapi.com/realms/getir-prod/protocol/openid-connect/token";
+const OIDC_CLIENT_ID = "warehouse-panel-frontend-client";
+const OIDC_ALARM_NAME = "warehouse-token-refresh";
+// Access token'ın bitmesine bu kadar kalınca yenile
+const OIDC_REFRESH_MARGIN_MS = 5 * 60 * 1000;
+// Service worker uyusa da alarm uyandırır; her turda sadece süre kontrolü yapılır
+const OIDC_CHECK_PERIOD_MINUTES = 2;
+const OIDC_DEFAULT_EXPIRES_IN = 900;
+const OIDC_DEFAULT_REFRESH_EXPIRES_IN = 10800;
+
+function decodeJwtPayload(token) {
+  try {
+    const part = String(token || "").split(".")[1];
+    if (!part) return null;
+    const base64 = part.replace(/-/g, "+").replace(/_/g, "/");
+    const padded = base64.padEnd(Math.ceil(base64.length / 4) * 4, "=");
+    return JSON.parse(atob(padded));
+  } catch {
+    return null;
+  }
+}
+
+function positiveNumber(value, fallback) {
+  const n = Number(value);
+  return Number.isFinite(n) && n > 0 ? n : fallback;
+}
+
+// Depo gateway'ine giden Bearer ile Keycloak access_token'ı aynı aileden mi?
+// Değilse otomatik yenileme yanlış token yazmasın diye bayrak kaldırıyoruz.
+async function checkOidcBearerMatch(bearerToken) {
+  try {
+    const { oidcAccessToken } = await chrome.storage.local.get("oidcAccessToken");
+    if (!oidcAccessToken) return;
+    if (oidcAccessToken === bearerToken) {
+      await chrome.storage.local.set({ oidcBearerMismatch: false });
+      return;
+    }
+    const fromOidc = decodeJwtPayload(oidcAccessToken);
+    const fromGateway = decodeJwtPayload(bearerToken);
+    const sameIssuer =
+      !!fromOidc?.iss && !!fromGateway?.iss && fromOidc.iss === fromGateway.iss;
+    await chrome.storage.local.set({ oidcBearerMismatch: !sameIssuer });
+    if (!sameIssuer) {
+      console.warn(
+        "[Getir Token Yakalayıcı] Depo Bearer'ı Keycloak token'ı değil, otomatik yenileme panele token yazmayacak"
+      );
+    }
+  } catch (e) {
+    console.warn("[Getir Token Yakalayıcı] Bearer eşleşme kontrolü:", e);
+  }
+}
+
+async function ensureRefreshAlarm() {
+  try {
+    const existing = await chrome.alarms.get(OIDC_ALARM_NAME);
+    if (existing) return;
+    chrome.alarms.create(OIDC_ALARM_NAME, {
+      delayInMinutes: 1,
+      periodInMinutes: OIDC_CHECK_PERIOD_MINUTES,
+    });
+  } catch (e) {
+    console.warn("[Getir Token Yakalayıcı] Yenileme alarmı kurulamadı:", e);
+  }
+}
+
+async function clearOidcSession(reason) {
+  await chrome.storage.local.remove([
+    "oidcAccessToken",
+    "oidcRefreshToken",
+    "oidcExpiresAt",
+    "oidcRefreshExpiresAt",
+  ]);
+  await chrome.storage.local.set({ oidcSessionEndedAt: new Date().toISOString() });
+  console.warn(
+    `[Getir Token Yakalayıcı] Depo oturumu sonlandı (${reason}). Depo paneline tekrar giriş yapın.`
+  );
+  chrome.action.setBadgeText({ text: "!" });
+  chrome.action.setBadgeBackgroundColor({ color: "#f59e0b" });
+}
+
+// Yenilenen access_token'ı panele yaz. Toast spam olmasın diye
+// lastCapturedAt_warehouse'a dokunmuyoruz, ayrı bir zaman damgası tutuyoruz.
+async function pushRefreshedWarehouseToken(accessToken) {
+  const { oidcBearerMismatch } = await chrome.storage.local.get("oidcBearerMismatch");
+  if (oidcBearerMismatch === true) return;
+  await chrome.storage.local.set({
+    lastToken_warehouse: accessToken,
+    lastRefreshedAt_warehouse: new Date().toISOString(),
+  });
+  await sendTokenToAPI(accessToken, "warehouse");
+}
+
+async function storeOidcTokens(data, source) {
+  const accessToken = typeof data?.access_token === "string" ? data.access_token : "";
+  const refreshToken = typeof data?.refresh_token === "string" ? data.refresh_token : "";
+  if (!accessToken.startsWith("eyJ") || !refreshToken) return false;
+
+  const now = Date.now();
+  const payload = decodeJwtPayload(accessToken);
+  const expiresAt = Number.isFinite(payload?.exp)
+    ? payload.exp * 1000
+    : now + positiveNumber(data.expires_in, OIDC_DEFAULT_EXPIRES_IN) * 1000;
+  const refreshExpiresAt =
+    now +
+    positiveNumber(data.refresh_expires_in, OIDC_DEFAULT_REFRESH_EXPIRES_IN) * 1000;
+
+  await chrome.storage.local.set({
+    oidcAccessToken: accessToken,
+    oidcRefreshToken: refreshToken,
+    oidcExpiresAt: expiresAt,
+    oidcRefreshExpiresAt: refreshExpiresAt,
+    oidcUpdatedAt: new Date().toISOString(),
+    oidcSource: source,
+  });
+  await chrome.storage.local.remove("oidcSessionEndedAt");
+  await ensureRefreshAlarm();
+
+  const minutes = Math.round((expiresAt - now) / 60000);
+  console.log(
+    `[Getir Token Yakalayıcı] Depo oturum token'ı güncellendi (${source}), ${minutes} dk geçerli`
+  );
+  return true;
+}
+
+let oidcRefreshInFlight = null;
+
+function buildRefreshBody(refreshToken) {
+  return new URLSearchParams({
+    grant_type: "refresh_token",
+    client_id: OIDC_CLIENT_ID,
+    refresh_token: refreshToken,
+  }).toString();
+}
+
+function waitForTabComplete(tabId, timeoutMs) {
+  return new Promise((resolve) => {
+    const finish = () => {
+      clearTimeout(timer);
+      chrome.tabs.onUpdated.removeListener(onUpdated);
+      resolve();
+    };
+    const onUpdated = (id, info) => {
+      if (id === tabId && info.status === "complete") finish();
+    };
+    const timer = setTimeout(finish, timeoutMs);
+    chrome.tabs.onUpdated.addListener(onUpdated);
+  });
+}
+
+// Bellekten atılmış sekmeyi geri yükle. İçinde iş kaybı riski yok, sekme zaten boşaltılmış.
+async function reloadDiscardedWarehouseTab(tabId) {
+  const before = (await chrome.storage.local.get("oidcUpdatedAt")).oidcUpdatedAt || "";
+  try {
+    await chrome.tabs.reload(tabId);
+  } catch (e) {
+    return { status: 0, body: `sekme yeniden yüklenemedi: ${(e && e.message) || e}`, via: "sekme" };
+  }
+  await waitForTabComplete(tabId, 20000);
+  // Sayfanın kendi token isteğinin hook'a düşmesi için biraz pay bırak
+  await new Promise((resolve) => setTimeout(resolve, 3000));
+
+  const after = (await chrome.storage.local.get("oidcUpdatedAt")).oidcUpdatedAt || "";
+  if (after && after !== before) {
+    return { status: 200, body: "", via: "sekme yeniden yüklendi", captured: true };
+  }
+  return { status: 0, body: "sekme yeniden yüklendi ama token yakalanamadı", via: "sekme" };
+}
+
+// Asıl yol: isteği depo sekmesinin içinden at. Keycloak yalnızca
+// warehouse.getir.com origin'ini kabul ediyor (eklentiden atınca 403 "Invalid origin").
+async function refreshViaWarehouseTab(refreshToken) {
+  let tabs = [];
+  try {
+    tabs = await chrome.tabs.query({ url: "https://warehouse.getir.com/*" });
+  } catch (e) {
+    return { status: 0, body: String((e && e.message) || e), via: "sekme" };
+  }
+  const withId = (tabs || []).filter((t) => t.id != null);
+  const usable = withId.filter((t) => !t.discarded);
+  if (usable.length === 0) {
+    if (withId.length === 0) {
+      return { status: 0, body: "depo sekmesi açık değil", via: "sekme" };
+    }
+    // Chrome sekmeyi bellekten atmış: içine kod enjekte edilemez. Yeniden yükleyince
+    // sayfa kendi token akışını çalıştırır, hook da yeni token'ı yakalar.
+    return reloadDiscardedWarehouseTab(withId[0].id);
+  }
+  const tab = usable.sort((a, b) => (b.lastAccessed || 0) - (a.lastAccessed || 0))[0];
+
+  try {
+    const [injected] = await chrome.scripting.executeScript({
+      target: { tabId: tab.id },
+      world: "MAIN",
+      args: [OIDC_TOKEN_ENDPOINT, buildRefreshBody(refreshToken)],
+      func: async (endpoint, body) => {
+        try {
+          const res = await fetch(endpoint, {
+            method: "POST",
+            headers: { "Content-Type": "application/x-www-form-urlencoded" },
+            body,
+          });
+          return { status: res.status, body: (await res.text()).slice(0, 4000) };
+        } catch (e) {
+          return { status: 0, body: String((e && e.message) || e) };
+        }
+      },
+    });
+    const result = injected?.result;
+    return {
+      status: Number(result?.status) || 0,
+      body: String(result?.body || ""),
+      via: "sekme",
+    };
+  } catch (e) {
+    return { status: 0, body: String((e && e.message) || e), via: "sekme" };
+  }
+}
+
+async function refreshViaExtension(refreshToken) {
+  try {
+    const response = await fetch(OIDC_TOKEN_ENDPOINT, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: buildRefreshBody(refreshToken),
+    });
+    return {
+      status: response.status,
+      body: (await response.text()).slice(0, 4000),
+      via: "eklenti",
+    };
+  } catch (e) {
+    return { status: 0, body: String((e && e.message) || e), via: "eklenti" };
+  }
+}
+
+async function performRefreshRequest(refreshToken) {
+  const viaTab = await refreshViaWarehouseTab(refreshToken);
+  if (viaTab.status === 200) return viaTab;
+  // Sunucu cevap verdiyse (400/401 gibi) bu gerçek bir hatadır, ikinci yolu denemeye gerek yok
+  if (viaTab.status !== 0) return viaTab;
+
+  const viaExtension = await refreshViaExtension(refreshToken);
+  if (viaExtension.status === 200) return viaExtension;
+  return {
+    status: viaExtension.status,
+    body: `${viaExtension.body} · sekme yolu: ${viaTab.body}`,
+    via: "eklenti",
+  };
+}
+
+async function refreshWarehouseToken(reason) {
+  if (oidcRefreshInFlight) return oidcRefreshInFlight;
+  oidcRefreshInFlight = (async () => {
+    const store = await chrome.storage.local.get([
+      "oidcRefreshToken",
+      "oidcRefreshExpiresAt",
+    ]);
+    const refreshToken = store.oidcRefreshToken;
+    if (!refreshToken) {
+      return { ok: false, detail: "Kayıtlı oturum yok, depo paneline giriş yapın" };
+    }
+
+    const refreshExpiresAt = Number(store.oidcRefreshExpiresAt) || 0;
+    if (refreshExpiresAt && Date.now() >= refreshExpiresAt) {
+      await clearOidcSession("refresh token süresi doldu");
+      return { ok: false, detail: "Oturum süresi doldu, tekrar giriş yapın" };
+    }
+
+    const result = await performRefreshRequest(refreshToken);
+
+    if (result.status !== 200) {
+      const detail = `${result.via} · durum ${result.status || "ağ hatası"} · ${result.body.slice(0, 200)}`;
+      console.warn("[Getir Token Yakalayıcı] Token yenilenemedi:", detail);
+      // invalid_grant = refresh token gerçekten ölmüş; diğer hatalarda oturumu koru
+      if (result.status === 400 && /invalid_grant/i.test(result.body)) {
+        await clearOidcSession("invalid_grant");
+      }
+      return { ok: false, detail };
+    }
+
+    // Sekme yeniden yüklendiyse token'ı sayfanın kendi akışı üretti, hook da kaydetti
+    if (result.captured) {
+      const { oidcAccessToken } = await chrome.storage.local.get("oidcAccessToken");
+      if (oidcAccessToken) await pushRefreshedWarehouseToken(oidcAccessToken);
+      return { ok: true, detail: result.via };
+    }
+
+    let data = null;
+    try {
+      data = JSON.parse(result.body);
+    } catch {
+      return { ok: false, detail: `${result.via} · cevap okunamadı` };
+    }
+
+    const stored = await storeOidcTokens(data, `yenileme:${reason}`);
+    if (!stored) {
+      return { ok: false, detail: `${result.via} · cevapta token yok` };
+    }
+    await pushRefreshedWarehouseToken(data.access_token);
+    return { ok: true, detail: `${result.via} üzerinden yenilendi` };
+  })();
+
+  try {
+    return await oidcRefreshInFlight;
+  } finally {
+    oidcRefreshInFlight = null;
+  }
+}
+
+// Sayfadan (content script üzerinden) gelen giriş/yenileme cevabı
+chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+  if (!msg || msg.type !== "WAREHOUSE_OIDC_TOKEN") return;
+  (async () => {
+    const stored = await storeOidcTokens(msg.data, "panel");
+    sendResponse({ ok: stored });
+  })();
+  return true;
+});
+
+// Popup'tan manuel yenileme
+chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+  if (!msg || msg.type !== "WAREHOUSE_TOKEN_REFRESH_NOW") return;
+  (async () => {
+    const result = await refreshWarehouseToken("manuel");
+    sendResponse(result);
+  })();
+  return true;
+});
+
+chrome.alarms.onAlarm.addListener((alarm) => {
+  if (!alarm || alarm.name !== OIDC_ALARM_NAME) return;
+  (async () => {
+    const store = await chrome.storage.local.get([
+      "oidcRefreshToken",
+      "oidcExpiresAt",
+    ]);
+    if (!store.oidcRefreshToken) return;
+    const expiresAt = Number(store.oidcExpiresAt) || 0;
+    if (expiresAt - Date.now() > OIDC_REFRESH_MARGIN_MS) return;
+    const result = await refreshWarehouseToken("alarm");
+    if (!result.ok) {
+      console.warn("[Getir Token Yakalayıcı] Otomatik yenileme başarısız:", result.detail);
+    }
+  })();
+});
+
+chrome.runtime.onStartup.addListener(() => {
+  ensureRefreshAlarm();
+});
+chrome.runtime.onInstalled.addListener(() => {
+  ensureRefreshAlarm();
+});
+ensureRefreshAlarm();
 
 // Eklenti yüklendiğinde console'a bilgi ver
 console.log("[Getir Token Yakalayıcı] Background service worker başlatıldı");

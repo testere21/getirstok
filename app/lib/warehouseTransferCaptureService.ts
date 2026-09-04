@@ -19,22 +19,35 @@ export type WarehouseTransferCapture = {
   capturedAt: string;
 };
 
-export function classifyTransferRequestUrl(url: string): WarehouseTransferCaptureKind {
+export function classifyTransferRequestUrl(
+  url: string
+): WarehouseTransferCaptureKind | null {
   try {
     const parsed = new URL(url);
     const path = parsed.pathname.replace(/\/+$/, "");
-    if (/product/i.test(path)) return "detail";
-    if (parsed.searchParams.has("offset") || parsed.searchParams.has("limit")) {
-      return "list";
+    if (/receiving-windows|transfer-orders/i.test(path)) return null;
+    if (/\/inbound\/transfer$/i.test(path)) return "list";
+    if (/\/inbound\/transfer\//i.test(path)) return "detail";
+    if (
+      /\/inbound\//i.test(path) &&
+      /product|item|sku|pallet|line/i.test(path)
+    ) {
+      return "detail";
     }
-    if (/\/transfer$/i.test(path)) return "list";
-    if (/\/transfer\//i.test(path)) return "detail";
-    return "list";
+    return null;
   } catch {
-    if (/offset=|limit=/i.test(url)) return "list";
-    if (/\/transfer\//i.test(url)) return "detail";
-    return "list";
+    if (/receiving-windows|transfer-orders/i.test(url)) return null;
+    if (/\/inbound\/transfer\/[a-fA-F0-9]{24}/i.test(url)) return "detail";
+    if (/\/inbound\/transfer(?:\?|$)/i.test(url)) return "list";
+    if (/\/inbound\//i.test(url) && /product|item|sku|pallet|line/i.test(url)) {
+      return "detail";
+    }
+    return null;
   }
+}
+
+export function isInboundTransferListUrl(url: string): boolean {
+  return classifyTransferRequestUrl(url) === "list";
 }
 
 function docIdForKind(kind: WarehouseTransferCaptureKind): string {
@@ -46,6 +59,22 @@ function docIdForKind(kind: WarehouseTransferCaptureKind): string {
 export async function saveWarehouseTransferCapture(
   capture: WarehouseTransferCapture
 ): Promise<void> {
+  if (capture.kind === "detail") {
+    const existing = await getWarehouseTransferCapture("detail");
+    const existingUrl = existing?.url || "";
+    const nextUrl = capture.url.split("?")[0];
+    const existingPath = existingUrl.split("?")[0];
+    const existingRich = /\/inbound\/transfer\/[a-fA-F0-9]{24}\/.+/i.test(
+      existingPath
+    );
+    const nextBare = /\/inbound\/transfer\/[a-fA-F0-9]{24}$/i.test(nextUrl);
+    if (existingRich && nextBare) {
+      return;
+    }
+    if (/\/products/i.test(existingUrl) && !/\/products/i.test(nextUrl)) {
+      return;
+    }
+  }
   const ref = doc(db, GETIR_TOKEN_COLLECTION, docIdForKind(capture.kind));
   await setDoc(
     ref,
@@ -54,7 +83,7 @@ export async function saveWarehouseTransferCapture(
       url: capture.url,
       method: capture.method,
       requestBody: capture.requestBody,
-      responsePreview: capture.responsePreview.slice(0, 4000),
+      responsePreview: capture.responsePreview.slice(0, 20000),
       responseTopKeys: capture.responseTopKeys.slice(0, 40),
       capturedAt: capture.capturedAt,
     },

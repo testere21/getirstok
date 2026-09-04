@@ -23,6 +23,7 @@ import {
 import { AddProductModal } from "./components/AddProductModal";
 import { ManualAddProductModal } from "./components/ManualAddProductModal";
 import { BakeryExitWizard } from "./components/BakeryExitWizard";
+import { SevkiyatControlWizard, SevkiyatControlOpenButton } from "./components/SevkiyatControlWizard";
 import { SearchBar } from "./components/SearchBar";
 import { BarcodeScanner } from "./components/BarcodeScanner";
 import { StatCardSkeleton } from "./components/StatCardSkeleton";
@@ -63,6 +64,11 @@ import {
   type BakeryBakeSuggestionItem,
 } from "@/app/lib/bakeryBakeSuggestions";
 import { isBakeryQuietHours } from "@/app/lib/bakeryQuietHours";
+import { subscribeBakeryBakeSuggestions } from "@/app/lib/bakeryBakeSuggestionService";
+import {
+  isDocumentVisible,
+  onDocumentBecameVisible,
+} from "@/app/lib/pageVisibility";
 /** Buton merkezinden radyal — çok baloncuk, halkalar halinde mesafe çeşitliliği */
 const REF_WATER_AROUND_BUTTON_COUNT = 120;
 
@@ -397,6 +403,7 @@ export default function Home() {
   // Bugün çıkılması gereken yaklaşan SKT ürünlerini kontrol et
   useEffect(() => {
     const checkExpiringProducts = async () => {
+      if (!isDocumentVisible()) return;
       try {
         // Bugünün tarihini al (YYYY-MM-DD formatında)
         const today = new Date().toISOString().split("T")[0];
@@ -418,13 +425,16 @@ export default function Home() {
       }
     };
 
-    // İlk yüklemede kontrol et
     checkExpiringProducts();
-
-    // Her 5 dakikada bir kontrol et (300000 ms = 5 dakika)
     const interval = setInterval(checkExpiringProducts, 300000);
+    const offVisible = onDocumentBecameVisible(() => {
+      void checkExpiringProducts();
+    });
 
-    return () => clearInterval(interval);
+    return () => {
+      clearInterval(interval);
+      offVisible();
+    };
   }, []);
 
   // Küçük uyarı rozetini tamamen kapat
@@ -654,7 +664,7 @@ export default function Home() {
     [catalogProducts]
   );
 
-  /** Deneme: sahte raf/donuk. Canlı Getir stoğu için `false`. */
+  /** Deneme: sahte raf stoku. Canlı Getir stoğu için `false`. */
   const BAKERY_DEV_MOCK_STOCK = false;
   const bakeryMockRafStock = BAKERY_DEV_MOCK_STOCK;
 
@@ -674,9 +684,6 @@ export default function Home() {
   const [bakeryStocks, setBakeryStocks] = useState<
     Record<string, number | null>
   >({});
-  const [bakeryFrozenStocks, setBakeryFrozenStocks] = useState<
-    Record<string, number | null>
-  >({});
   const [bakeryStocksLoading, setBakeryStocksLoading] = useState(false);
   const bakeryStockFetchGenRef = useRef(0);
   /** Fırın listesi: `public/bakery-images/{barkod}.jpg` tam ekran */
@@ -692,10 +699,12 @@ export default function Home() {
   const [bakeryExitSnapshot, setBakeryExitSnapshot] = useState<
     BakeryResolvedRow[] | null
   >(null);
-  /** Fırın: varsayılan = raf stoku 0 olanlar üstte; tıkla = az→çok → çok→az → varsayılan */
+  const [sevkiyatWizardOpen, setSevkiyatWizardOpen] = useState(false);
+  /** Fırın: varsayılan = pişirilecekler, sonra çok stok → az stok */
   const [bakeryRafSort, setBakeryRafSort] = useState<
     "default" | "asc" | "desc"
   >("default");
+  const [bakeryShowDepleted, setBakeryShowDepleted] = useState(false);
   const [bakeryBakeItems, setBakeryBakeItems] = useState<
     BakeryBakeSuggestionItem[]
   >([]);
@@ -710,8 +719,6 @@ export default function Home() {
   );
   const bakeryAudioCtxRef = useRef<AudioContext | null>(null);
   const bakeryTelegramFpRef = useRef("");
-  const activeTabRef = useRef(activeTab);
-  activeTabRef.current = activeTab;
 
   const bakeryStocksKey = useMemo(
     () => bakeryRows.map((r) => r.barcode).join("\u0000"),
@@ -746,48 +753,17 @@ export default function Home() {
     []
   );
 
-  const fetchBakeryFrozenMap = useCallback(
-    async (rows: BakeryResolvedRow[]): Promise<Record<string, number | null>> => {
-      try {
-        const res = await fetch("/api/bakery-frozen-stocks", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            barcodes: rows.map((r) => r.barcode),
-          }),
-        });
-        const data = (await res.json()) as {
-          stocks?: Record<string, number | null>;
-        };
-        if (!data.stocks || typeof data.stocks !== "object") {
-          return {};
-        }
-        return data.stocks;
-      } catch {
-        return {};
-      }
-    },
-    []
-  );
-
   const refreshBakeryLiveStocks = useCallback(
-    async (opts: { silent?: boolean; includeFrozen?: boolean }) => {
+    async (opts: { silent?: boolean } = {}) => {
       if (bakeryRows.length === 0) return;
       const gen = ++bakeryStockFetchGenRef.current;
       if (!opts.silent) setBakeryStocksLoading(true);
       try {
-        const frozenPromise = opts.includeFrozen
-          ? fetchBakeryFrozenMap(bakeryRows)
-          : Promise.resolve(null);
-        const [entries, frozenMap] = await Promise.all([
-          fetchBakeryStockEntries(bakeryRows),
-          frozenPromise,
-        ]);
+        const entries = await fetchBakeryStockEntries(bakeryRows);
         if (gen !== bakeryStockFetchGenRef.current) return;
         setBakeryStocks(
           Object.fromEntries(entries) as Record<string, number | null>
         );
-        if (frozenMap) setBakeryFrozenStocks(frozenMap);
         setBakeryStocksLoading(false);
       } catch {
         if (gen === bakeryStockFetchGenRef.current) {
@@ -795,18 +771,16 @@ export default function Home() {
         }
       }
     },
-    [bakeryRows, fetchBakeryStockEntries, fetchBakeryFrozenMap]
+    [bakeryRows, fetchBakeryStockEntries]
   );
 
   const handleBakeryStockRefresh = useCallback(() => {
     if (bakeryRows.length === 0) return;
     if (bakeryMockRafStock) {
-      setBakeryRafSort("asc");
       return;
     }
     void (async () => {
-      await refreshBakeryLiveStocks({ silent: false, includeFrozen: true });
-      setBakeryRafSort("asc");
+      await refreshBakeryLiveStocks({ silent: false });
     })();
   }, [bakeryRows.length, bakeryMockRafStock, refreshBakeryLiveStocks]);
 
@@ -818,17 +792,14 @@ export default function Home() {
     if (catalogLoading) return;
     if (bakeryRows.length === 0) {
       setBakeryStocks({});
-      setBakeryFrozenStocks({});
       setBakeryStocksLoading(false);
       return;
     }
 
     const runAuto = (silent: boolean) => {
+      if (!isDocumentVisible()) return;
       if (isBakeryQuietHours()) return;
-      void refreshBakeryLiveStocks({
-        silent,
-        includeFrozen: activeTabRef.current === "bakery",
-      });
+      void refreshBakeryLiveStocks({ silent });
     };
 
     runAuto(false);
@@ -836,19 +807,23 @@ export default function Home() {
 
     let wasQuiet = isBakeryQuietHours();
     const quietTick = window.setInterval(() => {
+      if (!isDocumentVisible()) return;
       const quiet = isBakeryQuietHours();
       if (wasQuiet && !quiet) {
-        void refreshBakeryLiveStocks({
-          silent: true,
-          includeFrozen: activeTabRef.current === "bakery",
-        });
+        void refreshBakeryLiveStocks({ silent: true });
       }
       wasQuiet = quiet;
     }, 30_000);
 
+    const offVisible = onDocumentBecameVisible(() => {
+      wasQuiet = isBakeryQuietHours();
+      runAuto(true);
+    });
+
     return () => {
       window.clearInterval(id);
       window.clearInterval(quietTick);
+      offVisible();
       bakeryStockFetchGenRef.current += 1;
     };
   }, [catalogLoading, bakeryStocksKey, bakeryMockRafStock, refreshBakeryLiveStocks]);
@@ -856,10 +831,11 @@ export default function Home() {
   useEffect(() => {
     if (bakeryMockRafStock) return;
     if (isBakeryQuietHours()) return;
+    if (!isDocumentVisible()) return;
     if (activeTab !== "bakery" || catalogLoading || bakeryRows.length === 0) {
       return;
     }
-    void refreshBakeryLiveStocks({ silent: true, includeFrozen: true });
+    void refreshBakeryLiveStocks({ silent: true });
   }, [activeTab, catalogLoading, bakeryRows.length, bakeryMockRafStock, refreshBakeryLiveStocks]);
 
   useEffect(() => {
@@ -881,47 +857,27 @@ export default function Home() {
   }, [activeTab]);
 
   useEffect(() => {
-    let cancelled = false;
-
-    const load = async () => {
-      try {
-        const res = await fetch("/api/bakery-suggestions");
-        const data = (await res.json()) as {
-          items?: BakeryBakeSuggestionItem[];
-          currentSlot?: BakeSlotKey | null;
-          currentSlotLabel?: string | null;
-        };
-        if (cancelled || !res.ok) return;
-        setBakeryBakeItems(Array.isArray(data.items) ? data.items : []);
-        setBakeryBakeSlot(data.currentSlot ?? getCurrentBakeSlot());
-        setBakeryBakeSlotLabel(
-          data.currentSlotLabel ??
-            (data.currentSlot ? BAKE_SLOT_LABELS[data.currentSlot] : null)
-        );
-      } catch {
-        if (!cancelled) {
-          setBakeryBakeSlot(getCurrentBakeSlot());
-        }
-      }
-    };
-
-    void load();
-    const poll = window.setInterval(() => void load(), 60_000);
-    const tick = window.setInterval(() => {
+    const unsub = subscribeBakeryBakeSuggestions((items) =>
+      setBakeryBakeItems(items)
+    );
+    const applySlot = () => {
       const s = getCurrentBakeSlot();
       setBakeryBakeSlot(s);
       setBakeryBakeSlotLabel(s ? BAKE_SLOT_LABELS[s] : null);
-    }, 60_000);
-
+    };
+    applySlot();
+    const tick = window.setInterval(applySlot, 60_000);
     return () => {
-      cancelled = true;
-      window.clearInterval(poll);
+      unsub();
       window.clearInterval(tick);
     };
   }, []);
 
   useEffect(() => {
-    if (activeTab !== "bakery") setBakeryRafSort("default");
+    if (activeTab !== "bakery") {
+      setBakeryRafSort("default");
+      setBakeryShowDepleted(false);
+    }
   }, [activeTab]);
 
   useEffect(() => {
@@ -951,7 +907,7 @@ export default function Home() {
    * (eksik/fazlada notlar + toplam arasındaki gibi — sütunlar sağa yapışmaz).
    */
   const BAKERY_LIST_GRID =
-    "3rem minmax(0,1fr) minmax(8rem,10rem) minmax(4rem,6rem) minmax(5rem,7rem) minmax(0,1fr)";
+    "3rem minmax(0,1fr) minmax(8rem,10rem) minmax(4rem,6rem) minmax(0,1fr)";
 
   const bakeryRowIndexByBarcode = useMemo(() => {
     const m = new Map<string, number>();
@@ -979,22 +935,6 @@ export default function Home() {
     });
     return mock;
   }, [bakeryMockRafStock, bakeryRows, bakeryStocks]);
-
-  const bakeryFrozenStocksForUi = useMemo((): Record<string, number | null> => {
-    if (!bakeryMockRafStock || bakeryRows.length === 0) {
-      return bakeryFrozenStocks;
-    }
-    const frozenOptions = [0, 2, 5, 8, 15];
-    const mock: Record<string, number | null> = {};
-    bakeryRows.forEach((row) => {
-      let h = 3;
-      for (let i = 0; i < row.barcode.length; i++) {
-        h = (h + row.barcode.charCodeAt(i) * (i + 2)) % frozenOptions.length;
-      }
-      mock[row.barcode] = frozenOptions[h];
-    });
-    return mock;
-  }, [bakeryMockRafStock, bakeryRows, bakeryFrozenStocks]);
 
   const cycleBakeryRafSort = useCallback(() => {
     setBakeryRafSort((s) =>
@@ -1037,8 +977,12 @@ export default function Home() {
       rows.sort((a, b) => {
         const aNeed = needsBake(a);
         const bNeed = needsBake(b);
-        if (aNeed && !bNeed) return -1;
-        if (!aNeed && bNeed) return 1;
+        if (aNeed !== bNeed) return aNeed ? -1 : 1;
+        const sa = numericShelf(a);
+        const sb = numericShelf(b);
+        const ka = sa === null ? -1 : sa;
+        const kb = sb === null ? -1 : sb;
+        if (ka !== kb) return kb - ka;
         return idx(a) - idx(b);
       });
       return rows;
@@ -1073,6 +1017,33 @@ export default function Home() {
     bakeryRafSort,
     bakeryBakeQtyByBarcode,
   ]);
+
+  const bakeryDepletedRows = useMemo(() => {
+    if (bakeryStocksLoadingForUi) return [];
+    return bakeryDisplayRows.filter((row) => {
+      const v = bakeryStocksForUi[row.barcode];
+      if (v !== 0) return false;
+      return !shouldShowBakeMeAlert(
+        bakeryBakeQtyByBarcode.get(row.barcode) ?? 0,
+        0
+      );
+    });
+  }, [
+    bakeryDisplayRows,
+    bakeryStocksForUi,
+    bakeryStocksLoadingForUi,
+    bakeryBakeQtyByBarcode,
+  ]);
+
+  const bakeryPrimaryRows = useMemo(() => {
+    if (bakeryDepletedRows.length === 0) return bakeryDisplayRows;
+    const hidden = new Set(bakeryDepletedRows.map((r) => r.barcode));
+    return bakeryDisplayRows.filter((r) => !hidden.has(r.barcode));
+  }, [bakeryDisplayRows, bakeryDepletedRows]);
+
+  const bakeryListedRows = bakeryShowDepleted
+    ? [...bakeryPrimaryRows, ...bakeryDepletedRows]
+    : bakeryPrimaryRows;
 
   /** Raf stoğu > 0 olan fırın satırları (sıra: liste sıralamasıyla aynı) */
   const bakeryExitQueue = useMemo(() => {
@@ -1452,14 +1423,9 @@ export default function Home() {
       <h1 className="text-xl font-semibold text-zinc-900 dark:text-zinc-50 sm:text-2xl">
         Stok Takip Paneli
       </h1>
-      <p className="-mt-4 text-sm">
-        <a
-          href="/sevkiyat-test"
-          className="text-zinc-500 underline-offset-2 hover:text-zinc-800 hover:underline dark:text-zinc-400 dark:hover:text-zinc-200"
-        >
-          Sevkiyat test
-        </a>
-      </p>
+      <div className="-mt-2">
+        <SevkiyatControlOpenButton onClick={() => setSevkiyatWizardOpen(true)} />
+      </div>
 
       {/* Firestore hata mesajı */}
       {firestoreError && (
@@ -2214,7 +2180,7 @@ export default function Home() {
                           role="status"
                         >
                           <strong className="font-semibold">Deneme modu:</strong> raf
-                          ve donuk stoklar sahte (Getir bağlı değil). API için{" "}
+                          stokları sahte (Getir bağlı değil). API için{" "}
                           <code className="rounded bg-black/25 px-1 py-0.5 text-[10px]">
                             BAKERY_DEV_MOCK_STOCK
                           </code>{" "}
@@ -2268,7 +2234,7 @@ export default function Home() {
                                 ? "text-zinc-900 dark:text-zinc-100"
                                 : ""
                             }`}
-                            aria-label="Raf stoğa göre sırala: önce sıfır stok, azdan çoka, çoktan aza"
+                            aria-label="Sırala: pişirilecekler, sonra çok stoktan aza"
                           >
                             <span>Raf stok</span>
                             {bakeryRafSort === "asc" ? (
@@ -2277,20 +2243,14 @@ export default function Home() {
                               <ArrowDown className="size-3 shrink-0" aria-hidden />
                             ) : null}
                           </button>
-                          <span
-                            role="columnheader"
-                            className="min-w-0 text-left"
-                          >
-                            Donuk stok
-                          </span>
                           <div className="flex min-w-0 items-center justify-end">
                             <button
                               type="button"
                               onClick={handleBakeryStockRefresh}
                               disabled={bakeryStocksLoadingForUi}
                               className="flex size-9 shrink-0 items-center justify-center rounded-lg text-zinc-500 transition hover:bg-zinc-200 hover:text-zinc-800 disabled:cursor-not-allowed disabled:opacity-50 dark:text-zinc-400 dark:hover:bg-zinc-700 dark:hover:text-zinc-100"
-                              aria-label="Raf ve donuk stokları yenile"
-                              title="Raf ve donuk stokları yenile"
+                              aria-label="Raf stokları yenile"
+                              title="Raf stokları yenile"
                             >
                               <RefreshCw
                                 className={`size-4 ${bakeryStocksLoadingForUi ? "animate-spin" : ""}`}
@@ -2308,7 +2268,7 @@ export default function Home() {
                         >
                           Raf stok sırası:{" "}
                           {bakeryRafSort === "default"
-                            ? "Önce 0"
+                            ? "Pişir → çok"
                             : bakeryRafSort === "asc"
                               ? "Az → çok"
                               : "Çok → az"}
@@ -2318,8 +2278,8 @@ export default function Home() {
                           onClick={handleBakeryStockRefresh}
                           disabled={bakeryStocksLoadingForUi}
                           className="flex size-9 shrink-0 items-center justify-center rounded-lg text-zinc-500 transition hover:bg-zinc-200 hover:text-zinc-800 disabled:cursor-not-allowed disabled:opacity-50 dark:text-zinc-400 dark:hover:bg-zinc-700 dark:hover:text-zinc-100"
-                          aria-label="Raf ve donuk stokları yenile"
-                          title="Raf ve donuk stokları yenile"
+                              aria-label="Raf stokları yenile"
+                              title="Raf stokları yenile"
                         >
                           <RefreshCw
                             className={`size-4 ${bakeryStocksLoadingForUi ? "animate-spin" : ""}`}
@@ -2327,23 +2287,18 @@ export default function Home() {
                           />
                         </button>
                       </div>
+                      <div className="relative flex min-h-0 flex-1 flex-col">
                       <ul
                         role="list"
                         className="min-h-0 flex-1 overflow-auto divide-y divide-zinc-200 dark:divide-zinc-700"
                       >
-                        {bakeryDisplayRows.map((row) => {
+                        {bakeryListedRows.map((row) => {
                             const imageUrl = getCatalogProductImage(row.barcode);
                             const shelf = bakeryStocksForUi[row.barcode];
                             const shelfText = bakeryStocksLoadingForUi
                               ? "…"
                               : typeof shelf === "number"
                                 ? String(shelf)
-                                : "—";
-                            const frozen = bakeryFrozenStocksForUi[row.barcode];
-                            const frozenText = bakeryStocksLoadingForUi
-                              ? "…"
-                              : typeof frozen === "number"
-                                ? String(frozen)
                                 : "—";
                             const bakeQty =
                               bakeryBakeQtyByBarcode.get(row.barcode) ?? 0;
@@ -2447,12 +2402,6 @@ export default function Home() {
                                         {shelfText}
                                       </span>
                                     </p>
-                                    <p className="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">
-                                      Donuk stok:{" "}
-                                      <span className="font-semibold tabular-nums text-zinc-700 dark:text-zinc-200">
-                                        {frozenText}
-                                      </span>
-                                    </p>
                               </div>
                                 </div>
                                 <div
@@ -2485,9 +2434,9 @@ export default function Home() {
                                     tabIndex={0}
                                     className="grid min-h-[44px] min-w-0 cursor-pointer items-center gap-4 text-left"
                                     style={{
-                                      gridColumn: "2 / 6",
+                                      gridColumn: "2 / 5",
                                       gridTemplateColumns:
-                                        "minmax(0,1fr) minmax(8rem,10rem) minmax(4rem,6rem) minmax(5rem,7rem)",
+                                        "minmax(0,1fr) minmax(8rem,10rem) minmax(4rem,6rem)",
                                     }}
                                     onClick={() => handleBakeryRowClick(row)}
                                     onKeyDown={(e) => {
@@ -2513,9 +2462,6 @@ export default function Home() {
                                     >
                                       {shelfText}
                             </span>
-                                    <span className="tabular-nums text-zinc-800 dark:text-zinc-200">
-                                      {frozenText}
-                          </span>
                                   </div>
                                   <div className="hidden min-w-0 justify-end sm:flex">
                                     {needsBake && (
@@ -2544,6 +2490,20 @@ export default function Home() {
                       );
                     })}
                       </ul>
+                      {bakeryDepletedRows.length > 0 && (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setBakeryShowDepleted((open) => !open)
+                            }
+                            className="shrink-0 border-t border-zinc-500/20 bg-zinc-950/40 px-4 py-2.5 text-center text-xs font-medium text-zinc-100/90 backdrop-blur-[2px] transition hover:bg-zinc-950/55 dark:bg-black/45 dark:hover:bg-black/60"
+                          >
+                            {bakeryShowDepleted
+                              ? "Biten ürünleri gizle"
+                              : "Biten ürünleri göster"}
+                          </button>
+                        )}
+                      </div>
                     </>
                   )}
                   </div>
@@ -3069,6 +3029,20 @@ export default function Home() {
         shelfStockByBarcode={bakeryStocksForUi}
         bakeryImageBarcodes={bakeryImageBarcodes}
         getDefaultProductImage={getCatalogProductImage}
+      />
+
+      <SevkiyatControlWizard
+        isOpen={sevkiyatWizardOpen}
+        onClose={() => setSevkiyatWizardOpen(false)}
+        missingItems={items
+          .filter((i) => i.type === "missing")
+          .map((i) => ({
+            name: i.name,
+            barcode: i.barcode,
+            quantity: i.quantity,
+            imageUrl: i.imageUrl,
+          }))}
+        getProductImage={getCatalogProductImage}
       />
 
       {bakeryLightboxBarcode && (
