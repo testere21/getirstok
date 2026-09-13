@@ -81,29 +81,38 @@ export async function addStockItem(
 
 /**
  * Stok kalemini doküman ID ile siler.
+ * `skipTelegram`: çağıran taraf kendi toplu bildirimini gönderiyorsa
+ * (ör. sayım change'i iki kaydı birlikte kapatıyor) tek tek "ürün silindi"
+ * mesajı atılmaz.
  */
-export async function deleteStockItem(id: string): Promise<void> {
+export async function deleteStockItem(
+  id: string,
+  options?: { skipTelegram?: boolean }
+): Promise<void> {
   const docRef = doc(db, STOCK_ITEMS_COLLECTION, id);
+  const skipTelegram = options?.skipTelegram === true;
 
   // Silme öncesi son durumu oku (Telegram için)
   let itemBeforeDelete: StockItemWithId | null = null;
-  try {
-    const snapshot = await getDoc(docRef);
-    if (snapshot.exists()) {
-      const data = snapshot.data();
-      itemBeforeDelete = {
-        id: snapshot.id,
-        name: (data.name as string) ?? "",
-        barcode: (data.barcode as string) ?? "",
-        quantity: typeof data.quantity === "number" ? data.quantity : 0,
-        notes: (data.notes as string) ?? "",
-        type: (data.type as StockItemType) === "extra" ? "extra" : "missing",
-        createdAt: "", // Telegram mesajında kullanılmıyor
-        imageUrl: (data.imageUrl as string) ?? "",
-      };
+  if (!skipTelegram) {
+    try {
+      const snapshot = await getDoc(docRef);
+      if (snapshot.exists()) {
+        const data = snapshot.data();
+        itemBeforeDelete = {
+          id: snapshot.id,
+          name: (data.name as string) ?? "",
+          barcode: (data.barcode as string) ?? "",
+          quantity: typeof data.quantity === "number" ? data.quantity : 0,
+          notes: (data.notes as string) ?? "",
+          type: (data.type as StockItemType) === "extra" ? "extra" : "missing",
+          createdAt: "", // Telegram mesajında kullanılmıyor
+          imageUrl: (data.imageUrl as string) ?? "",
+        };
+      }
+    } catch (err) {
+      console.error("Silme öncesi doküman okunamadı:", err);
     }
-  } catch (err) {
-    console.error("Silme öncesi doküman okunamadı:", err);
   }
 
   await deleteDoc(docRef);

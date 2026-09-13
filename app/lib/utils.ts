@@ -1,6 +1,16 @@
 /**
- * Tarih/saat formatlama yardımcı fonksiyonları
+ * Tarih/saat ve para formatlama yardımcı fonksiyonları
  */
+
+/** 1234.5 → "₺1.234,50" */
+export function formatTryPriceTRY(value: number): string {
+  return new Intl.NumberFormat("tr-TR", {
+    style: "currency",
+    currency: "TRY",
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(value);
+}
 
 /**
  * ISO string formatındaki tarihi Türkçe formatına çevirir.

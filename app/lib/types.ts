@@ -150,6 +150,12 @@ export interface CatalogProduct {
   price?: number;
   /** Depo panelinden tedarikçi iade: kaç gün önceden çıkılacak (expDays.dead) */
   supplierReturnDays?: number;
+  /** Bayi panelindeki ana kategori (ör. "Süt Ürünleri") */
+  category?: string;
+  /** Bayi panelindeki alt kategori (ör. "Yoğurt") */
+  subCategory?: string;
+  /** Saklama koşulu: "+4" | "-18" | "ambient" */
+  storageType?: string;
 }
 
 /**
@@ -162,6 +168,9 @@ export interface SupplementalCatalogProduct {
   imageUrl?: string;
   productId?: string;
   price?: number;
+  category?: string;
+  subCategory?: string;
+  storageType?: string;
   source: "warehouse_shelf_label" | "manual_add";
   createdAt: string;
   updatedAt: string;

@@ -16,6 +16,7 @@ import {
   ArrowUp,
   ArrowDown,
   ChefHat,
+  Scale,
   X,
   RefreshCw,
   Plus,
@@ -46,8 +47,10 @@ import { ConfirmModal } from "./components/ConfirmModal";
 import { BarkodOlusturucuModal } from "./components/BarkodOlusturucuModal";
 import { ReferenceWaterProductsPanel } from "./components/ReferenceWaterProductsPanel";
 import { ReferenceWaterProductsPanelContent } from "./components/ReferenceWaterProductsPanelContent";
+import { SayimTabContent } from "./components/SayimTabContent";
+import type { SayimPair } from "@/app/lib/sayimMatch";
 import type { StockItemWithId, ExpiringProductWithId } from "@/app/lib/types";
-import { formatDateTime } from "@/app/lib/utils";
+import { formatDateTime, formatTryPriceTRY } from "@/app/lib/utils";
 import {
   resolveBakeryProducts,
   type BakeryResolvedRow,
@@ -105,7 +108,8 @@ export type TabType =
   | "missing"
   | "extra"
   | "expiring"
-  | "bakery";
+  | "bakery"
+  | "sayim";
 
 interface ToastState {
   message: string;
@@ -170,15 +174,6 @@ const STOCK_LIST_COLUMNS: {
     sortKey: "totalAmount",
   },
 ];
-
-function formatTryPriceTRY(value: number) {
-  return new Intl.NumberFormat("tr-TR", {
-    style: "currency",
-    currency: "TRY",
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(value);
-}
 
 /** Katalog fiyatı bilinen satırların para tutarı (miktar × birim fiyat) */
 function sumStockValueByBarcode(
@@ -643,19 +638,35 @@ export default function Home() {
     [filteredItems]
   );
 
-  const catalogPriceByBarcode = useMemo(() => {
-    const m = new Map<string, number>();
-    for (const p of catalogProducts) {
-      if (
-        p.barcode &&
-        typeof p.price === "number" &&
-        !Number.isNaN(p.price)
-      ) {
-        m.set(p.barcode, p.price);
+  /**
+   * Barkod -> katalog ürünü. Ana barkodun yanı sıra `barcodes[]` alternatifleri
+   * de indekslenir; aksi hâlde alternatif barkodla girilen kayıtlar fiyatsız ve
+   * kategorisiz kalıyor. Ana barkodlar önce yazılır, alternatif onu ezmez.
+   */
+  const catalogByBarcode = useMemo(() => {
+    const m = new Map<string, CatalogProduct>();
+    const put = (raw: string | undefined, product: CatalogProduct) => {
+      if (!raw) return;
+      for (const key of [raw, raw.trim().replace(/\s+/g, "")]) {
+        if (key && !m.has(key)) m.set(key, product);
       }
+    };
+    for (const p of catalogProducts) put(p.barcode, p);
+    for (const p of catalogProducts) {
+      for (const alt of p.barcodes ?? []) put(alt, p);
     }
     return m;
   }, [catalogProducts]);
+
+  const catalogPriceByBarcode = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const [barcode, p] of catalogByBarcode) {
+      if (typeof p.price === "number" && !Number.isNaN(p.price)) {
+        m.set(barcode, p.price);
+      }
+    }
+    return m;
+  }, [catalogByBarcode]);
 
   /** Katalogda eşleşmeyen barkodlar listede gösterilmez */
   const bakeryRows = useMemo(
@@ -1392,6 +1403,67 @@ export default function Home() {
     }
   }, [displayItems, selectedStockIds]);
 
+  /**
+   * Sayım: onaylanan change. Tutar bazlı kapatmada iki kaydın da miktarı
+   * sıfırlandığı için ikisi de silinir; kısmi düşme diye bir durum yok.
+   */
+  const handleSayimChange = useCallback(async (pair: SayimPair) => {
+    const targets = [
+      { id: pair.extra.id, label: "fazla" },
+      { id: pair.missing.id, label: "eksik" },
+    ];
+    const results = await Promise.allSettled(
+      // Tek tek "ürün silindi" yerine aşağıda tek bir change bildirimi gidiyor
+      targets.map((t) => deleteStockItem(t.id, { skipTelegram: true }))
+    );
+    const failed = targets.filter((_, i) => results[i].status === "rejected");
+
+    // Hiç silme olmadıysa panelde bir şey değişmedi, bildirim de gitmesin
+    if (failed.length < targets.length) {
+      const side = (c: SayimPair["extra"]) => ({
+        name: c.name,
+        barcode: c.barcode,
+        quantity: c.quantity,
+        unitPrice: c.unitPrice,
+        total: c.total,
+      });
+      void fetch("/api/telegram/sayim-change", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          category: pair.category,
+          extra: side(pair.extra),
+          missing: side(pair.missing),
+          net: pair.net,
+          warning: failed.length
+            ? `${failed[0].label} kaydı silinemedi, elle kontrol edin.`
+            : undefined,
+        }),
+      }).catch(() => null);
+    }
+
+    if (failed.length === 0) {
+      setSelectedStockIds((prev) => {
+        if (!targets.some((t) => prev.has(t.id))) return prev;
+        const next = new Set(prev);
+        for (const t of targets) next.delete(t.id);
+        return next;
+      });
+      setSuccessModalMessage(
+        `Change uygulandı, iki kayıt da silindi. Net etki: ${formatTryPriceTRY(pair.net)}`
+      );
+      return;
+    }
+
+    setToast({
+      message:
+        failed.length === targets.length
+          ? "Change uygulanamadı, hiçbir kayıt silinemedi. Liste değişmedi."
+          : `${failed[0].label} kaydı silinemedi; diğer kayıt silindi. Kalan kaydı elle kontrol edin.`,
+      type: "error",
+    });
+  }, []);
+
   const handleEdit = useCallback((item: StockItemWithId) => {
     setEditingItem(item);
   }, []);
@@ -1979,6 +2051,30 @@ export default function Home() {
                 />
               )}
             </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={activeTab === "sayim"}
+              aria-controls="panel-sayim"
+              id="tab-sayim"
+              onClick={() => setActiveTab("sayim")}
+              className={`relative min-h-[44px] px-4 py-4 text-sm font-medium transition duration-200 sm:px-6 sm:py-4 sm:text-base motion-reduce:transition-none ${
+                activeTab === "sayim"
+                  ? "text-sky-700 hover:bg-sky-50/80 dark:text-sky-400 dark:hover:bg-sky-950/35"
+                  : "text-zinc-500 hover:bg-zinc-200/80 hover:text-zinc-800 active:bg-zinc-300 dark:text-zinc-400 dark:hover:bg-zinc-700/80 dark:hover:text-zinc-100 dark:active:bg-zinc-600"
+              }`}
+            >
+              <span className="inline-flex items-center gap-1.5">
+                <Scale className="size-4 opacity-80" aria-hidden />
+                Sayım
+              </span>
+              {activeTab === "sayim" && (
+                <span
+                  className="absolute bottom-0 left-0 right-0 h-0.5 bg-sky-600 dark:bg-sky-400"
+                  aria-hidden
+                />
+              )}
+            </button>
           </div>
           <div
             role="tabpanel"
@@ -1991,7 +2087,9 @@ export default function Home() {
                     ? "panel-expiring"
                     : activeTab === "bakery"
                       ? "panel-bakery"
-                      : "panel-missing"
+                      : activeTab === "sayim"
+                        ? "panel-sayim"
+                        : "panel-missing"
             }
             aria-labelledby={
               activeTab === "missing"
@@ -2002,7 +2100,9 @@ export default function Home() {
                     ? "tab-expiring"
                     : activeTab === "bakery"
                       ? "tab-bakery"
-                      : "tab-missing"
+                      : activeTab === "sayim"
+                        ? "tab-sayim"
+                        : "tab-missing"
             }
             className="min-h-[120px]"
           >
@@ -2510,6 +2610,13 @@ export default function Home() {
               )
             ) : isLoading || catalogLoading ? (
               <ListSkeleton />
+            ) : activeTab === "sayim" ? (
+              <SayimTabContent
+                missingItems={missingItems}
+                extraItems={extraItems}
+                catalogByBarcode={catalogByBarcode}
+                onApplyChange={handleSayimChange}
+              />
             ) : (
               <div className="flex min-h-[8rem] flex-col">
                 {displayItems.length > 0 && (

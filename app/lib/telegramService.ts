@@ -7,7 +7,7 @@ import {
   listActiveTelegramChatIds,
   markTelegramSubscriberInactive,
 } from "./telegramSubscriberService";
-import { formatYmdToTr } from "./utils";
+import { formatTryPriceTRY, formatYmdToTr } from "./utils";
 
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID;
@@ -242,6 +242,66 @@ export interface BakeryBakeAlertItem {
   name: string;
   barcode: string;
   bakeQty: number;
+}
+
+export interface SayimChangeTelegramSide {
+  name: string;
+  barcode: string;
+  quantity: number;
+  unitPrice: number;
+  total: number;
+}
+
+export interface SayimChangeTelegramPayload {
+  category: string;
+  extra: SayimChangeTelegramSide;
+  missing: SayimChangeTelegramSide;
+  /** fazla tutarı - eksik tutarı */
+  net: number;
+  /** Kısmi başarıda kullanıcıya düşen uyarı (bir kayıt silinemediyse) */
+  warning?: string;
+}
+
+/**
+ * Sayım sekmesindeki change işlemi bildirimi.
+ * Change'de iki kayıt birlikte kapandığı için tek tek "ürün silindi"
+ * mesajları yerine bu toplu mesaj gönderilir.
+ */
+export function buildSayimChangeMessage(
+  payload: SayimChangeTelegramPayload
+): string {
+  const side = (label: string, s: SayimChangeTelegramSide): string[] => [
+    `${label}: ${s.name.trim() || "-"}`,
+    `Barkod: ${s.barcode.trim() || "-"}`,
+    `Miktar: ${s.quantity} × ${formatTryPriceTRY(
+      s.unitPrice
+    )} = ${formatTryPriceTRY(s.total)}`,
+  ];
+
+  const netLabel =
+    payload.net > 0 ? "kâr" : payload.net < 0 ? "zarar" : "başabaş";
+  const netAmount = `${payload.net > 0 ? "+" : ""}${formatTryPriceTRY(
+    payload.net
+  )}`;
+
+  const lines = ["🔁 SAYIM İLE ÜRÜN DÜZENLENDİ"];
+  const category = payload.category.trim();
+  if (category) lines.push(`Kategori: ${category}`);
+  lines.push("");
+  lines.push(...side("Fazla", payload.extra));
+  lines.push("");
+  lines.push(...side("Eksik", payload.missing));
+  lines.push("");
+  lines.push(`Toplam fark: ${netAmount} (${netLabel})`);
+
+  const warning = payload.warning?.trim();
+  if (warning) {
+    lines.push(`⚠️ ${warning}`);
+  } else {
+    lines.push("İki kayıt da panelden silindi.");
+  }
+
+  return lines.join("\n");
 }
 
 export function buildBakeryBakeAlertMessage(

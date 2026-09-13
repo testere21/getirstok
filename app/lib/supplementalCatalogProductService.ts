@@ -23,12 +23,22 @@ export function normalizeCatalogBarcodeKey(barcode: string): string {
 function supplementalDocToCatalogProduct(
   data: SupplementalCatalogProduct
 ): CatalogProduct {
-  return {
+  // Boş alanlar objede hiç bulunmamalı: `mergeProductsJsonWithSupplemental`
+  // spread ile birleştiriyor, `undefined` bir alan `products.json`'daki dolu
+  // değerin üzerine yazıp siler.
+  const out: CatalogProduct = {
     name: data.name,
     barcode: data.barcode,
-    imageUrl: data.imageUrl,
-    productId: data.productId,
   };
+  if (data.imageUrl) out.imageUrl = data.imageUrl;
+  if (data.productId) out.productId = data.productId;
+  if (typeof data.price === "number" && Number.isFinite(data.price)) {
+    out.price = data.price;
+  }
+  if (data.category) out.category = data.category;
+  if (data.subCategory) out.subCategory = data.subCategory;
+  if (data.storageType) out.storageType = data.storageType;
+  return out;
 }
 
 export async function fetchAllSupplementalCatalogAsCatalogProducts(): Promise<
@@ -101,6 +111,12 @@ export async function upsertSupplementalCatalogProduct(
   if (typeof product.price === "number" && Number.isFinite(product.price)) {
     payload.price = product.price;
   }
+  const category = product.category?.trim();
+  if (category) payload.category = category;
+  const subCategory = product.subCategory?.trim();
+  if (subCategory) payload.subCategory = subCategory;
+  const storageType = product.storageType?.trim();
+  if (storageType) payload.storageType = storageType;
 
   await setDoc(ref, payload, { merge: true });
 }
