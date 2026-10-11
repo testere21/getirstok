@@ -1,10 +1,23 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
-import { ChevronLeft, Loader2, Package, Truck, X } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  ArrowUpDown,
+  Boxes,
+  ChevronLeft,
+  ChevronRight,
+  Loader2,
+  Package,
+  Search,
+  Truck,
+  X,
+} from "lucide-react";
+import {
+  groupIncomingProductsByPallet,
   matchMissingWithTransferProducts,
+  searchMatchesIncomingProduct,
   sortIncomingProducts,
+  sortIncomingProductsByPallet,
   summarizeIncomingProducts,
   type MissingMatchInput,
   type SevkiyatMatchRow,
@@ -13,6 +26,8 @@ import {
 
 type WizardStep = "date" | "choose" | "result";
 type ResultMode = "missing" | "incoming";
+type IncomingViewMode = "all" | "pallets" | "pallet-detail";
+type IncomingSortBy = "name" | "pallet";
 
 function istanbulTodayYmd(): string {
   return new Intl.DateTimeFormat("en-CA", {
@@ -67,6 +82,12 @@ export function SevkiyatControlWizard({
   const [incomingRows, setIncomingRows] = useState<TransferMatchInput[]>([]);
   const [incomingError, setIncomingError] = useState<string | null>(null);
   const [incomingWarning, setIncomingWarning] = useState<string | null>(null);
+  const [incomingViewMode, setIncomingViewMode] = useState<IncomingViewMode>("all");
+  const [incomingSortBy, setIncomingSortBy] = useState<IncomingSortBy>("name");
+  const [incomingSearchQuery, setIncomingSearchQuery] = useState("");
+  const [palletsListSearchQuery, setPalletsListSearchQuery] = useState("");
+  const [selectedPalletCode, setSelectedPalletCode] = useState<string | null>(null);
+  const [palletSearchQuery, setPalletSearchQuery] = useState("");
   const fetchGenRef = useRef(0);
 
   const reset = useCallback(() => {
@@ -80,6 +101,12 @@ export function SevkiyatControlWizard({
     setIncomingRows([]);
     setIncomingError(null);
     setIncomingWarning(null);
+    setIncomingViewMode("all");
+    setIncomingSortBy("name");
+    setIncomingSearchQuery("");
+    setPalletsListSearchQuery("");
+    setSelectedPalletCode(null);
+    setPalletSearchQuery("");
     fetchGenRef.current += 1;
   }, []);
 
@@ -179,6 +206,12 @@ export function SevkiyatControlWizard({
       }
       setIncomingRows(sortIncomingProducts(json.products));
       setIncomingWarning(json.warning);
+      setIncomingViewMode("all");
+      setIncomingSortBy("name");
+      setIncomingSearchQuery("");
+      setPalletsListSearchQuery("");
+      setSelectedPalletCode(null);
+      setPalletSearchQuery("");
     } catch {
       if (gen !== fetchGenRef.current) return;
       setIncomingError("İstek atılamadı. Ağı kontrol edip tekrar deneyin.");
@@ -186,6 +219,55 @@ export function SevkiyatControlWizard({
       if (gen === fetchGenRef.current) setLoading(false);
     }
   }
+
+  const palletGroups = useMemo(
+    () => groupIncomingProductsByPallet(incomingRows),
+    [incomingRows]
+  );
+
+  const selectedPallet = useMemo(
+    () => palletGroups.find((g) => g.palletCode === selectedPalletCode) || null,
+    [palletGroups, selectedPalletCode]
+  );
+
+  const displayedIncomingRows = useMemo(() => {
+    let rows = incomingRows;
+    if (incomingSearchQuery.trim()) {
+      rows = rows.filter((r) =>
+        searchMatchesIncomingProduct(r, incomingSearchQuery)
+      );
+    }
+    return incomingSortBy === "pallet"
+      ? sortIncomingProductsByPallet(rows)
+      : sortIncomingProducts(rows);
+  }, [incomingRows, incomingSearchQuery, incomingSortBy]);
+
+  const filteredSummaryTotalQty = useMemo(() => {
+    let total = 0;
+    for (const r of displayedIncomingRows) {
+      if (r.quantity != null) total += r.quantity;
+    }
+    return total;
+  }, [displayedIncomingRows]);
+
+  const filteredPalletGroups = useMemo(() => {
+    const q = palletsListSearchQuery.trim();
+    if (!q) return palletGroups;
+    return palletGroups.filter(
+      (g) =>
+        g.displayName.toLocaleLowerCase("tr-TR").includes(q.toLocaleLowerCase("tr-TR")) ||
+        g.products.some((p) => searchMatchesIncomingProduct(p, q))
+    );
+  }, [palletGroups, palletsListSearchQuery]);
+
+  const filteredPalletProducts = useMemo(() => {
+    if (!selectedPallet) return [];
+    const q = palletSearchQuery.trim();
+    if (!q) return selectedPallet.products;
+    return selectedPallet.products.filter((p) =>
+      searchMatchesIncomingProduct(p, q)
+    );
+  }, [selectedPallet, palletSearchQuery]);
 
   if (!isOpen) return null;
 
@@ -233,7 +315,11 @@ export function SevkiyatControlWizard({
                   ? dateYmd
                   : resultMode === "missing"
                     ? "Eksik ürünler"
-                    : "Gelen ürünler"}
+                    : incomingViewMode === "pallets"
+                      ? `Gelen ürünler · Paletler (${palletGroups.length})`
+                      : incomingViewMode === "pallet-detail"
+                        ? `Palet: ${selectedPallet?.displayName || selectedPalletCode}`
+                        : "Gelen ürünler"}
             </p>
           </div>
           <button
@@ -383,60 +469,368 @@ export function SevkiyatControlWizard({
                     Tekrar dene
                   </button>
                 </div>
+              ) : incomingEmpty ? (
+                <p className="text-sm text-zinc-600 dark:text-zinc-300">
+                  Bu tarihte teslimat/ürün yok.
+                </p>
               ) : (
                 <>
-                  {!loading && incomingRows.length > 0 && (
-                    <p className="text-xs text-zinc-500 dark:text-zinc-400">
-                      {incomingSummary.skuCount} SKU · toplam miktar{" "}
-                      {incomingSummary.totalQty}
-                      {incomingSummary.missingQtyCount > 0
-                        ? ` · miktarsız ${incomingSummary.missingQtyCount} satır`
-                        : ""}
-                    </p>
-                  )}
                   {incomingWarning && (
                     <p className="text-xs text-amber-700 dark:text-amber-300">
                       {incomingWarning}
                     </p>
                   )}
-                  {incomingEmpty && (
-                    <p className="text-sm text-zinc-600 dark:text-zinc-300">
-                      Bu tarihte teslimat/ürün yok.
-                    </p>
-                  )}
-                  {incomingRows.length > 0 && (
-                    <ul className="space-y-2.5">
-                      {incomingRows.map((row, i) => {
-                        const name = row.name?.trim() || "İsimsiz";
-                        const imageSrc = row.barcode
-                          ? getProductImage?.(row.barcode)
-                          : undefined;
-                        return (
-                          <li
-                            key={`${row.barcode || row.name || i}-${i}`}
-                            className="flex gap-3 rounded-xl border border-zinc-200 bg-zinc-50 p-3 dark:border-zinc-700 dark:bg-zinc-800/70"
+
+                  {/* 1. TÜM ÜRÜNLER GÖRÜNÜMÜ */}
+                  {incomingViewMode === "all" && (
+                    <div className="flex flex-col gap-3">
+                      {/* Ürün arama kutucuğu */}
+                      <div className="relative">
+                        <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-zinc-400 dark:text-zinc-500" />
+                        <input
+                          type="text"
+                          value={incomingSearchQuery}
+                          onChange={(e) => setIncomingSearchQuery(e.target.value)}
+                          placeholder="Ürün ismi veya barkod ile ara..."
+                          className="w-full rounded-xl border border-zinc-200 bg-white py-2.5 pl-9 pr-9 text-sm text-zinc-900 placeholder-zinc-400 focus:border-zinc-500 focus:outline-none focus:ring-1 focus:ring-zinc-500 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100 dark:placeholder-zinc-500"
+                        />
+                        {incomingSearchQuery && (
+                          <button
+                            type="button"
+                            onClick={() => setIncomingSearchQuery("")}
+                            className="absolute right-2.5 top-1/2 -translate-y-1/2 rounded-md p-1 text-zinc-400 hover:text-zinc-600 dark:text-zinc-500 dark:hover:text-zinc-300"
+                            aria-label="Aramayı temizle"
                           >
-                            <ProductThumb src={imageSrc} alt={name} />
-                            <div className="min-w-0 flex-1">
-                              <p className="text-[15px] font-medium leading-snug text-zinc-900 dark:text-zinc-50">
-                                {name}
-                              </p>
-                              <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
-                                {row.barcode?.trim() || "Barkod yok"}
-                              </p>
-                              <p className="mt-1.5 text-sm font-semibold tabular-nums text-zinc-800 dark:text-zinc-100">
-                                {row.quantity != null ? `${row.quantity} adet` : "Miktar yok"}
-                              </p>
-                              {row.palletCodes.length > 0 ? (
-                                <p className="mt-1 text-xs leading-relaxed text-zinc-500 dark:text-zinc-400">
-                                  Palet: {row.palletCodes.join(", ")}
-                                </p>
-                              ) : null}
-                            </div>
-                          </li>
-                        );
-                      })}
-                    </ul>
+                            <X className="size-4" />
+                          </button>
+                        )}
+                      </div>
+
+                      {/* Aksiyon butonları: Sıralama & Paletleri göster */}
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setIncomingSortBy((prev) =>
+                              prev === "pallet" ? "name" : "pallet"
+                            )
+                          }
+                          className={`inline-flex items-center gap-1.5 rounded-xl border px-3 py-2 text-xs font-semibold transition active:scale-[0.98] ${
+                            incomingSortBy === "pallet"
+                              ? "border-amber-400/80 bg-amber-50 text-amber-900 ring-1 ring-amber-400/50 dark:border-amber-600/70 dark:bg-amber-950/40 dark:text-amber-200"
+                              : "border-zinc-200 bg-zinc-50 text-zinc-700 hover:bg-zinc-100 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700"
+                          }`}
+                        >
+                          <ArrowUpDown className="size-3.5" />
+                          <span>
+                            {incomingSortBy === "pallet"
+                              ? "Palete göre sıralı"
+                              : "Palete göre sırala"}
+                          </span>
+                        </button>
+
+                        {palletGroups.length > 0 && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setIncomingViewMode("pallets");
+                              setPalletsListSearchQuery("");
+                            }}
+                            className="inline-flex items-center gap-1.5 rounded-xl border border-zinc-300 bg-zinc-900 px-3.5 py-2 text-xs font-semibold text-white shadow-sm transition hover:bg-zinc-800 active:scale-[0.98] dark:border-zinc-600 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200"
+                          >
+                            <Boxes className="size-3.5" />
+                            <span>Paletleri göster</span>
+                            <span className="ml-0.5 rounded-md bg-white/20 px-1.5 py-0.5 text-[11px] font-bold text-white dark:bg-zinc-900/20 dark:text-zinc-900">
+                              {palletGroups.length}
+                            </span>
+                          </button>
+                        )}
+                      </div>
+
+                      {/* Özet bilgisi */}
+                      <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                        {incomingSearchQuery.trim()
+                          ? `${displayedIncomingRows.length} / ${incomingRows.length} SKU bulundu · miktar: ${filteredSummaryTotalQty}`
+                          : `${incomingSummary.skuCount} SKU · toplam miktar ${incomingSummary.totalQty}`}
+                        {incomingSummary.missingQtyCount > 0
+                          ? ` · miktarsız ${incomingSummary.missingQtyCount} satır`
+                          : ""}
+                      </p>
+
+                      {/* Ürün Listesi */}
+                      {displayedIncomingRows.length === 0 ? (
+                        <div className="rounded-xl border border-zinc-200 bg-zinc-50/50 py-8 text-center dark:border-zinc-700 dark:bg-zinc-800/40">
+                          <p className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
+                            Aramanıza uygun ürün bulunamadı.
+                          </p>
+                          <button
+                            type="button"
+                            onClick={() => setIncomingSearchQuery("")}
+                            className="mt-2 text-xs font-semibold text-zinc-900 underline dark:text-zinc-100"
+                          >
+                            Aramayı temizle
+                          </button>
+                        </div>
+                      ) : (
+                        <ul className="space-y-2.5">
+                          {displayedIncomingRows.map((row, i) => {
+                            const name = row.name?.trim() || "İsimsiz";
+                            const imageSrc = row.barcode
+                              ? getProductImage?.(row.barcode)
+                              : undefined;
+                            return (
+                              <li
+                                key={`${row.barcode || row.name || i}-${i}`}
+                                className="flex gap-3 rounded-xl border border-zinc-200 bg-zinc-50 p-3 transition hover:border-zinc-300 dark:border-zinc-700 dark:bg-zinc-800/70 dark:hover:border-zinc-600"
+                              >
+                                <ProductThumb src={imageSrc} alt={name} />
+                                <div className="min-w-0 flex-1">
+                                  <p className="text-[15px] font-medium leading-snug text-zinc-900 dark:text-zinc-50">
+                                    {name}
+                                  </p>
+                                  <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
+                                    {row.barcode?.trim() || "Barkod yok"}
+                                  </p>
+                                  <p className="mt-1.5 text-sm font-semibold tabular-nums text-zinc-800 dark:text-zinc-100">
+                                    {row.quantity != null
+                                      ? `${row.quantity} adet`
+                                      : "Miktar yok"}
+                                  </p>
+                                  {row.palletCodes.length > 0 ? (
+                                    <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-xs text-zinc-500 dark:text-zinc-400">
+                                      <span>Palet:</span>
+                                      {row.palletCodes.map((pCode) => (
+                                        <button
+                                          key={pCode}
+                                          type="button"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            setSelectedPalletCode(pCode);
+                                            setIncomingViewMode("pallet-detail");
+                                            setPalletSearchQuery("");
+                                          }}
+                                          className="inline-flex items-center gap-1 rounded-md border border-zinc-200 bg-white px-2 py-0.5 font-mono text-[11px] font-semibold text-zinc-800 transition hover:border-zinc-400 hover:bg-zinc-100 active:scale-95 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-200 dark:hover:border-zinc-500 dark:hover:bg-zinc-700"
+                                          title={`${pCode} paletindeki ürünleri göster`}
+                                        >
+                                          {pCode}
+                                        </button>
+                                      ))}
+                                    </div>
+                                  ) : null}
+                                </div>
+                              </li>
+                            );
+                          })}
+                        </ul>
+                      )}
+                    </div>
+                  )}
+
+                  {/* 2. PALETLER LİSTESİ GÖRÜNÜMÜ */}
+                  {incomingViewMode === "pallets" && (
+                    <div className="flex flex-col gap-3">
+                      {/* Üst bar: Tüm ürünlere dön */}
+                      <div className="flex items-center justify-between gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setIncomingViewMode("all")}
+                          className="inline-flex items-center gap-1 rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-1.5 text-xs font-semibold text-zinc-700 transition hover:bg-zinc-100 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700"
+                        >
+                          <ChevronLeft className="size-3.5" />
+                          Tüm ürünleri göster
+                        </button>
+                        <span className="text-xs font-medium text-zinc-500 dark:text-zinc-400">
+                          {palletGroups.length} Palet · {incomingSummary.skuCount} SKU
+                        </span>
+                      </div>
+
+                      {/* Palet arama kutusu */}
+                      <div className="relative">
+                        <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-zinc-400 dark:text-zinc-500" />
+                        <input
+                          type="text"
+                          value={palletsListSearchQuery}
+                          onChange={(e) => setPalletsListSearchQuery(e.target.value)}
+                          placeholder="Palet numarası veya ürün ara..."
+                          className="w-full rounded-xl border border-zinc-200 bg-white py-2.5 pl-9 pr-9 text-sm text-zinc-900 placeholder-zinc-400 focus:border-zinc-500 focus:outline-none focus:ring-1 focus:ring-zinc-500 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100 dark:placeholder-zinc-500"
+                        />
+                        {palletsListSearchQuery && (
+                          <button
+                            type="button"
+                            onClick={() => setPalletsListSearchQuery("")}
+                            className="absolute right-2.5 top-1/2 -translate-y-1/2 rounded-md p-1 text-zinc-400 hover:text-zinc-600 dark:text-zinc-500 dark:hover:text-zinc-300"
+                            aria-label="Aramayı temizle"
+                          >
+                            <X className="size-4" />
+                          </button>
+                        )}
+                      </div>
+
+                      {/* Palet Listesi */}
+                      {filteredPalletGroups.length === 0 ? (
+                        <div className="rounded-xl border border-zinc-200 bg-zinc-50/50 py-8 text-center dark:border-zinc-700 dark:bg-zinc-800/40">
+                          <p className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
+                            Aramanıza uygun palet bulunamadı.
+                          </p>
+                          <button
+                            type="button"
+                            onClick={() => setPalletsListSearchQuery("")}
+                            className="mt-2 text-xs font-semibold text-zinc-900 underline dark:text-zinc-100"
+                          >
+                            Aramayı temizle
+                          </button>
+                        </div>
+                      ) : (
+                        <ul className="space-y-2.5">
+                          {filteredPalletGroups.map((group) => (
+                            <li
+                              key={group.palletCode}
+                              className="flex items-center justify-between gap-3 rounded-xl border border-zinc-200 bg-zinc-50 p-3.5 transition hover:border-zinc-300 dark:border-zinc-700 dark:bg-zinc-800/70 dark:hover:border-zinc-600"
+                            >
+                              <div className="flex min-w-0 items-center gap-3">
+                                <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-amber-500/10 text-amber-600 dark:bg-amber-400/10 dark:text-amber-400">
+                                  <Boxes className="size-5" />
+                                </div>
+                                <div className="min-w-0">
+                                  <p className="truncate font-mono text-[15px] font-bold tracking-tight text-zinc-900 dark:text-zinc-50">
+                                    {group.displayName}
+                                  </p>
+                                  <p className="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">
+                                    {group.skuCount} çeşit · {group.totalQty} adet
+                                  </p>
+                                </div>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setSelectedPalletCode(group.palletCode);
+                                  setIncomingViewMode("pallet-detail");
+                                  setPalletSearchQuery("");
+                                }}
+                                className="inline-flex shrink-0 items-center gap-1 rounded-xl bg-zinc-900 px-3.5 py-2 text-xs font-semibold text-white shadow-sm transition hover:bg-zinc-800 active:scale-[0.98] dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200"
+                              >
+                                Ürünleri göster
+                                <ChevronRight className="size-3.5" />
+                              </button>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+                  )}
+
+                  {/* 3. SEÇİLEN PALETİN ÜRÜNLERİ GÖRÜNÜMÜ */}
+                  {incomingViewMode === "pallet-detail" && (
+                    <div className="flex flex-col gap-3">
+                      {/* Üst bar: Palet listesine dön butonu */}
+                      <div className="flex items-center justify-between gap-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setIncomingViewMode("pallets");
+                            setPalletSearchQuery("");
+                          }}
+                          className="inline-flex items-center gap-1 rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-1.5 text-xs font-semibold text-zinc-700 transition hover:bg-zinc-100 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700"
+                        >
+                          <ChevronLeft className="size-3.5" />
+                          Palet listesine dön
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setIncomingViewMode("all");
+                            setPalletSearchQuery("");
+                          }}
+                          className="text-xs font-medium text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-200"
+                        >
+                          Tüm ürünler
+                        </button>
+                      </div>
+
+                      {/* Palet Bilgi Başlığı */}
+                      <div className="flex items-center justify-between rounded-xl border border-amber-300/80 bg-amber-50/70 p-3.5 dark:border-amber-700/60 dark:bg-amber-950/30">
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2">
+                            <Boxes className="size-4 shrink-0 text-amber-700 dark:text-amber-400" />
+                            <span className="truncate font-mono text-sm font-bold tracking-tight text-amber-950 dark:text-amber-200">
+                              {selectedPallet?.displayName}
+                            </span>
+                          </div>
+                          <p className="mt-1 text-xs text-amber-900/80 dark:text-amber-300/80">
+                            Bu palette {selectedPallet?.skuCount ?? 0} çeşit, toplam{" "}
+                            {selectedPallet?.totalQty ?? 0} adet ürün var
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Bu palette arama kutusu ("Yine orada da arama butonu olacak") */}
+                      <div className="relative">
+                        <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-zinc-400 dark:text-zinc-500" />
+                        <input
+                          type="text"
+                          value={palletSearchQuery}
+                          onChange={(e) => setPalletSearchQuery(e.target.value)}
+                          placeholder="Bu palette ürün veya barkod ara..."
+                          className="w-full rounded-xl border border-zinc-200 bg-white py-2.5 pl-9 pr-9 text-sm text-zinc-900 placeholder-zinc-400 focus:border-zinc-500 focus:outline-none focus:ring-1 focus:ring-zinc-500 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100 dark:placeholder-zinc-500"
+                        />
+                        {palletSearchQuery && (
+                          <button
+                            type="button"
+                            onClick={() => setPalletSearchQuery("")}
+                            className="absolute right-2.5 top-1/2 -translate-y-1/2 rounded-md p-1 text-zinc-400 hover:text-zinc-600 dark:text-zinc-500 dark:hover:text-zinc-300"
+                            aria-label="Aramayı temizle"
+                          >
+                            <X className="size-4" />
+                          </button>
+                        )}
+                      </div>
+
+                      {/* Palet İçi Ürün Listesi */}
+                      {filteredPalletProducts.length === 0 ? (
+                        <div className="rounded-xl border border-zinc-200 bg-zinc-50/50 py-8 text-center dark:border-zinc-700 dark:bg-zinc-800/40">
+                          <p className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
+                            Bu palette aradığınız kriterlere uygun ürün bulunamadı.
+                          </p>
+                          <button
+                            type="button"
+                            onClick={() => setPalletSearchQuery("")}
+                            className="mt-2 text-xs font-semibold text-zinc-900 underline dark:text-zinc-100"
+                          >
+                            Aramayı temizle
+                          </button>
+                        </div>
+                      ) : (
+                        <ul className="space-y-2.5">
+                          {filteredPalletProducts.map((row, i) => {
+                            const name = row.name?.trim() || "İsimsiz";
+                            const imageSrc = row.barcode
+                              ? getProductImage?.(row.barcode)
+                              : undefined;
+                            return (
+                              <li
+                                key={`${row.barcode || row.name || i}-${i}`}
+                                className="flex gap-3 rounded-xl border border-zinc-200 bg-zinc-50 p-3 dark:border-zinc-700 dark:bg-zinc-800/70"
+                              >
+                                <ProductThumb src={imageSrc} alt={name} />
+                                <div className="min-w-0 flex-1">
+                                  <p className="text-[15px] font-medium leading-snug text-zinc-900 dark:text-zinc-50">
+                                    {name}
+                                  </p>
+                                  <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
+                                    {row.barcode?.trim() || "Barkod yok"}
+                                  </p>
+                                  <p className="mt-1.5 text-sm font-semibold tabular-nums text-zinc-800 dark:text-zinc-100">
+                                    {row.quantity != null
+                                      ? `${row.quantity} adet`
+                                      : "Miktar yok"}
+                                  </p>
+                                </div>
+                              </li>
+                            );
+                          })}
+                        </ul>
+                      )}
+                    </div>
                   )}
                 </>
               )}
@@ -478,12 +872,29 @@ export function SevkiyatControlWizard({
               type="button"
               disabled={loading}
               onClick={() => {
+                if (step === "result" && resultMode === "incoming") {
+                  if (incomingViewMode === "pallet-detail") {
+                    setIncomingViewMode("pallets");
+                    setPalletSearchQuery("");
+                    return;
+                  }
+                  if (incomingViewMode === "pallets") {
+                    setIncomingViewMode("all");
+                    return;
+                  }
+                }
                 setMissingError(null);
                 setMissingRows([]);
                 setMissingWarning(null);
                 setIncomingError(null);
                 setIncomingRows([]);
                 setIncomingWarning(null);
+                setIncomingViewMode("all");
+                setIncomingSortBy("name");
+                setIncomingSearchQuery("");
+                setPalletsListSearchQuery("");
+                setSelectedPalletCode(null);
+                setPalletSearchQuery("");
                 setStep(step === "result" ? "choose" : "date");
               }}
               className="inline-flex min-h-11 items-center justify-center gap-1 rounded-xl border border-zinc-300 px-4 text-sm font-medium text-zinc-700 disabled:opacity-50 dark:border-zinc-600 dark:text-zinc-300"

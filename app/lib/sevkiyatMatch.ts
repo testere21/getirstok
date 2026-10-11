@@ -257,3 +257,154 @@ export function formatIncomingProductLine(row: TransferMatchInput): string {
     ? `${name} · ${barcode} · ${qty} · ${pallets}`
     : `${name} · ${barcode} · ${qty}`;
 }
+
+export function turkishToAscii(str: string): string {
+  return str
+    .replace(/ğ/g, "g")
+    .replace(/Ğ/g, "g")
+    .replace(/ü/g, "u")
+    .replace(/Ü/g, "u")
+    .replace(/ş/g, "s")
+    .replace(/Ş/g, "s")
+    .replace(/ı/g, "i")
+    .replace(/İ/g, "i")
+    .replace(/ö/g, "o")
+    .replace(/Ö/g, "o")
+    .replace(/ç/g, "c")
+    .replace(/Ç/g, "c")
+    .toLowerCase();
+}
+
+/**
+ * Ürün adı, barkod veya palet kodu üzerinden esnek Türkçe arama.
+ * Büyük/küçük harf ve Türkçe karakter toleranslıdır.
+ */
+export function searchMatchesIncomingProduct(
+  product: {
+    name: string | null;
+    barcode: string | null;
+    palletCodes?: string[];
+  },
+  query: string
+): boolean {
+  const q = query.trim();
+  if (!q) return true;
+
+  const qLower = q.toLocaleLowerCase("tr-TR");
+  const qAscii = turkishToAscii(q);
+
+  const name = product.name || "";
+  const barcode = product.barcode || "";
+  const pallets = (product.palletCodes || []).join(" ");
+
+  const nameLower = name.toLocaleLowerCase("tr-TR");
+  const nameAscii = turkishToAscii(name);
+  const barcodeLower = barcode.toLowerCase();
+  const palletsLower = pallets.toLowerCase();
+
+  return (
+    nameLower.includes(qLower) ||
+    nameAscii.includes(qAscii) ||
+    barcodeLower.includes(qLower) ||
+    palletsLower.includes(qLower)
+  );
+}
+
+/**
+ * Gelen ürünleri palet koduna göre sıralar.
+ * Paletli ürünler alfabetik/sayısal palet sırasına göre önce gelir,
+ * aynı paletteki ürünler ada göre sıralanır.
+ * Paletsiz ürünler en sona yerleştirilir.
+ */
+export function sortIncomingProductsByPallet(
+  rows: readonly TransferMatchInput[]
+): TransferMatchInput[] {
+  return [...rows].sort((a, b) => {
+    const palA = a.palletCodes && a.palletCodes.length > 0 ? a.palletCodes[0].trim() : "";
+    const palB = b.palletCodes && b.palletCodes.length > 0 ? b.palletCodes[0].trim() : "";
+
+    if (palA && !palB) return -1;
+    if (!palA && palB) return 1;
+
+    if (palA && palB && palA !== palB) {
+      const cmp = palA.localeCompare(palB, "tr-TR", { numeric: true, sensitivity: "base" });
+      if (cmp !== 0) return cmp;
+    }
+
+    return (a.name || "").localeCompare(b.name || "", "tr-TR", { sensitivity: "base" });
+  });
+}
+
+export type IncomingPalletGroup = {
+  palletCode: string;
+  displayName: string;
+  isNoPallet: boolean;
+  products: TransferMatchInput[];
+  skuCount: number;
+  totalQty: number;
+};
+
+/**
+ * Gelen ürünleri palet kodlarına göre gruplar.
+ * Her palet için ürün listesi, SKU sayısı ve toplam miktar hesaplanır.
+ * Paletsiz ürünler varsa listenin sonuna "Palet Kodu Yok" grubu olarak eklenir.
+ */
+export function groupIncomingProductsByPallet(
+  rows: readonly TransferMatchInput[]
+): IncomingPalletGroup[] {
+  const palletMap = new Map<string, TransferMatchInput[]>();
+  const noPalletProducts: TransferMatchInput[] = [];
+
+  for (const row of rows) {
+    if (row.palletCodes && row.palletCodes.length > 0) {
+      for (const code of row.palletCodes) {
+        const trimmed = code.trim();
+        if (!trimmed) continue;
+        const list = palletMap.get(trimmed) ?? [];
+        list.push(row);
+        palletMap.set(trimmed, list);
+      }
+    } else {
+      noPalletProducts.push(row);
+    }
+  }
+
+  const sortedCodes = [...palletMap.keys()].sort((a, b) =>
+    a.localeCompare(b, "tr-TR", { numeric: true, sensitivity: "base" })
+  );
+
+  const groups: IncomingPalletGroup[] = sortedCodes.map((code) => {
+    const products = sortIncomingProducts(palletMap.get(code)!);
+    let totalQty = 0;
+    for (const p of products) {
+      if (p.quantity != null) totalQty += p.quantity;
+    }
+    return {
+      palletCode: code,
+      displayName: code,
+      isNoPallet: false,
+      products,
+      skuCount: products.length,
+      totalQty,
+    };
+  });
+
+  if (noPalletProducts.length > 0) {
+    const products = sortIncomingProducts(noPalletProducts);
+    let totalQty = 0;
+    for (const p of products) {
+      if (p.quantity != null) totalQty += p.quantity;
+    }
+    groups.push({
+      palletCode: "__NO_PALLET__",
+      displayName: "Palet Kodu Yok",
+      isNoPallet: true,
+      products,
+      skuCount: products.length,
+      totalQty,
+    });
+  }
+
+  return groups;
+}
+

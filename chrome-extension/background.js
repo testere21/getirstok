@@ -222,14 +222,26 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   return true;
 });
 
+// Bayi paneli her istekte aynı token'ı yolluyor; aynı token'ı tekrar tekrar
+// panele yazmamak için son gönderileni tutuyoruz.
+let lastSentFranchiseToken = null;
+
+// /auth/* isteklerinde Bearer access token değil (refresh-token, OTP ön token'ı)
+function isFranchiseDataRequest(url) {
+  const u = String(url || "");
+  if (!u.includes("franchise-api-gateway.getirapi.com")) return false;
+  return !/franchise-api-gateway\.getirapi\.com\/auth\//i.test(u);
+}
+
 // Token yakalama - webRequest API kullanarak
 chrome.webRequest.onBeforeSendHeaders.addListener(
   function(details) {
     let tokenType = null;
     let shouldCapture = false;
     
-    // Getir Bayi Paneli token'ı (franchise-api-gateway) - sadece /stocks endpoint'i için
-    if (details.url.includes("franchise-api-gateway.getirapi.com/stocks")) {
+    // Getir Bayi Paneli token'ı (franchise-api-gateway) — yeni panel /stocks'a
+    // her sayfada gitmediği için gateway'e giden tüm veri isteklerinden alınıyor
+    if (isFranchiseDataRequest(details.url)) {
       tokenType = "franchise";
       shouldCapture = true;
     }
@@ -258,6 +270,10 @@ chrome.webRequest.onBeforeSendHeaders.addListener(
           
           // Token formatını kontrol et (eyJ ile başlamalı)
           if (bearerToken.startsWith("eyJ") && bearerToken.length > 50) {
+            if (tokenType === "franchise") {
+              if (bearerToken === lastSentFranchiseToken) return;
+              lastSentFranchiseToken = bearerToken;
+            }
             const panelName = tokenType === "franchise" ? "Bayi Paneli" : "Depo Paneli";
             console.log(`[Getir Token Yakalayıcı] ${panelName} token yakalandı:`, bearerToken.substring(0, 20) + "...");
             
@@ -285,7 +301,7 @@ chrome.webRequest.onBeforeSendHeaders.addListener(
   },
   {
     urls: [
-      "https://franchise-api-gateway.getirapi.com/stocks*",
+      "https://franchise-api-gateway.getirapi.com/*",
       "https://warehouse-panel-api-gateway.getirapi.com/*/products*",
       "https://warehouse-panel-api-gateway.getirapi.com/*transfer*"
     ]

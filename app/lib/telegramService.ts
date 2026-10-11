@@ -304,6 +304,26 @@ export function buildSayimChangeMessage(
   return lines.join("\n");
 }
 
+export interface InventoryCheckTelegramPayload {
+  inventoryCheckId: string;
+  productNames: string[];
+}
+
+/** Kasa/Palet sekmesinden depo panelinde sayım açıldığında gönderilir. */
+export function buildInventoryCheckMessage(
+  payload: InventoryCheckTelegramPayload
+): string {
+  const lines = [
+    "📋 KASA/PALET SAYIMI AÇILDI",
+    `Ürün sayısı: ${payload.productNames.length}`,
+  ];
+  for (const name of payload.productNames) {
+    lines.push(`• ${name.trim() || "-"}`);
+  }
+  lines.push(`Sayım no: ${payload.inventoryCheckId}`);
+  return lines.join("\n");
+}
+
 export function buildBakeryBakeAlertMessage(
   items: BakeryBakeAlertItem[],
   slotLabel?: string | null

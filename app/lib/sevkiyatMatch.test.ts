@@ -3,8 +3,11 @@ import { test } from "node:test";
 import {
   formatIncomingProductLine,
   formatMissingMatchLine,
+  groupIncomingProductsByPallet,
   matchMissingWithTransferProducts,
+  searchMatchesIncomingProduct,
   sortIncomingProducts,
+  sortIncomingProductsByPallet,
   summarizeIncomingProducts,
 } from "./sevkiyatMatch";
 
@@ -160,3 +163,73 @@ test("gelen ürünler ada göre A→Z ve toplam miktar", () => {
     "Coca-Cola · 1 · 24 · K1"
   );
 });
+
+test("searchMatchesIncomingProduct: ürün adı, barkod ve palet ile arama", () => {
+  const prod = {
+    name: "7 Days Çilekli Kruvasan (60 g)",
+    barcode: "7622202365355",
+    quantity: 24,
+    palletCodes: ["K0011215706"],
+  };
+
+  // Tam veya kısmi isim
+  assert.equal(searchMatchesIncomingProduct(prod, "Çilekli"), true);
+  // Türkçe karakter toleransı (cilekli -> Çilekli)
+  assert.equal(searchMatchesIncomingProduct(prod, "cilekli"), true);
+  assert.equal(searchMatchesIncomingProduct(prod, "kruvasan"), true);
+  // Barkod araması
+  assert.equal(searchMatchesIncomingProduct(prod, "762220"), true);
+  // Palet kodu araması
+  assert.equal(searchMatchesIncomingProduct(prod, "K0011215706"), true);
+  assert.equal(searchMatchesIncomingProduct(prod, "1215706"), true);
+  // Uyuşmayan arama
+  assert.equal(searchMatchesIncomingProduct(prod, "Peynir"), false);
+  // Boş arama hepsiyle eşleşir
+  assert.equal(searchMatchesIncomingProduct(prod, ""), true);
+});
+
+test("sortIncomingProductsByPallet: palet koduna göre sıralama", () => {
+  const items = [
+    { name: "Çilekli Kruvasan", barcode: "1", quantity: 5, palletCodes: ["K002"] },
+    { name: "Süt", barcode: "2", quantity: 10, palletCodes: [] },
+    { name: "Ayran", barcode: "3", quantity: 20, palletCodes: ["K001"] },
+    { name: "Kakaolu Kruvasan", barcode: "4", quantity: 3, palletCodes: ["K002"] },
+  ];
+
+  const sorted = sortIncomingProductsByPallet(items);
+  // K001 önce gelir
+  assert.equal(sorted[0].name, "Ayran");
+  // K002 ürünleri (kendi içinde ada göre A-Z)
+  assert.equal(sorted[1].name, "Çilekli Kruvasan");
+  assert.equal(sorted[2].name, "Kakaolu Kruvasan");
+  // Paletsiz en sonda
+  assert.equal(sorted[3].name, "Süt");
+});
+
+test("groupIncomingProductsByPallet: palet gruplama ve miktar hesaplama", () => {
+  const items = [
+    { name: "Kruvasan 1", barcode: "1", quantity: 10, palletCodes: ["K002"] },
+    { name: "Ayran", barcode: "2", quantity: 20, palletCodes: ["K001"] },
+    { name: "Kruvasan 2", barcode: "3", quantity: 5, palletCodes: ["K002"] },
+    { name: "Paletsiz Ürün", barcode: "4", quantity: 2, palletCodes: [] },
+  ];
+
+  const groups = groupIncomingProductsByPallet(items);
+  assert.equal(groups.length, 3);
+
+  // K001
+  assert.equal(groups[0].palletCode, "K001");
+  assert.equal(groups[0].skuCount, 1);
+  assert.equal(groups[0].totalQty, 20);
+
+  // K002
+  assert.equal(groups[1].palletCode, "K002");
+  assert.equal(groups[1].skuCount, 2);
+  assert.equal(groups[1].totalQty, 15);
+
+  // Palet Kodu Yok
+  assert.equal(groups[2].isNoPallet, true);
+  assert.equal(groups[2].skuCount, 1);
+  assert.equal(groups[2].totalQty, 2);
+});
+

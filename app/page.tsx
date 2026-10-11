@@ -16,6 +16,7 @@ import {
   ArrowUp,
   ArrowDown,
   ChefHat,
+  ClipboardList,
   Scale,
   X,
   RefreshCw,
@@ -39,6 +40,9 @@ import {
   AlertTriangle,
   CheckCircle2,
   Droplets,
+  ChevronDown,
+  EyeOff,
+  Power,
 } from "lucide-react";
 import { deleteStockItem, subscribeStockItems } from "@/app/lib/stockService";
 import { ExpiringProductNotification } from "./components/ExpiringProductNotification";
@@ -48,6 +52,7 @@ import { BarkodOlusturucuModal } from "./components/BarkodOlusturucuModal";
 import { ReferenceWaterProductsPanel } from "./components/ReferenceWaterProductsPanel";
 import { ReferenceWaterProductsPanelContent } from "./components/ReferenceWaterProductsPanelContent";
 import { SayimTabContent } from "./components/SayimTabContent";
+import { KasaPaletSayimTabContent } from "./components/KasaPaletSayimTabContent";
 import type { SayimPair } from "@/app/lib/sayimMatch";
 import type { StockItemWithId, ExpiringProductWithId } from "@/app/lib/types";
 import { formatDateTime, formatTryPriceTRY } from "@/app/lib/utils";
@@ -68,6 +73,10 @@ import {
 } from "@/app/lib/bakeryBakeSuggestions";
 import { isBakeryQuietHours } from "@/app/lib/bakeryQuietHours";
 import { subscribeBakeryBakeSuggestions } from "@/app/lib/bakeryBakeSuggestionService";
+import {
+  setBakeryProductActive,
+  subscribeBakeryInactiveBarcodes,
+} from "@/app/lib/bakeryInactiveService";
 import {
   isDocumentVisible,
   onDocumentBecameVisible,
@@ -109,7 +118,8 @@ export type TabType =
   | "extra"
   | "expiring"
   | "bakery"
-  | "sayim";
+  | "sayim"
+  | "kasaPalet";
 
 interface ToastState {
   message: string;
@@ -716,6 +726,13 @@ export default function Home() {
     "default" | "asc" | "desc"
   >("default");
   const [bakeryShowDepleted, setBakeryShowDepleted] = useState(false);
+  const [bakeryInactiveBarcodes, setBakeryInactiveBarcodes] = useState<
+    Set<string>
+  >(() => new Set());
+  const [bakeryInactiveOpen, setBakeryInactiveOpen] = useState(false);
+  const [bakeryActivePending, setBakeryActivePending] = useState<Set<string>>(
+    () => new Set()
+  );
   const [bakeryBakeItems, setBakeryBakeItems] = useState<
     BakeryBakeSuggestionItem[]
   >([]);
@@ -884,10 +901,16 @@ export default function Home() {
     };
   }, []);
 
+  useEffect(
+    () => subscribeBakeryInactiveBarcodes(setBakeryInactiveBarcodes),
+    []
+  );
+
   useEffect(() => {
     if (activeTab !== "bakery") {
       setBakeryRafSort("default");
       setBakeryShowDepleted(false);
+      setBakeryInactiveOpen(false);
     }
   }, [activeTab]);
 
@@ -966,8 +989,46 @@ export default function Home() {
     return m;
   }, [bakeryRows, bakeryBakeItems, bakeryBakeSlot]);
 
+  const bakeryActiveRows = useMemo(
+    () => bakeryRows.filter((r) => !bakeryInactiveBarcodes.has(r.barcode)),
+    [bakeryRows, bakeryInactiveBarcodes]
+  );
+  const bakeryInactiveRows = useMemo(
+    () => bakeryRows.filter((r) => bakeryInactiveBarcodes.has(r.barcode)),
+    [bakeryRows, bakeryInactiveBarcodes]
+  );
+
+  const handleBakeryActiveToggle = useCallback(
+    async (row: BakeryResolvedRow, active: boolean) => {
+      setBakeryActivePending((prev) => new Set(prev).add(row.barcode));
+      try {
+        await setBakeryProductActive(row.barcode, active);
+        setToast({
+          message: active
+            ? `${row.displayName} aktif edildi; raf stoğu bitince yine uyarı verir.`
+            : `${row.displayName} deaktif edildi; raf stoğu 0 olsa da uyarı vermez.`,
+          type: "success",
+        });
+      } catch {
+        setToast({
+          message: active
+            ? "Ürün aktif edilemedi, tekrar deneyin."
+            : "Ürün deaktif edilemedi, tekrar deneyin.",
+          type: "error",
+        });
+      } finally {
+        setBakeryActivePending((prev) => {
+          const next = new Set(prev);
+          next.delete(row.barcode);
+          return next;
+        });
+      }
+    },
+    []
+  );
+
   const bakeryDisplayRows = useMemo(() => {
-    const rows = [...bakeryRows];
+    const rows = [...bakeryActiveRows];
     const idx = (r: BakeryResolvedRow) =>
       bakeryRowIndexByBarcode.get(r.barcode) ?? 0;
 
@@ -1021,7 +1082,7 @@ export default function Home() {
     });
     return rows;
   }, [
-    bakeryRows,
+    bakeryActiveRows,
     bakeryRowIndexByBarcode,
     bakeryStocksForUi,
     bakeryStocksLoadingForUi,
@@ -1056,19 +1117,22 @@ export default function Home() {
     ? [...bakeryPrimaryRows, ...bakeryDepletedRows]
     : bakeryPrimaryRows;
 
-  /** Raf stoğu > 0 olan fırın satırları (sıra: liste sıralamasıyla aynı) */
+  /**
+   * Raf stoğu > 0 olan fırın satırları (sıra: liste sıralamasıyla aynı).
+   * Deaktif ürünler de dahil: rafta duruyorlarsa çıkarılmaları gerekir.
+   */
   const bakeryExitQueue = useMemo(() => {
-    return bakeryDisplayRows.filter((row) => {
+    return [...bakeryDisplayRows, ...bakeryInactiveRows].filter((row) => {
       const s = bakeryStocksForUi[row.barcode];
       return typeof s === "number" && s > 0;
     });
-  }, [bakeryDisplayRows, bakeryStocksForUi]);
+  }, [bakeryDisplayRows, bakeryInactiveRows, bakeryStocksForUi]);
 
   const bakeryCookAlertItems = useMemo(() => {
     const hasShelfData = Object.keys(bakeryStocksForUi).length > 0;
     if (bakeryStocksLoadingForUi && !hasShelfData) return [];
     const out: { name: string; barcode: string; bakeQty: number }[] = [];
-    for (const row of bakeryRows) {
+    for (const row of bakeryActiveRows) {
       const shelf = bakeryStocksForUi[row.barcode];
       const qty = bakeryBakeQtyByBarcode.get(row.barcode) ?? 0;
       if (
@@ -1086,7 +1150,7 @@ export default function Home() {
     }
     return out;
   }, [
-    bakeryRows,
+    bakeryActiveRows,
     bakeryStocksForUi,
     bakeryStocksLoadingForUi,
     bakeryBakeQtyByBarcode,
@@ -1946,7 +2010,7 @@ export default function Home() {
         <div className="overflow-hidden rounded-xl border border-zinc-200 dark:border-zinc-700">
           <div
             role="tablist"
-            aria-label="Eksik, fazla, yaklaşan SKT ve fırın ürünleri"
+            aria-label="Eksik, fazla, yaklaşan SKT, fırın ürünleri, sayım ve kasa/palet sayımı"
             className="flex flex-wrap gap-0 border-b border-zinc-200 bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-800"
           >
             <button
@@ -2075,6 +2139,30 @@ export default function Home() {
                 />
               )}
             </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={activeTab === "kasaPalet"}
+              aria-controls="panel-kasa-palet"
+              id="tab-kasa-palet"
+              onClick={() => setActiveTab("kasaPalet")}
+              className={`relative min-h-[44px] px-4 py-4 text-sm font-medium transition duration-200 sm:px-6 sm:py-4 sm:text-base motion-reduce:transition-none ${
+                activeTab === "kasaPalet"
+                  ? "text-violet-700 hover:bg-violet-50/80 dark:text-violet-400 dark:hover:bg-violet-950/35"
+                  : "text-zinc-500 hover:bg-zinc-200/80 hover:text-zinc-800 active:bg-zinc-300 dark:text-zinc-400 dark:hover:bg-zinc-700/80 dark:hover:text-zinc-100 dark:active:bg-zinc-600"
+              }`}
+            >
+              <span className="inline-flex items-center gap-1.5">
+                <ClipboardList className="size-4 opacity-80" aria-hidden />
+                Kasa/Palet Sayımı
+              </span>
+              {activeTab === "kasaPalet" && (
+                <span
+                  className="absolute bottom-0 left-0 right-0 h-0.5 bg-violet-600 dark:bg-violet-400"
+                  aria-hidden
+                />
+              )}
+            </button>
           </div>
           <div
             role="tabpanel"
@@ -2089,7 +2177,9 @@ export default function Home() {
                       ? "panel-bakery"
                       : activeTab === "sayim"
                         ? "panel-sayim"
-                        : "panel-missing"
+                        : activeTab === "kasaPalet"
+                          ? "panel-kasa-palet"
+                          : "panel-missing"
             }
             aria-labelledby={
               activeTab === "missing"
@@ -2102,7 +2192,9 @@ export default function Home() {
                       ? "tab-bakery"
                       : activeTab === "sayim"
                         ? "tab-sayim"
-                        : "tab-missing"
+                        : activeTab === "kasaPalet"
+                          ? "tab-kasa-palet"
+                          : "tab-missing"
             }
             className="min-h-[120px]"
           >
@@ -2444,6 +2536,25 @@ export default function Home() {
                                 <ChefHat className="size-5 text-zinc-400" />
                               </span>
                             );
+                            const togglePending = bakeryActivePending.has(
+                              row.barcode
+                            );
+                            const deactivateButton = (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  void handleBakeryActiveToggle(row, false);
+                                }}
+                                disabled={togglePending}
+                                className="inline-flex shrink-0 items-center gap-1 self-center rounded-lg border border-zinc-300 bg-white px-2 py-1 text-[11px] font-medium text-zinc-600 transition hover:border-zinc-400 hover:bg-zinc-100 hover:text-zinc-900 disabled:cursor-wait disabled:opacity-50 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-300 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
+                                title="Deaktif et: raf stoğu 0 olsa da uyarı vermez"
+                                aria-label={`${row.displayName} ürününü deaktif et`}
+                              >
+                                <EyeOff className="size-3.5" aria-hidden />
+                                Deaktif et
+                              </button>
+                            );
                             return (
                               <li
                                 key={row.barcode}
@@ -2503,6 +2614,7 @@ export default function Home() {
                                       </span>
                                     </p>
                               </div>
+                                  {deactivateButton}
                                 </div>
                                 <div
                                   className="hidden w-full items-center gap-4 px-4 py-3 text-sm sm:grid"
@@ -2563,7 +2675,7 @@ export default function Home() {
                                       {shelfText}
                             </span>
                                   </div>
-                                  <div className="hidden min-w-0 justify-end sm:flex">
+                                  <div className="hidden min-w-0 items-center justify-end gap-2 sm:flex">
                                     {needsBake && (
                                       <div
                                         className="bakery-cook-alert-banner inline-flex items-center rounded-lg border border-red-300/80 bg-gradient-to-r from-red-100/95 via-amber-50/95 to-red-100/95 px-2.5 py-1 text-center dark:border-red-800/70 dark:from-red-950/90 dark:via-amber-950/35 dark:to-red-950/90"
@@ -2574,6 +2686,7 @@ export default function Home() {
                             </span>
                                       </div>
                                     )}
+                                    {deactivateButton}
                                   </div>
                                 </div>
                                 {needsBake && (
@@ -2603,11 +2716,104 @@ export default function Home() {
                               : "Biten ürünleri göster"}
                           </button>
                         )}
+                      {bakeryInactiveRows.length > 0 && (
+                        <div className="shrink-0 border-t border-zinc-200 dark:border-zinc-700">
+                          <button
+                            type="button"
+                            onClick={() => setBakeryInactiveOpen((open) => !open)}
+                            aria-expanded={bakeryInactiveOpen}
+                            aria-controls="bakery-inactive-panel"
+                            className="flex w-full items-center justify-center gap-2 bg-zinc-100 px-4 py-2.5 text-xs font-medium text-zinc-700 transition hover:bg-zinc-200 dark:bg-zinc-800/80 dark:text-zinc-200 dark:hover:bg-zinc-700/80"
+                          >
+                            <EyeOff className="size-3.5 opacity-70" aria-hidden />
+                            Deaktif ürünler ({bakeryInactiveRows.length})
+                            <ChevronDown
+                              className={`size-4 transition-transform duration-300 motion-reduce:transition-none ${
+                                bakeryInactiveOpen ? "rotate-180" : ""
+                              }`}
+                              aria-hidden
+                            />
+                          </button>
+                          <div
+                            id="bakery-inactive-panel"
+                            className={`grid transition-[grid-template-rows] duration-300 ease-out motion-reduce:transition-none ${
+                              bakeryInactiveOpen
+                                ? "grid-rows-[1fr]"
+                                : "grid-rows-[0fr]"
+                            }`}
+                            inert={!bakeryInactiveOpen}
+                          >
+                            <div className="min-h-0 overflow-hidden">
+                              <ul
+                                role="list"
+                                className="max-h-[28vh] overflow-auto divide-y divide-zinc-200 bg-zinc-50/80 dark:divide-zinc-700 dark:bg-zinc-900/50"
+                              >
+                                {bakeryInactiveRows.map((row) => {
+                                  const imageUrl = getCatalogProductImage(row.barcode);
+                                  const shelf = bakeryStocksForUi[row.barcode];
+                                  const pending = bakeryActivePending.has(row.barcode);
+                                  return (
+                                    <li
+                                      key={row.barcode}
+                                      className="flex items-center gap-3 px-4 py-2.5"
+                                    >
+                                      {imageUrl ? (
+                                        <img
+                                          src={imageUrl}
+                                          alt=""
+                                          className="size-10 shrink-0 rounded object-cover opacity-60 grayscale"
+                                          width={40}
+                                          height={40}
+                                          loading="lazy"
+                                        />
+                                      ) : (
+                                        <span className="flex size-10 shrink-0 items-center justify-center rounded-lg border border-zinc-200 bg-zinc-100 dark:border-zinc-700 dark:bg-zinc-800">
+                                          <ChefHat className="size-5 text-zinc-400" />
+                                        </span>
+                                      )}
+                                      <div className="min-w-0 flex-1">
+                                        <p className="line-clamp-2 text-sm font-medium text-zinc-600 dark:text-zinc-300">
+                                          {row.displayName}
+                                        </p>
+                                        <p className="mt-0.5 text-[11px] tabular-nums text-zinc-500 dark:text-zinc-400">
+                                          {row.barcode} · Raf:{" "}
+                                          {bakeryStocksLoadingForUi
+                                            ? "…"
+                                            : typeof shelf === "number"
+                                              ? shelf
+                                              : "—"}
+                                        </p>
+                                      </div>
+                                      <button
+                                        type="button"
+                                        onClick={() =>
+                                          void handleBakeryActiveToggle(row, true)
+                                        }
+                                        disabled={pending}
+                                        className="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-emerald-700 disabled:cursor-wait disabled:opacity-50"
+                                        aria-label={`${row.displayName} ürününü aktif et`}
+                                      >
+                                        <Power className="size-3.5" aria-hidden />
+                                        Aktif et
+                                      </button>
+                                    </li>
+                                  );
+                                })}
+                              </ul>
+                            </div>
+                          </div>
+                        </div>
+                      )}
                       </div>
                     </>
                   )}
                   </div>
               )
+            ) : activeTab === "kasaPalet" ? (
+              <KasaPaletSayimTabContent
+                onSuccess={setSuccessModalMessage}
+                onError={(message) => setToast({ message, type: "error", autoClose: 12000 })}
+              />
             ) : isLoading || catalogLoading ? (
               <ListSkeleton />
             ) : activeTab === "sayim" ? (

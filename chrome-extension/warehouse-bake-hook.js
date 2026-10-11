@@ -134,6 +134,57 @@
     );
   }
 
+  function extractProductBarcodesFromNode(node, out) {
+    if (!node || typeof node !== "object") return;
+    if (Array.isArray(node)) {
+      for (const item of node) extractProductBarcodesFromNode(item, out);
+      return;
+    }
+    const name =
+      typeof node.name === "string"
+        ? node.name
+        : typeof node.productName === "string"
+          ? node.productName
+          : typeof node.fullName === "string"
+            ? node.fullName
+            : null;
+    const barcode =
+      typeof node.barcode === "string" && node.barcode.trim()
+        ? node.barcode.trim()
+        : typeof node.clientProductId === "string" && /^\d{6,}$/.test(node.clientProductId.trim())
+          ? node.clientProductId.trim()
+          : Array.isArray(node.barcodes) && node.barcodes.length > 0 && typeof node.barcodes[0] === "string"
+            ? node.barcodes[0].trim()
+            : null;
+
+    if (name && barcode) {
+      const cleanName = name.replace(/\s+/g, " ").trim();
+      out[cleanName] = barcode;
+      out[cleanName.toLowerCase()] = barcode;
+    }
+
+    for (const v of Object.values(node)) {
+      if (v && typeof v === "object") {
+        extractProductBarcodesFromNode(v, out);
+      }
+    }
+  }
+
+  function publishOrderBarcodes(json) {
+    if (!json || typeof json !== "object") return;
+    const barcodes = {};
+    extractProductBarcodesFromNode(json, barcodes);
+    if (Object.keys(barcodes).length > 0) {
+      window.postMessage(
+        {
+          source: "getirstok-order-barcodes",
+          barcodes,
+        },
+        "*"
+      );
+    }
+  }
+
   const origFetch = window.fetch;
   if (typeof origFetch === "function") {
     window.fetch = async function (...args) {
@@ -172,6 +223,7 @@
             .then((json) => {
               publish(url, json);
               publishTransfer(meta, json);
+              publishOrderBarcodes(json);
             })
             .catch(() => {});
         }
@@ -220,6 +272,7 @@
             },
             json
           );
+          publishOrderBarcodes(json);
         } catch {
           /* ignore */
         }

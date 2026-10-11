@@ -47,7 +47,7 @@ function loadFranchiseTokenStatus() {
     } else {
       // Token yok
       franchiseStatusDiv.className = "status error";
-      franchiseStatusDiv.innerHTML = "⚠ Bayi Paneli token henüz yakalanmadı<br><small>franchise.getir.com'da stocks sayfasını açın</small>";
+      franchiseStatusDiv.innerHTML = "⚠ Bayi Paneli token henüz yakalanmadı<br><small>franchise-v2.getir.com'u açıp herhangi bir sayfaya girin</small>";
       franchiseTokenInfoDiv.style.display = "none";
       franchiseLastCapturedDiv.style.display = "none";
       franchiseTestButton.disabled = true;

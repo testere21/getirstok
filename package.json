@@ -15,6 +15,7 @@
     "fill-prices": "node scripts/fill-product-prices-from-stocks-api.mjs",
     "fill-supplier-return-days": "node scripts/fill-supplier-return-days-from-warehouse.mjs",
     "fill-categories": "node scripts/fill-product-categories-from-franchise-api.mjs",
+    "resolve-kasa-palet": "node --env-file=.env.local scripts/resolve-kasa-palet-products.mjs",
     "missing-from-panel": "node scripts/find-missing-products-from-getir-panel.mjs",
     "update-from-panel": "node scripts/update-products-from-getir-panel.mjs",
     "update-from-api": "node scripts/update-products-from-getir-api.mjs",
