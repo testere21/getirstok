@@ -1,0 +1,606 @@
+"use client";
+
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  AlertTriangle,
+  CalendarDays,
+  Gauge,
+  Loader2,
+  RefreshCw,
+  UserPlus,
+  Users,
+} from "lucide-react";
+import {
+  aggregatePickerStats,
+  sortPickerStats,
+  type PickerSortKey,
+  type PickerStatRow,
+  type SortDirection,
+  type StoredPickerOrder,
+} from "@/app/lib/pickerStatsMerge";
+import {
+  daysInRange,
+  formatYmdShort,
+  isYmd,
+  istanbulTodayYmd,
+  normalizeRange,
+  presetRange,
+  type YmdRange,
+} from "@/app/lib/pickerStatsPeriod";
+import {
+  readPickerStatsDaysRange,
+  readPickerStatsState,
+  type PickerStatsState,
+} from "@/app/lib/pickerStatsStore";
+import { PickerManageModal } from "./PickerManageModal";
+import { DpsPanel } from "./DpsPanel";
+
+const SORT_KEYS: readonly PickerSortKey[] = ["total", "green", "red", "greenRate"];
+
+const RANGE_STORAGE_KEY = "getirstok.pickerStats.range";
+const SORT_STORAGE_KEY = "getirstok.pickerStats.sort";
+/** Bir sekme açılışında en fazla bu kadar rapor işlenir (sonsuz döngüye karşı) */
+const MAX_SYNC_CALLS = 30;
+
+type SyncStatus =
+  | { kind: "idle" }
+  | { kind: "running"; done: number; total: number | null }
+  | { kind: "done"; processed: number }
+  | { kind: "error"; message: string };
+
+interface SyncResponse {
+  success: boolean;
+  error?: string;
+  remaining?: number;
+  report?: { ordersWritten: number } | null;
+  newPickers?: string[];
+}
+
+function formatPercent(rate: number | null): string {
+  return rate == null ? "—" : `%${Math.round(rate * 100)}`;
+}
+
+function formatRatio(ratio: number | null): string {
+  return ratio == null ? "—" : ratio.toLocaleString("tr-TR", { maximumFractionDigits: 2, minimumFractionDigits: 2 });
+}
+
+function formatDateTime(iso: string | null): string {
+  if (!iso) return "";
+  return new Date(iso).toLocaleString("tr-TR", {
+    timeZone: "Europe/Istanbul",
+    day: "numeric",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function rangeLabel(range: YmdRange, today: string): string {
+  const year = today.slice(0, 4);
+  if (range.from === range.to) return formatYmdShort(range.from, year);
+  return `${formatYmdShort(range.from, year)} – ${formatYmdShort(range.to, year)}`;
+}
+
+/** Son seçilen aralık; yoksa son 7 gün */
+function readStoredRange(): YmdRange {
+  const fallback = presetRange("last7", istanbulTodayYmd());
+  if (typeof window === "undefined") return fallback;
+  try {
+    const v = JSON.parse(window.localStorage.getItem(RANGE_STORAGE_KEY) ?? "null");
+    if (typeof v?.from === "string" && typeof v?.to === "string" && isYmd(v.from) && isYmd(v.to)) {
+      return { from: v.from, to: v.to };
+    }
+  } catch {
+    /* bozuk kayıt: varsayılan */
+  }
+  return fallback;
+}
+
+function readStoredSort(): { key: PickerSortKey; direction: SortDirection } {
+  const fallback = { key: "total" as PickerSortKey, direction: "desc" as SortDirection };
+  if (typeof window === "undefined") return fallback;
+  try {
+    const v = JSON.parse(window.localStorage.getItem(SORT_STORAGE_KEY) ?? "null");
+    if (SORT_KEYS.includes(v?.key) && (v?.direction === "asc" || v?.direction === "desc")) {
+      return v;
+    }
+  } catch {
+    /* bozuk kayıt: varsayılan */
+  }
+  return fallback;
+}
+
+function GreenBar({ rate }: { rate: number | null }) {
+  const pct = rate == null ? 0 : Math.round(rate * 100);
+  return (
+    <div className="flex items-center gap-2">
+      <div
+        className={`hidden h-2 w-24 overflow-hidden rounded-full sm:block ${
+          rate == null ? "bg-zinc-200 dark:bg-zinc-700" : "bg-red-200 dark:bg-red-900/50"
+        }`}
+        aria-hidden
+      >
+        {rate != null && (
+          <div className="h-full rounded-full bg-emerald-500 dark:bg-emerald-400" style={{ width: `${pct}%` }} />
+        )}
+      </div>
+      <span className="w-10 text-right tabular-nums">{formatPercent(rate)}</span>
+    </div>
+  );
+}
+
+function SummaryCard({
+  label,
+  value,
+  tone,
+}: {
+  label: string;
+  value: string;
+  tone: "neutral" | "green" | "red";
+}) {
+  const toneClass =
+    tone === "green"
+      ? "text-emerald-700 dark:text-emerald-400"
+      : tone === "red"
+        ? "text-red-700 dark:text-red-400"
+        : "text-zinc-900 dark:text-zinc-50";
+  return (
+    <div className="rounded-xl border border-zinc-200 bg-white px-2 py-2.5 sm:px-3 dark:border-zinc-700 dark:bg-zinc-800/60">
+      <p className="text-xs text-zinc-500 dark:text-zinc-400">{label}</p>
+      <p className={`mt-0.5 text-xl font-semibold tabular-nums ${toneClass}`}>{value}</p>
+    </div>
+  );
+}
+
+function ToplayiciPerformansiPanel() {
+  const [today, setToday] = useState(() => istanbulTodayYmd());
+  const [selectedRange, setSelectedRange] = useState<YmdRange>(readStoredRange);
+  const [sort, setSort] = useState(readStoredSort);
+
+  const [state, setState] = useState<PickerStatsState | null>(null);
+  const [dayCache, setDayCache] = useState<Map<string, Record<string, StoredPickerOrder>>>(() => new Map());
+  const [loadingDays, setLoadingDays] = useState(false);
+  const [metaError, setMetaError] = useState<string | null>(null);
+  const [dayError, setDayError] = useState<string | null>(null);
+  const latestDay = state?.latestDay ?? null;
+  const loadError = metaError ?? dayError;
+  const [sync, setSync] = useState<SyncStatus>({ kind: "idle" });
+  const [newPickers, setNewPickers] = useState<string[]>([]);
+  const [manageOpen, setManageOpen] = useState(false);
+  const [showInactive, setShowInactive] = useState(false);
+  const syncingRef = useRef(false);
+  /** Senkron sürerken kişi eklenirse, bitince bir tur daha (işaretlenen raporlar için) */
+  const resyncRequestedRef = useRef(false);
+  const autoSyncStartedRef = useRef(false);
+
+  const range = useMemo(() => normalizeRange(selectedRange), [selectedRange]);
+  const rangeDays = useMemo(() => daysInRange(range), [range]);
+
+  useEffect(() => {
+    window.localStorage.setItem(RANGE_STORAGE_KEY, JSON.stringify(selectedRange));
+  }, [selectedRange]);
+  useEffect(() => {
+    window.localStorage.setItem(SORT_STORAGE_KEY, JSON.stringify(sort));
+  }, [sort]);
+
+  // Panel gece açık kalırsa "bugün" kaysın
+  useEffect(() => {
+    const id = window.setInterval(() => setToday(istanbulTodayYmd()), 60_000);
+    return () => window.clearInterval(id);
+  }, []);
+
+  const refreshMeta = useCallback(async () => {
+    setState(await readPickerStatsState());
+  }, []);
+
+  useEffect(() => {
+    refreshMeta().catch(() =>
+      setMetaError("Toplayıcı listesi okunamadı. Sayfayı yenileyip tekrar deneyin.")
+    );
+  }, [refreshMeta]);
+
+  // Sadece önbellekte olmayan günler okunur (dönem değiştirince aynı gün tekrar okunmaz)
+  useEffect(() => {
+    const missing = rangeDays.filter((d) => !dayCache.has(d));
+    if (missing.length === 0) return;
+    let cancelled = false;
+    setLoadingDays(true);
+    readPickerStatsDaysRange(missing[0], missing[missing.length - 1])
+      .then((found) => {
+        if (cancelled) return;
+        setDayCache((prev) => {
+          const next = new Map(prev);
+          for (const d of missing) next.set(d, found.get(d) ?? {});
+          return next;
+        });
+        setDayError(null);
+      })
+      .catch(() => {
+        if (!cancelled) setDayError("İstatistikler okunamadı. Sayfayı yenileyip tekrar deneyin.");
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingDays(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [rangeDays, dayCache]);
+
+  const runSync = useCallback(async (): Promise<void> => {
+    if (syncingRef.current) {
+      resyncRequestedRef.current = true;
+      return;
+    }
+    syncingRef.current = true;
+    resyncRequestedRef.current = false;
+    setSync({ kind: "running", done: 0, total: null });
+    let done = 0;
+    let total: number | null = null;
+    let wrote = false;
+    const found: string[] = [];
+    try {
+      for (let i = 0; i < MAX_SYNC_CALLS; i++) {
+        const res = await fetch("/api/picker-stats/sync", { method: "POST" });
+        const data = (await res.json().catch(() => null)) as SyncResponse | null;
+        if (!res.ok || !data?.success) {
+          throw new Error(data?.error ?? "Raporlar okunamadı.");
+        }
+        if (data.newPickers?.length) found.push(...data.newPickers);
+        if (!data.report) break;
+        done++;
+        if (data.report.ordersWritten > 0) wrote = true;
+        total ??= done + (data.remaining ?? 0);
+        setSync({ kind: "running", done, total });
+        if (!data.remaining) break;
+      }
+      setSync({ kind: "done", processed: done });
+    } catch (error) {
+      setSync({ kind: "error", message: error instanceof Error ? error.message : "Raporlar okunamadı." });
+    } finally {
+      syncingRef.current = false;
+      if (found.length > 0) setNewPickers((prev) => [...new Set([...prev, ...found])]);
+      if (wrote) setDayCache(new Map());
+      refreshMeta()
+        .then(() => setMetaError(null))
+        .catch(() => setMetaError("Toplayıcı listesi okunamadı. Sayfayı yenileyip tekrar deneyin."));
+      if (resyncRequestedRef.current) void runSyncRef.current();
+    }
+  }, [refreshMeta]);
+  const runSyncRef = useRef(runSync);
+  useEffect(() => {
+    runSyncRef.current = runSync;
+  }, [runSync]);
+
+  const onPickerListChanged = useCallback(() => {
+    refreshMeta().catch(() =>
+      setMetaError("Toplayıcı listesi okunamadı. Sayfayı yenileyip tekrar deneyin.")
+    );
+  }, [refreshMeta]);
+
+  const onPickerAdded = useCallback(
+    (reprocess: number) => {
+      if (reprocess > 0) void runSync();
+    },
+    [runSync]
+  );
+
+  // Sekme açılınca yeni raporlar kendiliğinden okunur (Getir dosyaları 8 gün sonra siliyor)
+  useEffect(() => {
+    if (autoSyncStartedRef.current) return;
+    autoSyncStartedRef.current = true;
+    void runSync();
+  }, [runSync]);
+
+  const rows = useMemo<PickerStatRow[]>(() => {
+    if (!state) return [];
+    const days = rangeDays.map((d) => dayCache.get(d)).filter((d): d is Record<string, StoredPickerOrder> => !!d);
+    return sortPickerStats(
+      aggregatePickerStats(days, state.pickers, { includeInactive: showInactive }),
+      sort.key,
+      sort.direction
+    );
+  }, [state, rangeDays, dayCache, sort, showInactive]);
+
+  const inactiveCount = useMemo(
+    () => (state ? Object.values(state.pickers).filter((p) => !p.active).length : 0),
+    [state]
+  );
+
+  const totals = useMemo(() => {
+    const t = rows.reduce(
+      (acc, r) => ({ total: acc.total + r.total, green: acc.green + r.green, red: acc.red + r.red }),
+      { total: 0, green: 0, red: 0 }
+    );
+    return { ...t, greenRate: t.total > 0 ? t.green / t.total : null };
+  }, [rows]);
+
+  const dataReady = state != null && rangeDays.every((d) => dayCache.has(d));
+  const rangeAfterData = latestDay != null && range.from > latestDay;
+
+  const onHeaderSort = (key: PickerSortKey) => {
+    setSort((prev) =>
+      prev.key === key ? { key, direction: prev.direction === "desc" ? "asc" : "desc" } : { key, direction: "desc" }
+    );
+  };
+
+  const sortIndicator = (key: PickerSortKey) =>
+    sort.key === key ? (sort.direction === "desc" ? " ↓" : " ↑") : "";
+
+  return (
+    <div className="flex flex-col gap-4">
+      {/* Başlık + senkron */}
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <h2 className="flex items-center gap-2 text-base font-semibold text-zinc-900 dark:text-zinc-50">
+          <Users className="size-5 text-teal-600 dark:text-teal-400" aria-hidden />
+          Toplayıcı Performansı
+        </h2>
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-zinc-500 dark:text-zinc-400" aria-live="polite">
+            {sync.kind === "running"
+              ? sync.total
+                ? `Raporlar okunuyor (${sync.done}/${sync.total})…`
+                : "Yeni raporlar kontrol ediliyor…"
+              : sync.kind === "done" && sync.processed > 0
+                ? `${sync.processed} yeni rapor okundu`
+                : state?.lastSyncAt
+                  ? `Son kontrol: ${formatDateTime(state.lastSyncAt)}`
+                  : ""}
+          </span>
+          <button
+            type="button"
+            onClick={() => setManageOpen(true)}
+            disabled={!state}
+            className="inline-flex min-h-[40px] items-center gap-1.5 rounded-lg border border-zinc-300 bg-white px-3 text-sm font-medium text-zinc-700 transition hover:bg-zinc-50 disabled:opacity-60 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-200 dark:hover:bg-zinc-700"
+          >
+            <Users className="size-4" aria-hidden />
+            Toplayıcılar
+          </button>
+          <button
+            type="button"
+            onClick={() => void runSync()}
+            disabled={sync.kind === "running"}
+            className="inline-flex min-h-[40px] items-center gap-1.5 rounded-lg border border-zinc-300 bg-white px-3 text-sm font-medium text-zinc-700 transition hover:bg-zinc-50 disabled:opacity-60 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-200 dark:hover:bg-zinc-700"
+          >
+            <RefreshCw className={`size-4 ${sync.kind === "running" ? "animate-spin" : ""}`} aria-hidden />
+            Güncelle
+          </button>
+        </div>
+      </div>
+
+      {sync.kind === "error" && (
+        <div className="flex items-start gap-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-200">
+          <AlertTriangle className="mt-0.5 size-4 shrink-0" aria-hidden />
+          <span>
+            Yeni raporlar okunamadı: {sync.message} Tablo eldeki verilerle gösteriliyor.
+          </span>
+        </div>
+      )}
+      {loadError && (
+        <div className="flex items-start gap-2 rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-800 dark:border-red-800 dark:bg-red-950/40 dark:text-red-200">
+          <AlertTriangle className="mt-0.5 size-4 shrink-0" aria-hidden />
+          <span>{loadError}</span>
+        </div>
+      )}
+      {newPickers.length > 0 && (
+        <div className="flex items-start gap-2 rounded-lg border border-teal-300 bg-teal-50 px-3 py-2 text-sm text-teal-900 dark:border-teal-700 dark:bg-teal-950/40 dark:text-teal-200">
+          <UserPlus className="mt-0.5 size-4 shrink-0" aria-hidden />
+          <span>Yeni toplayıcı bulundu ve listeye eklendi: {newPickers.join(", ")}</span>
+        </div>
+      )}
+
+      {/* Tarih aralığı */}
+      <div className="flex flex-col gap-2">
+        <div className="flex flex-wrap items-center gap-2 text-sm">
+          <label className="flex items-center gap-1.5 text-zinc-600 dark:text-zinc-300">
+            Başlangıç
+            <input
+              type="date"
+              value={selectedRange.from}
+              max={today}
+              onChange={(e) => isYmd(e.target.value) && setSelectedRange((r) => ({ ...r, from: e.target.value }))}
+              className="rounded-lg border border-zinc-300 bg-white px-2 py-1.5 text-zinc-900 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-100"
+            />
+          </label>
+          <label className="flex items-center gap-1.5 text-zinc-600 dark:text-zinc-300">
+            Bitiş
+            <input
+              type="date"
+              value={selectedRange.to}
+              max={today}
+              onChange={(e) => isYmd(e.target.value) && setSelectedRange((r) => ({ ...r, to: e.target.value }))}
+              className="rounded-lg border border-zinc-300 bg-white px-2 py-1.5 text-zinc-900 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-100"
+            />
+          </label>
+        </div>
+        <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-zinc-500 dark:text-zinc-400">
+          <span className="inline-flex items-center gap-1">
+            <CalendarDays className="size-3.5" aria-hidden />
+            {rangeLabel(range, today)} · {rangeDays.length} gün
+          </span>
+          {latestDay && <span>Veri {formatYmdShort(latestDay, today.slice(0, 4))} tarihine kadar</span>}
+        </p>
+      </div>
+
+      {/* Özet */}
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+        <SummaryCard label="Toplam sipariş" value={dataReady ? String(totals.total) : "…"} tone="neutral" />
+        <SummaryCard label="Yeşil" value={dataReady ? String(totals.green) : "…"} tone="green" />
+        <SummaryCard label="Kırmızı" value={dataReady ? String(totals.red) : "…"} tone="red" />
+        <SummaryCard label="Yeşil oranı" value={dataReady ? formatPercent(totals.greenRate) : "…"} tone="neutral" />
+      </div>
+
+      {/* Tablo */}
+      {!dataReady || (loadingDays && rows.length === 0) ? (
+        <div className="flex items-center justify-center gap-2 py-10 text-sm text-zinc-500 dark:text-zinc-400">
+          <Loader2 className="size-4 animate-spin" aria-hidden />
+          Yükleniyor…
+        </div>
+      ) : (
+        <>
+          {totals.total === 0 && (
+            <p className="rounded-lg border border-dashed border-zinc-300 px-3 py-3 text-center text-sm text-zinc-500 dark:border-zinc-600 dark:text-zinc-400">
+              {rangeAfterData
+                ? `Bu dönem için henüz rapor yok. Elde ${formatYmdShort(latestDay!, today.slice(0, 4))} tarihine kadar veri var; bayi panelinde yeni DPS raporu istendiğinde burada görünür.`
+                : "Bu dönemde kayıtlı sipariş yok."}
+            </p>
+          )}
+          <div className="overflow-x-auto rounded-xl border border-zinc-200 dark:border-zinc-700">
+            <table className="w-full text-sm sm:min-w-[34rem]">
+              <thead className="bg-zinc-50 text-left text-xs uppercase tracking-wide text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400">
+                <tr>
+                  <th scope="col" className="hidden w-10 px-2 py-2.5 sm:px-3 font-medium sm:table-cell">#</th>
+                  <th scope="col" className="px-2 py-2.5 sm:px-3 font-medium">Toplayıcı</th>
+                  {(
+                    [
+                      ["total", "Sipariş"],
+                      ["green", "Yeşil"],
+                      ["red", "Kırmızı"],
+                      ["greenRate", "Yeşil %"],
+                    ] as const
+                  ).map(([key, label]) => (
+                    <th
+                      key={key}
+                      scope="col"
+                      aria-sort={sort.key === key ? (sort.direction === "desc" ? "descending" : "ascending") : "none"}
+                      className="px-2 py-2.5 sm:px-3 text-right font-medium"
+                    >
+                      <button
+                        type="button"
+                        onClick={() => onHeaderSort(key)}
+                        title={`"${label}" sütununa göre sırala (tekrar tıklayınca yön değişir)`}
+                        className={`uppercase tracking-wide transition hover:text-zinc-900 dark:hover:text-zinc-100 ${
+                          sort.key === key ? "text-zinc-900 dark:text-zinc-100" : ""
+                        }`}
+                      >
+                        {label}
+                        {sortIndicator(key)}
+                      </button>
+                    </th>
+                  ))}
+                  <th scope="col" className="hidden px-2 py-2.5 sm:px-3 text-right font-medium sm:table-cell">
+                    Ort. uyum
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-zinc-100 bg-white dark:divide-zinc-800 dark:bg-zinc-900">
+                {rows.map((r, i) => (
+                  <tr
+                    key={r.key}
+                    className={`hover:bg-zinc-50 dark:hover:bg-zinc-800/60 ${r.active ? "" : "opacity-60"}`}
+                  >
+                    <td className="hidden px-2 py-2.5 sm:px-3 tabular-nums text-zinc-400 sm:table-cell">{i + 1}</td>
+                    <td className="px-2 py-2.5 sm:px-3 font-medium text-zinc-900 dark:text-zinc-100">
+                      {r.name}
+                      {!r.active && (
+                        <span className="ml-1.5 rounded bg-zinc-200 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-zinc-600 dark:bg-zinc-700 dark:text-zinc-300">
+                          Pasif
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-2 py-2.5 sm:px-3 text-right font-semibold tabular-nums text-zinc-900 dark:text-zinc-100">
+                      {r.total}
+                    </td>
+                    <td className="px-2 py-2.5 sm:px-3 text-right tabular-nums text-emerald-700 dark:text-emerald-400">
+                      {r.green}
+                    </td>
+                    <td className="px-2 py-2.5 sm:px-3 text-right tabular-nums text-red-700 dark:text-red-400">{r.red}</td>
+                    <td className="px-2 py-2.5 sm:px-3 text-right text-zinc-700 dark:text-zinc-300">
+                      <div className="flex justify-end">
+                        <GreenBar rate={r.greenRate} />
+                      </div>
+                    </td>
+                    <td className="hidden px-2 py-2.5 sm:px-3 text-right tabular-nums text-zinc-600 sm:table-cell dark:text-zinc-400">
+                      {formatRatio(r.avgRatio)}
+                    </td>
+                  </tr>
+                ))}
+                {rows.length === 0 && (
+                  <tr>
+                    <td colSpan={7} className="px-3 py-6 text-center text-zinc-500 dark:text-zinc-400">
+                      Toplayıcı listesi boş.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+          {inactiveCount > 0 && (
+            <label className="flex items-center gap-2 self-start text-sm text-zinc-600 dark:text-zinc-300">
+              <input
+                type="checkbox"
+                checked={showInactive}
+                onChange={(e) => setShowInactive(e.target.checked)}
+                className="size-4 rounded border-zinc-300 accent-teal-600"
+              />
+              Pasifleri göster ({inactiveCount})
+            </label>
+          )}
+        </>
+      )}
+
+      {manageOpen && state && (
+        <PickerManageModal
+          pickers={state.pickers}
+          onClose={() => setManageOpen(false)}
+          onChanged={onPickerListChanged}
+          onAdded={onPickerAdded}
+        />
+      )}
+    </div>
+  );
+}
+
+type StatsSubTab = "toplayici" | "dps";
+
+const SUB_TAB_STORAGE_KEY = "getirstok.stats.subTab";
+
+const SUB_TABS: { id: StatsSubTab; label: string; icon: typeof Users }[] = [
+  { id: "toplayici", label: "Toplayıcı Performansı", icon: Users },
+  { id: "dps", label: "DPS", icon: Gauge },
+];
+
+function readStoredSubTab(): StatsSubTab {
+  if (typeof window === "undefined") return "toplayici";
+  return window.localStorage.getItem(SUB_TAB_STORAGE_KEY) === "dps" ? "dps" : "toplayici";
+}
+
+export function IstatistiklerTabContent() {
+  const [subTab, setSubTab] = useState<StatsSubTab>(readStoredSubTab);
+
+  useEffect(() => {
+    window.localStorage.setItem(SUB_TAB_STORAGE_KEY, subTab);
+  }, [subTab]);
+
+  return (
+    <div className="flex flex-col gap-4 p-4">
+      <div
+        role="tablist"
+        aria-label="İstatistik türü"
+        className="inline-flex self-start rounded-lg bg-zinc-100 p-1 dark:bg-zinc-800"
+      >
+        {SUB_TABS.map(({ id, label, icon: Icon }) => (
+          <button
+            key={id}
+            type="button"
+            role="tab"
+            id={`stats-subtab-${id}`}
+            aria-selected={subTab === id}
+            aria-controls={`stats-subpanel-${id}`}
+            onClick={() => setSubTab(id)}
+            className={`inline-flex min-h-[36px] items-center gap-1.5 rounded-md px-3 text-sm font-medium transition ${
+              subTab === id
+                ? "bg-white text-teal-700 shadow-sm dark:bg-zinc-900 dark:text-teal-400"
+                : "text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100"
+            }`}
+          >
+            <Icon className="size-4" aria-hidden />
+            {label}
+          </button>
+        ))}
+      </div>
+      <div role="tabpanel" id={`stats-subpanel-${subTab}`} aria-labelledby={`stats-subtab-${subTab}`}>
+        {subTab === "dps" ? <DpsPanel /> : <ToplayiciPerformansiPanel />}
+      </div>
+    </div>
+  );
+}

@@ -222,9 +222,9 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   return true;
 });
 
-// Bayi paneli her istekte aynı token'ı yolluyor; aynı token'ı tekrar tekrar
-// panele yazmamak için son gönderileni tutuyoruz.
-let lastSentFranchiseToken = null;
+// Paneller her istekte aynı token'ı yolluyor (depo Kontrol Paneli birkaç saniyede bir);
+// aynı token'ı tekrar tekrar panele yazmamak için tip başına son gönderileni tutuyoruz.
+const lastSentTokenByType = { franchise: null, warehouse: null };
 
 // /auth/* isteklerinde Bearer access token değil (refresh-token, OTP ön token'ı)
 function isFranchiseDataRequest(url) {
@@ -246,11 +246,10 @@ chrome.webRequest.onBeforeSendHeaders.addListener(
       shouldCapture = true;
     }
     
-    // Getir Depo Paneli token'ı — ürün ve transfer istekleri
-    if (
-      details.url.includes("warehouse-panel-api-gateway.getirapi.com") &&
-      (details.url.includes("/products") || /transfer/i.test(details.url))
-    ) {
+    // Getir Depo Paneli token'ı — panel token'ını kendisi yeniliyor; yeni token'ı
+    // ilk taşıyan istek genelde Kontrol Paneli'nin count/orders sorgusu olduğu için
+    // gateway'e giden tüm istekler dinleniyor
+    if (details.url.includes("warehouse-panel-api-gateway.getirapi.com")) {
       tokenType = "warehouse";
       shouldCapture = true;
     }
@@ -270,23 +269,35 @@ chrome.webRequest.onBeforeSendHeaders.addListener(
           
           // Token formatını kontrol et (eyJ ile başlamalı)
           if (bearerToken.startsWith("eyJ") && bearerToken.length > 50) {
-            if (tokenType === "franchise") {
-              if (bearerToken === lastSentFranchiseToken) return;
-              lastSentFranchiseToken = bearerToken;
-            }
+            const previousToken = lastSentTokenByType[tokenType];
+            if (bearerToken === previousToken) return;
+            lastSentTokenByType[tokenType] = bearerToken;
             const panelName = tokenType === "franchise" ? "Bayi Paneli" : "Depo Paneli";
             console.log(`[Getir Token Yakalayıcı] ${panelName} token yakalandı:`, bearerToken.substring(0, 20) + "...");
-            
-            // Token'ı storage'a kaydet (local) - her panel için ayrı
-            chrome.storage.local.set({ 
+
+            // Depo token'ı ~15 dk'da bir yenileniyor; content.js lastCapturedAt değişince
+            // toast gösterdiği için sonraki yenilemeler ayrı damgaya yazılıyor
+            const stampKey =
+              tokenType === "warehouse" && previousToken
+                ? "lastRefreshedAt_warehouse"
+                : `lastCapturedAt_${tokenType}`;
+            chrome.storage.local.set({
               [`lastToken_${tokenType}`]: bearerToken,
-              [`lastCapturedAt_${tokenType}`]: new Date().toISOString()
+              [stampKey]: new Date().toISOString()
             }, () => {
               console.log(`[Getir Token Yakalayıcı] ${panelName} token storage'a kaydedildi`);
             });
-            
-            // Token'ı API'ye gönder (type bilgisi ile)
-            sendTokenToAPI(bearerToken, tokenType);
+
+            // Gönderilemezse 1 dk sonraki ilk istekte tekrar denensin (count her birkaç
+            // saniyede geldiği için hemen sıfırlamak API'ye istek yağdırırdı)
+            sendTokenToAPI(bearerToken, tokenType).then((ok) => {
+              if (ok) return;
+              setTimeout(() => {
+                if (lastSentTokenByType[tokenType] === bearerToken) {
+                  lastSentTokenByType[tokenType] = null;
+                }
+              }, 60 * 1000);
+            });
 
             // Gateway'in kullandığı Bearer gerçekten Keycloak access_token'ı mı?
             if (tokenType === "warehouse") {
@@ -302,8 +313,7 @@ chrome.webRequest.onBeforeSendHeaders.addListener(
   {
     urls: [
       "https://franchise-api-gateway.getirapi.com/*",
-      "https://warehouse-panel-api-gateway.getirapi.com/*/products*",
-      "https://warehouse-panel-api-gateway.getirapi.com/*transfer*"
+      "https://warehouse-panel-api-gateway.getirapi.com/*"
     ]
   },
   ["requestHeaders"]
@@ -422,6 +432,7 @@ async function sendTokenToAPI(token, type) {
       chrome.action.setBadgeText({ text: "" });
     }, 3000);
   }
+  return anyOk;
 }
 
 // -----------------------------
@@ -778,13 +789,153 @@ chrome.alarms.onAlarm.addListener((alarm) => {
   })();
 });
 
+// -----------------------------
+// Sipariş detayı: elle düzeltilen barkodlar (ürün adı → barkod)
+// Kayıt önce bu tarayıcıda uygulanır (orderBarcodeOverrides), sonra sunucuya gönderilir.
+// Gönderilemeyenler orderBarcodeOverridesPending'de bekler, sonraki yenilemede tekrar denenir.
+// -----------------------------
+
+const BARCODE_OVERRIDES_PATH = "/api/order-barcode-overrides";
+const BARCODE_OVERRIDES_ALARM = "order-barcode-overrides-refresh";
+const BARCODE_OVERRIDES_PERIOD_MINUTES = 15;
+
+function barcodeOverrideEndpoints() {
+  const bases = [API_BASE];
+  if (!USE_LOCAL_API) bases.push("http://localhost:3000");
+  return bases.map((b) => `${b}${BARCODE_OVERRIDES_PATH}`);
+}
+
+function barcodeNameKey(name) {
+  return String(name || "").replace(/\s+/g, " ").trim().toLocaleLowerCase("tr-TR");
+}
+
+async function postBarcodeOverride(name, barcode) {
+  let lastError = "Sunucuya ulaşılamadı";
+  for (const endpoint of barcodeOverrideEndpoints()) {
+    try {
+      const res = await fetch(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, barcode }),
+      });
+      const data = await res.json().catch(() => null);
+      if (res.ok && data?.success) return { ok: true };
+      lastError = data?.error || `HTTP ${res.status}`;
+      // Doğrulama hatası her uçta aynı olur; diğerini denemeye gerek yok
+      if (res.status === 400) return { ok: false, error: lastError, invalid: true };
+    } catch (e) {
+      lastError = String((e && e.message) || e);
+    }
+  }
+  return { ok: false, error: lastError };
+}
+
+async function fetchServerBarcodeOverrides() {
+  for (const endpoint of barcodeOverrideEndpoints()) {
+    try {
+      const res = await fetch(endpoint);
+      const data = await res.json().catch(() => null);
+      if (res.ok && data?.success && data.overrides && typeof data.overrides === "object") {
+        return data.overrides;
+      }
+    } catch {
+      /* sıradaki uç */
+    }
+  }
+  return null;
+}
+
+/** Bekleyenleri göndermeyi dener, sunucu listesini alır, hâlâ bekleyenleri üstüne uygular. */
+async function refreshBarcodeOverrides() {
+  const store = await chrome.storage.local.get(["orderBarcodeOverrides", "orderBarcodeOverridesPending"]);
+  const pending = { ...(store.orderBarcodeOverridesPending || {}) };
+  for (const [key, item] of Object.entries(pending)) {
+    const result = await postBarcodeOverride(item.name, item.barcode);
+    if (result.ok || result.invalid) delete pending[key];
+  }
+
+  const server = await fetchServerBarcodeOverrides();
+  const merged = { ...(server ?? store.orderBarcodeOverrides ?? {}) };
+  for (const [key, item] of Object.entries(pending)) {
+    if (item.barcode == null) delete merged[key];
+    else merged[key] = { name: item.name, barcode: item.barcode, updatedAt: item.updatedAt };
+  }
+  await chrome.storage.local.set({
+    orderBarcodeOverrides: merged,
+    orderBarcodeOverridesPending: pending,
+    orderBarcodeOverridesSyncedAt: server ? new Date().toISOString() : store.orderBarcodeOverridesSyncedAt ?? null,
+  });
+  return { ok: server != null, pending: Object.keys(pending).length };
+}
+
+chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+  if (!msg || msg.type !== "GETIRSTOK_BARCODE_OVERRIDE_SAVE") return;
+  (async () => {
+    const name = String(msg.name || "").replace(/\s+/g, " ").trim();
+    const barcode = msg.barcode == null ? null : String(msg.barcode).trim();
+    if (name.length < 2 || (barcode != null && !/^\d{4,20}$/.test(barcode))) {
+      sendResponse({ ok: false, error: "Barkod 4–20 haneli rakam olmalı." });
+      return;
+    }
+    const key = barcodeNameKey(name);
+    const updatedAt = new Date().toISOString();
+    const store = await chrome.storage.local.get(["orderBarcodeOverrides", "orderBarcodeOverridesPending"]);
+    const overrides = { ...(store.orderBarcodeOverrides || {}) };
+    const pending = { ...(store.orderBarcodeOverridesPending || {}) };
+    if (barcode == null) delete overrides[key];
+    else overrides[key] = { name, barcode, updatedAt };
+    pending[key] = { name, barcode, updatedAt };
+    // Önce bu tarayıcıda uygula: sipariş ekranı hemen güncellensin
+    await chrome.storage.local.set({ orderBarcodeOverrides: overrides, orderBarcodeOverridesPending: pending });
+
+    const result = await postBarcodeOverride(name, barcode);
+    if (result.ok) {
+      const latest = (await chrome.storage.local.get("orderBarcodeOverridesPending")).orderBarcodeOverridesPending || {};
+      if (latest[key]?.updatedAt === updatedAt) {
+        delete latest[key];
+        await chrome.storage.local.set({ orderBarcodeOverridesPending: latest });
+      }
+    }
+    sendResponse({ ok: true, synced: result.ok, error: result.ok ? null : result.error });
+  })();
+  return true;
+});
+
+chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+  if (!msg || msg.type !== "GETIRSTOK_BARCODE_OVERRIDES_REFRESH") return;
+  refreshBarcodeOverrides().then(sendResponse, (e) => sendResponse({ ok: false, error: String(e) }));
+  return true;
+});
+
+async function ensureBarcodeOverridesAlarm() {
+  try {
+    if (await chrome.alarms.get(BARCODE_OVERRIDES_ALARM)) return;
+    chrome.alarms.create(BARCODE_OVERRIDES_ALARM, {
+      delayInMinutes: 1,
+      periodInMinutes: BARCODE_OVERRIDES_PERIOD_MINUTES,
+    });
+  } catch (e) {
+    console.warn("[Getir Token Yakalayıcı] Barkod düzeltme alarmı kurulamadı:", e);
+  }
+}
+
+chrome.alarms.onAlarm.addListener((alarm) => {
+  if (alarm?.name !== BARCODE_OVERRIDES_ALARM) return;
+  refreshBarcodeOverrides().catch((e) => console.warn("[Getir Token Yakalayıcı] Barkod düzeltmeleri yenilenemedi:", e));
+});
+
 chrome.runtime.onStartup.addListener(() => {
   ensureRefreshAlarm();
+  ensureBarcodeOverridesAlarm();
+  refreshBarcodeOverrides().catch(() => {});
 });
 chrome.runtime.onInstalled.addListener(() => {
   ensureRefreshAlarm();
+  ensureBarcodeOverridesAlarm();
+  refreshBarcodeOverrides().catch(() => {});
 });
 ensureRefreshAlarm();
+ensureBarcodeOverridesAlarm();
 
 // Eklenti yüklendiğinde console'a bilgi ver
 console.log("[Getir Token Yakalayıcı] Background service worker başlatıldı");

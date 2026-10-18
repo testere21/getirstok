@@ -47,3 +47,7 @@ data/*.bak-before-*
 
 # scripts outputs / debug dumps (do not commit)
 scripts/*.json
+
+# Getir rapor indirmeleri (çalışan isimleri içerir)
+/tmp-*.xlsx
+/tmp-*.html

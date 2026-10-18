@@ -17,8 +17,22 @@
   }
 
   function publish(url, json) {
+    publishHeatingEstimations(url, json);
     if (!looksLikeBakePayload(url, json)) return;
     window.postMessage({ source: "getirstok-bake-hook", url, json }, "*");
+  }
+
+  // Pişirme Önerileri sayfasının verisi (dilim başına öneri + Raf/Donuk stokları).
+  // Cevap içerik betiği hazır olmadan gelebildiği için sessionStorage'a da yazılır.
+  function publishHeatingEstimations(url, json) {
+    if (!/\/heating-estimations(\?|$)/.test(String(url || ""))) return;
+    if (!json || !Array.isArray(json.data)) return;
+    try {
+      sessionStorage.setItem("getirstok.heatingEstimations", JSON.stringify(json));
+    } catch {
+      /* depolama dolu / kapalı */
+    }
+    window.postMessage({ source: "getirstok-heating-estimations", json }, window.location.origin);
   }
 
   // Keycloak token endpoint'i: hem giriş hem yenileme cevapları buradan geçer

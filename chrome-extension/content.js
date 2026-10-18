@@ -79,6 +79,38 @@ console.log(`[Getir Token Yakalayıcı] Content script yüklendi (${panelName})`
 let showBarcodes = false;
 const liveOrderBarcodes = {};
 
+/** Elle düzeltilen barkodlar (arka plan sunucudan alıp chrome.storage'a yazar): nameKey → { name, barcode } */
+let barcodeOverrides = {};
+
+function barcodeNameKey(name) {
+  return normalizeText(name).toLocaleLowerCase("tr-TR");
+}
+
+try {
+  chrome.storage.local.get(["orderBarcodeOverrides"], (store) => {
+    barcodeOverrides = store?.orderBarcodeOverrides || {};
+    rerenderBarcodes();
+  });
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area !== "local" || !changes.orderBarcodeOverrides) return;
+    barcodeOverrides = changes.orderBarcodeOverrides.newValue || {};
+    rerenderBarcodes();
+  });
+  // Sayfa açılınca güncel listeyi iste (başka bilgisayarda yapılan düzeltmeler gelsin)
+  chrome.runtime.sendMessage({ type: "GETIRSTOK_BARCODE_OVERRIDES_REFRESH" }, () => void chrome.runtime.lastError);
+} catch {
+  /* eklenti bağlamı yok (ör. test sayfası) */
+}
+
+/** Düzeltme listesi değişince çizili barkod kartları yeniden çizilsin (düzenleme açık olanlar hariç) */
+function rerenderBarcodes() {
+  for (const wrap of document.querySelectorAll(".getirstok-barcode-wrap")) {
+    if (wrap.dataset.editing === "1") continue;
+    const name = wrap.dataset.name;
+    if (name) renderBarcodeWrap(wrap, name);
+  }
+}
+
 function ensureStyleOnce() {
   if (document.getElementById("getirstok-search-style")) return;
   const style = document.createElement("style");
@@ -204,6 +236,111 @@ function ensureStyleOnce() {
       color: #16a34a;
     }
     .getirstok-bc-copy svg { width: 14px; height: 14px; display: block; }
+    .getirstok-bc-actions {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .getirstok-bc-edit-btn {
+      width: 26px;
+      height: 26px;
+      padding: 0;
+      border-radius: 8px;
+      border: 1px solid #e5e7eb;
+      background: #f9fafb;
+      color: #6b7280;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 5px;
+      cursor: pointer;
+      flex-shrink: 0;
+      transition: background 0.15s, color 0.15s, border-color 0.15s;
+    }
+    .getirstok-bc-edit-btn:hover {
+      background: #f3f0ff;
+      border-color: #d9d0f7;
+      color: #5d3ebc;
+    }
+    .getirstok-bc-edit-btn svg { width: 13px; height: 13px; display: block; }
+    .getirstok-bc-edit-btn--text {
+      width: auto;
+      height: 22px;
+      margin-left: 6px;
+      padding: 0 8px;
+      border-radius: 999px;
+      border-color: #d9d0f7;
+      background: #f3f0ff;
+      color: #5d3ebc;
+      font: 600 11px/1 system-ui, sans-serif;
+    }
+    .getirstok-bc-card--manual {
+      border-color: #d9d0f7;
+      box-shadow: 0 0 0 1px #ede7fc inset;
+    }
+    .getirstok-bc-manual {
+      margin-left: 6px;
+      padding: 1px 5px;
+      border-radius: 4px;
+      background: #ede7fc;
+      color: #5d3ebc;
+      font: 700 9px/1.3 system-ui, sans-serif;
+      letter-spacing: 0.04em;
+      vertical-align: 1px;
+      user-select: none;
+    }
+    .getirstok-bc-edit {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 6px;
+      padding: 6px;
+      border: 1px solid #d9d0f7;
+      border-radius: 10px;
+      background: #faf9fe;
+    }
+    .getirstok-bc-edit input {
+      width: 170px;
+      height: 30px;
+      padding: 0 9px;
+      border: 1px solid #d6d0e6;
+      border-radius: 8px;
+      background: #ffffff;
+      font: 600 13px/1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      letter-spacing: 0.04em;
+      color: #1f1b2e;
+      outline: none;
+    }
+    .getirstok-bc-edit input:focus {
+      border-color: #5d3ebc;
+      box-shadow: 0 0 0 3px rgba(93, 62, 188, 0.15);
+    }
+    .getirstok-bc-edit button {
+      height: 30px;
+      padding: 0 11px;
+      border-radius: 8px;
+      font: 600 12px/1 system-ui, sans-serif;
+      cursor: pointer;
+    }
+    .getirstok-bc-edit-save {
+      border: 1px solid #5d3ebc;
+      background: #5d3ebc;
+      color: #ffffff;
+    }
+    .getirstok-bc-edit-save:disabled { opacity: 0.6; cursor: default; }
+    .getirstok-bc-edit-cancel {
+      border: 1px solid #e5e7eb;
+      background: #ffffff;
+      color: #4b4560;
+    }
+    .getirstok-bc-edit-cancel:hover { background: #f5f3fb; }
+    .getirstok-bc-edit-status {
+      flex-basis: 100%;
+      font: 500 11px/1.3 system-ui, sans-serif;
+      color: #6b6580;
+    }
+    .getirstok-bc-edit-status:empty { display: none; }
+    .getirstok-bc-edit-status[data-tone="error"] { color: #b91c1c; }
     .getirstok-bc-missing {
       display: inline-flex;
       align-items: center;
@@ -427,10 +564,10 @@ function ensureStyleOnce() {
     .ant-modal-content.getirstok-order-modal .ant-table-tbody > tr.ant-table-row > td {
       padding: 10px 14px !important;
       vertical-align: middle !important;
-      background: #ffffff !important;
+      background: #f8f6fd !important;
       border: none !important;
-      border-top: 1px solid #e9e5f3 !important;
-      border-bottom: 1px solid #e9e5f3 !important;
+      border-top: 1px solid #ebe6f7 !important;
+      border-bottom: 1px solid #ebe6f7 !important;
       font-size: 14px !important;
       font-weight: 600 !important;
       color: #1f1b2e !important;
@@ -438,12 +575,12 @@ function ensureStyleOnce() {
     }
     .ant-modal-content.getirstok-order-modal .ant-table-tbody > tr.ant-table-row > td:first-child {
       padding-left: 10px !important;
-      border-left: 1px solid #e9e5f3 !important;
+      border-left: 1px solid #ebe6f7 !important;
       border-radius: 14px 0 0 14px !important;
       box-shadow: inset 4px 0 0 transparent;
     }
     .ant-modal-content.getirstok-order-modal .ant-table-tbody > tr.ant-table-row > td:last-child {
-      border-right: 1px solid #e9e5f3 !important;
+      border-right: 1px solid #ebe6f7 !important;
       border-radius: 0 14px 14px 0 !important;
     }
     .ant-modal-content.getirstok-order-modal .ant-table-tbody > tr.ant-table-row:hover {
@@ -451,7 +588,7 @@ function ensureStyleOnce() {
       filter: drop-shadow(0 8px 14px rgba(93, 62, 188, 0.16));
     }
     .ant-modal-content.getirstok-order-modal .ant-table-tbody > tr.ant-table-row:hover > td {
-      background: #fdfcff !important;
+      background: #f2eefc !important;
       border-color: #cfc3f5 !important;
     }
     .ant-modal-content.getirstok-order-modal .ant-table-tbody > tr.ant-table-row:hover > td:first-child {
@@ -460,23 +597,36 @@ function ensureStyleOnce() {
     .ant-modal-content.getirstok-order-modal .ant-table-tbody > tr.ant-table-row:hover > td:not(:first-child):not(:has(> .getirstok-search-btn)) {
       color: #4c2fa8 !important;
     }
+    /* Görsel: renkli kutu + multiply → fotoğrafın beyaz zemini kutunun rengine karışır */
     .ant-modal-content.getirstok-order-modal .ant-table-tbody .ant-image {
-      width: 44px !important;
+      width: 52px !important;
+      height: 52px !important;
+      padding: 5px;
+      box-sizing: border-box;
+      border-radius: 14px;
+      background: linear-gradient(145deg, #ece6fb, #e2dbf7);
+      display: inline-flex !important;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      transition: transform 0.2s ease, background 0.2s ease;
     }
     .ant-modal-content.getirstok-order-modal .ant-table-tbody .ant-image-img {
       box-sizing: border-box;
-      width: 44px !important;
-      height: 44px !important;
-      padding: 3px;
+      width: 42px !important;
+      height: 42px !important;
+      padding: 0;
       object-fit: contain;
-      background: #ffffff;
-      border: 1px solid #efecf7;
-      border-radius: 12px;
-      transition: transform 0.2s ease, border-color 0.2s ease;
+      background: transparent !important;
+      border: none;
+      mix-blend-mode: multiply;
     }
-    .ant-modal-content.getirstok-order-modal .ant-table-tbody > tr.ant-table-row:hover .ant-image-img {
-      transform: scale(1.08);
-      border-color: #d9cff8;
+    .ant-modal-content.getirstok-order-modal .ant-table-tbody .ant-image-mask {
+      border-radius: 14px;
+    }
+    .ant-modal-content.getirstok-order-modal .ant-table-tbody > tr.ant-table-row:hover .ant-image {
+      transform: scale(1.06);
+      background: linear-gradient(145deg, #e4dcfa, #d8cff4);
     }
     .ant-modal-content.getirstok-order-modal .ant-table-tbody > tr.ant-table-row > td:has(> .getirstok-search-btn) {
       width: 1% !important;
@@ -491,6 +641,22 @@ function ensureStyleOnce() {
       font-size: 13px;
       font-weight: 600;
       color: #a19bb5;
+    }
+    /* Barkod kartı beyaz kalır (okutmak için kontrast), lavanta satırın üstünde ayrı kart */
+    .ant-modal-content.getirstok-order-modal .getirstok-bc-card {
+      border-color: #e2dbf5;
+      box-shadow: 0 2px 6px -2px rgba(93, 62, 188, 0.18);
+    }
+    .ant-modal-content.getirstok-order-modal .getirstok-bc-copy,
+    .ant-modal-content.getirstok-order-modal .getirstok-bc-edit-btn:not(.getirstok-bc-edit-btn--text) {
+      border-color: #e6e0f6;
+      background: #f6f3fd;
+      color: #7a6fa0;
+    }
+    .ant-modal-content.getirstok-order-modal .getirstok-bc-missing {
+      background: #ffffff;
+      border: 1px solid #ebe6f7;
+      color: #8a849d;
     }
     .ant-modal-content.getirstok-order-modal .ant-table-placeholder > td {
       background: #ffffff !important;
@@ -568,6 +734,13 @@ function getCleanProductNameFromCell(cell) {
     cell.dataset.getirstokOriginalName = name;
   }
   return name;
+}
+
+/** @returns { barcode, manual } — elle düzeltme varsa o, yoksa otomatik bulunan */
+function resolveBarcodeInfo(name) {
+  const override = barcodeOverrides[barcodeNameKey(name)];
+  if (override?.barcode) return { barcode: override.barcode, manual: true };
+  return { barcode: resolveBarcode(name), manual: false };
 }
 
 function resolveBarcode(name) {
@@ -770,7 +943,10 @@ const CHECK_ICON_SVG =
 
 // ────────────────────────────────────────────────────────────────────────────
 
-function injectBarcodeIntoCell(cell, barcode) {
+const PENCIL_ICON_SVG =
+  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>';
+
+function injectBarcodeIntoCell(cell, name) {
   if (!cell) return;
 
   let wrap = cell.querySelector('.getirstok-barcode-wrap');
@@ -780,23 +956,156 @@ function injectBarcodeIntoCell(cell, barcode) {
     cell.appendChild(wrap);
   }
   wrap.style.display = showBarcodes ? 'flex' : 'none';
+  // Düzenleme açıkken yazılan barkod silinmesin
+  if (wrap.dataset.editing === '1' && wrap.dataset.name === name) return;
+  renderBarcodeWrap(wrap, name);
+}
+
+function smallIconButton(className, title, svg, onClick) {
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = className;
+  btn.title = title;
+  btn.setAttribute('aria-label', title);
+  btn.innerHTML = svg;
+  btn.addEventListener('click', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    onClick(btn);
+  });
+  return btn;
+}
+
+/** Satırın içinde barkod girme / düzeltme formu */
+function openBarcodeEditor(wrap, name, current) {
+  wrap.dataset.editing = '1';
+  wrap.innerHTML = '';
+  const form = document.createElement('form');
+  form.className = 'getirstok-bc-edit';
+  form.addEventListener('click', (e) => e.stopPropagation());
+
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.inputMode = 'numeric';
+  input.autocomplete = 'off';
+  input.placeholder = 'Barkodu yazın veya okutun';
+  input.value = current.barcode || '';
+  input.maxLength = 20;
+  input.setAttribute('aria-label', `${name} barkodu`);
+
+  const save = document.createElement('button');
+  save.type = 'submit';
+  save.className = 'getirstok-bc-edit-save';
+  save.textContent = 'Kaydet';
+
+  const cancel = document.createElement('button');
+  cancel.type = 'button';
+  cancel.className = 'getirstok-bc-edit-cancel';
+  cancel.textContent = 'İptal';
+
+  const status = document.createElement('span');
+  status.className = 'getirstok-bc-edit-status';
+
+  const close = () => {
+    delete wrap.dataset.editing;
+    renderBarcodeWrap(wrap, name, { force: true });
+  };
+
+  const send = (barcode) => {
+    save.disabled = true;
+    status.textContent = 'Kaydediliyor…';
+    try {
+      chrome.runtime.sendMessage({ type: 'GETIRSTOK_BARCODE_OVERRIDE_SAVE', name, barcode }, (res) => {
+        if (chrome.runtime.lastError || !res?.ok) {
+          save.disabled = false;
+          status.textContent = res?.error || 'Kaydedilemedi, tekrar deneyin.';
+          status.dataset.tone = 'error';
+          return;
+        }
+        // Liste chrome.storage'dan güncellenince kart yeniden çizilir
+        close();
+      });
+    } catch {
+      save.disabled = false;
+      status.textContent = 'Eklenti yenilenmiş; sayfayı yenileyin.';
+      status.dataset.tone = 'error';
+    }
+  };
+
+  form.addEventListener('submit', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const value = input.value.replace(/\s+/g, '');
+    if (!/^\d{4,20}$/.test(value)) {
+      status.textContent = '4–20 haneli rakam olmalı';
+      status.dataset.tone = 'error';
+      input.focus();
+      return;
+    }
+    send(value);
+  });
+  cancel.addEventListener('click', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    close();
+  });
+  input.addEventListener('keydown', (e) => {
+    e.stopPropagation();
+    if (e.key === 'Escape') close();
+  });
+
+  form.append(input, save, cancel);
+  if (current.manual) {
+    const reset = document.createElement('button');
+    reset.type = 'button';
+    reset.className = 'getirstok-bc-edit-cancel';
+    reset.textContent = 'Otomatiğe dön';
+    reset.title = 'Elle girilen barkodu sil, eklentinin bulduğunu kullan';
+    reset.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      send(null);
+    });
+    form.appendChild(reset);
+  }
+  form.appendChild(status);
+  wrap.appendChild(form);
+  input.focus();
+  input.select();
+}
+
+function renderBarcodeWrap(wrap, name, { force = false } = {}) {
+  const info = resolveBarcodeInfo(name);
+  const barcode = info.barcode;
 
   // Her DOM değişiminde yeniden çizme; aynı barkod zaten çizildiyse dokunma
-  const key = barcode || '';
-  if (wrap.dataset.barcode === key && wrap.childElementCount > 0) return;
+  const key = `${name}|${barcode || ''}|${info.manual ? 'm' : 'a'}`;
+  if (!force && wrap.dataset.barcode === key && wrap.childElementCount > 0) return;
   wrap.dataset.barcode = key;
+  wrap.dataset.name = name;
   wrap.innerHTML = '';
+
+  const editBtn = smallIconButton(
+    'getirstok-bc-edit-btn',
+    barcode ? 'Barkodu düzelt' : 'Barkod ekle',
+    PENCIL_ICON_SVG,
+    () => openBarcodeEditor(wrap, name, info)
+  );
 
   if (!barcode) {
     const missing = document.createElement('span');
     missing.className = 'getirstok-bc-missing';
     missing.textContent = 'Barkod bulunamadı';
     wrap.appendChild(missing);
+    editBtn.classList.add('getirstok-bc-edit-btn--text');
+    editBtn.insertAdjacentText('beforeend', 'Barkod ekle');
+    wrap.appendChild(editBtn);
     return;
   }
 
   const card = document.createElement('div');
   card.className = 'getirstok-bc-card';
+  if (info.manual) card.classList.add('getirstok-bc-card--manual');
 
   const main = document.createElement('div');
   main.className = 'getirstok-bc-main';
@@ -812,6 +1121,13 @@ function injectBarcodeIntoCell(cell, barcode) {
   const num = document.createElement('span');
   num.className = 'getirstok-bc-num';
   num.textContent = barcode;
+  if (info.manual) {
+    const manualTag = document.createElement('span');
+    manualTag.className = 'getirstok-bc-manual';
+    manualTag.textContent = 'elle';
+    manualTag.title = 'Bu barkod elle girildi';
+    num.appendChild(manualTag);
+  }
   main.appendChild(num);
   card.appendChild(main);
 
@@ -834,7 +1150,10 @@ function injectBarcodeIntoCell(cell, barcode) {
       }, 1500);
     } catch {}
   });
-  card.appendChild(copyBtn);
+  const actions = document.createElement('div');
+  actions.className = 'getirstok-bc-actions';
+  actions.append(copyBtn, editBtn);
+  card.appendChild(actions);
   wrap.appendChild(card);
 }
 
@@ -980,6 +1299,11 @@ function decorateOrderModal(orderTable) {
 
 function tryInjectButtons() {
   if (!isFranchisePanel && !isWarehousePanel) return;
+  if (isWarehousePanel) {
+    decorateWarehouseLayout();
+    decorateBakeryPage();
+    decorateExpirationPage();
+  }
   ensureStyleOnce();
   tryInjectBarcodeToggleButton();
 
@@ -1034,11 +1358,1355 @@ function tryInjectButtons() {
         const qtyIdx = qtyColByName.get(nameColIdx);
         const qtyCell = qtyIdx !== undefined ? tds[qtyIdx] ?? null : null;
         injectButtonIntoCell(qtyCell || nameCell, name);
-        const barcode = resolveBarcode(name);
-        injectBarcodeIntoCell(nameCell, barcode);
+        injectBarcodeIntoCell(nameCell, name);
       }
     }
   }
+}
+
+// -----------------------------
+// Depo: Pişirme Önerileri sayfasını sadeleştir
+// Getir'in elemanları silinmez (açma/sıralama bozulmasın); gizlenip yanlarına bizimkiler eklenir.
+// Her çağrı sadece değişen şeye dokunur: aynı durumda DOM'a yazmaz, observer döngüye girmez.
+// -----------------------------
+
+const BAKE_PAGE_PATH_RE = /\/stock\/stock-management\/product\/bakery-estimation\//;
+const HEATING_STORAGE_KEY = "getirstok.heatingEstimations";
+const BAKE_BRAND_PREFIX_RE = /^La Lorraine\s+/i;
+
+/** Ürün adı (tam ad, küçük harf, tek boşluk) → anlık stok. Dilimler arası aynı; hangi dilimde varsa alınır */
+let heatingStocks = null;
+
+function bakeNameKey(name) {
+  return normalizeText(name).toLocaleLowerCase("tr-TR");
+}
+
+function buildHeatingStocks(json) {
+  const slots = Array.isArray(json?.data) ? json.data : [];
+  const stocks = new Map();
+  for (const slot of slots) {
+    for (const p of Array.isArray(slot?.products) ? slot.products : []) {
+      const key = bakeNameKey(p?.fullName || p?.name);
+      if (!key) continue;
+      const entry = stocks.get(key) || {};
+      for (const field of ["frozen", "available", "reserve"]) {
+        if (typeof p[field] === "number") entry[field] = p[field];
+      }
+      stocks.set(key, entry);
+    }
+  }
+  return stocks;
+}
+
+/** `startDate: "2026-10-18T12:00:00"` → "12-16" */
+function heatingSlotKey(startDate) {
+  const hour = Number(String(startDate || "").slice(11, 13));
+  if (hour === 8) return "08-12";
+  if (hour === 12) return "12-16";
+  if (hour === 16) return "16-20";
+  if (hour === 20) return "20-00";
+  return null;
+}
+
+/** Panelin Fırın sekmesi için öneriler: ekrandan okumak yerine Getir'in kendi verisinden */
+function bakeItemsFromHeating(json) {
+  const map = {};
+  for (const slot of Array.isArray(json?.data) ? json.data : []) {
+    const key = heatingSlotKey(slot?.startDate);
+    if (!key) continue;
+    for (const p of Array.isArray(slot?.products) ? slot.products : []) {
+      const qty = Number(p?.prediction);
+      const pid = /^[a-f0-9]{24}$/i.test(String(p?.productId || "")) ? p.productId : undefined;
+      mergeBakeItem(map, p?.fullName || p?.name, key, qty, pid);
+    }
+  }
+  return Object.values(map);
+}
+
+function applyHeatingJson(json) {
+  heatingStocks = buildHeatingStocks(json);
+  publishBakeSuggestions(bakeItemsFromHeating(json));
+}
+
+function loadHeatingStocksFromSession() {
+  try {
+    const raw = sessionStorage.getItem(HEATING_STORAGE_KEY);
+    if (raw) applyHeatingJson(JSON.parse(raw));
+  } catch {
+    /* bozuk kayıt */
+  }
+}
+
+function setDataAttr(el, name, value) {
+  if (value == null) {
+    if (el.hasAttribute(name)) el.removeAttribute(name);
+  } else if (el.getAttribute(name) !== value) {
+    el.setAttribute(name, value);
+  }
+}
+
+function ensureBakeStyleOnce() {
+  if (document.getElementById("getirstok-bake-style")) return;
+  const style = document.createElement("style");
+  style.id = "getirstok-bake-style";
+  style.textContent = `
+    /* Kart (saat dilimi) */
+    [data-getirstok-bake-card] {
+      border-radius: 14px !important;
+      border: 1px solid #ebe7f5 !important;
+      box-shadow: 0 1px 3px rgba(31, 27, 46, 0.06) !important;
+      overflow: hidden;
+      transition: opacity 0.2s ease;
+    }
+    [data-getirstok-bake-card] > .ant-card-head {
+      min-height: 0 !important;
+      padding: 8px 12px !important;
+      background: #faf9fd !important;
+      border-bottom: 1px solid #ebe7f5 !important;
+    }
+    [data-getirstok-bake-card] .period-title {
+      font-size: 14px !important;
+      font-weight: 700 !important;
+      color: #1f1b2e !important;
+    }
+    [data-getirstok-bake-card="current"] {
+      border: 2px solid #5d3ebc !important;
+      box-shadow: 0 6px 18px -8px rgba(93, 62, 188, 0.45) !important;
+    }
+    [data-getirstok-bake-card="current"] > .ant-card-head {
+      background: #5d3ebc !important;
+    }
+    [data-getirstok-bake-card="current"] > .ant-card-head .period-title,
+    [data-getirstok-bake-card="current"] > .ant-card-head .period-title .anticon {
+      color: #ffffff !important;
+    }
+    [data-getirstok-bake-card] .ant-card-head-wrapper {
+      flex-wrap: nowrap !important;
+      gap: 6px;
+    }
+    [data-getirstok-bake-card] .ant-card-head-title {
+      min-width: 0;
+      padding: 0 !important;
+    }
+    [data-getirstok-bake-card] .period-title {
+      white-space: nowrap;
+    }
+    [data-getirstok-bake-card] .ant-card-extra {
+      flex-shrink: 0;
+      padding: 0 !important;
+    }
+    [data-getirstok-bake-card] .ant-card-extra [class*="cardActions"] {
+      display: flex !important;
+      flex-wrap: nowrap !important;
+      gap: 4px !important;
+    }
+    [data-getirstok-bake-card="past"] {
+      opacity: 0.55;
+    }
+    [data-getirstok-bake-card="past"]:hover {
+      opacity: 1;
+    }
+    [data-getirstok-bake-card] > .ant-card-body {
+      padding: 4px 6px 6px !important;
+    }
+
+    /* Ürün satırı */
+    [data-getirstok-bake-item] {
+      margin: 0 !important;
+      border-bottom: 1px solid #f2f0f7 !important;
+      border-radius: 10px !important;
+    }
+    [data-getirstok-bake-item]:last-child {
+      border-bottom: none !important;
+    }
+    [data-getirstok-bake-item] > .ant-collapse-header {
+      padding: 6px 6px 6px 8px !important;
+      align-items: center !important;
+    }
+    [data-getirstok-bake-item] > .ant-collapse-header:hover {
+      background: #faf9fe;
+      border-radius: 10px;
+    }
+    [data-getirstok-bake-item] .ant-collapse-header-text {
+      flex: 1 1 auto !important;
+      min-width: 0 !important;
+    }
+    [data-getirstok-bake-item] .ant-collapse-header-text > div {
+      display: flex !important;
+      align-items: center !important;
+      gap: 8px !important;
+      flex-direction: row !important;
+    }
+    [data-getirstok-bake-item] .ant-collapse-header-text > div > div:first-child {
+      flex: 1 1 auto;
+      min-width: 0;
+    }
+    [data-getirstok-bake-item] .ant-collapse-header .ant-typography,
+    [data-getirstok-bake-item] [class*="progressBarWrapper"] {
+      display: none !important;
+    }
+    [data-getirstok-bake-item] .ant-collapse-header .ant-avatar {
+      width: 26px !important;
+      height: 26px !important;
+      flex-shrink: 0;
+      border-radius: 8px !important;
+    }
+    [data-getirstok-bake-item] .ant-collapse-header-text > div > div:first-child > div {
+      display: flex !important;
+      align-items: center !important;
+      gap: 8px !important;
+      min-width: 0;
+    }
+    .getirstok-bake-title {
+      display: flex;
+      flex-direction: column;
+      flex: 1 1 auto;
+      min-width: 0;
+      overflow: hidden;
+      line-height: 1.25;
+    }
+    .getirstok-bake-name {
+      font-size: 13px;
+      font-weight: 600;
+      color: #1f1b2e;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+      overflow-wrap: anywhere;
+    }
+    .getirstok-bake-stock {
+      font-size: 11px;
+      color: #8a849d;
+    }
+    .getirstok-bake-stock b {
+      font-weight: 600;
+      color: #4b4560;
+    }
+    .getirstok-bake-qty {
+      flex-shrink: 0;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 34px;
+      height: 28px;
+      padding: 0 6px;
+      border-radius: 9px;
+      background: #fff4e5;
+      color: #c2410c;
+      font-size: 16px;
+      font-weight: 800;
+      font-variant-numeric: tabular-nums;
+    }
+    [data-getirstok-bake-zero] .getirstok-bake-qty {
+      background: #f3f2f7;
+      color: #a19bb5;
+    }
+    [data-getirstok-bake-zero] .getirstok-bake-name {
+      color: #8a849d;
+      font-weight: 500;
+    }
+    [data-getirstok-bake-item][data-getirstok-bake-hidden] {
+      display: none !important;
+    }
+
+    /* Raf boş + pişirme önerisi var (şu anki dilim) */
+    [data-getirstok-bake-alert] {
+      background: #fef2f2 !important;
+      box-shadow: inset 3px 0 0 #dc2626;
+    }
+    [data-getirstok-bake-alert] .getirstok-bake-qty {
+      background: #dc2626;
+      color: #ffffff;
+    }
+    .getirstok-bake-alert {
+      align-self: flex-start;
+      margin-top: 2px;
+      padding: 1px 7px;
+      border-radius: 999px;
+      background: #dc2626;
+      color: #ffffff;
+      font-size: 10.5px;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+      animation: getirstok-bake-pulse 1.4s ease-in-out infinite;
+    }
+    @keyframes getirstok-bake-pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.55; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .getirstok-bake-alert { animation: none; }
+    }
+
+    /* Açılan detay: Satılan / Rezerve / Donuk / Raf */
+    [data-getirstok-bake-item] .ant-collapse-content-box {
+      padding: 0 8px 8px 46px !important;
+    }
+    [data-getirstok-bake-item] [class*="productStocks"] {
+      display: grid !important;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 4px !important;
+    }
+    [data-getirstok-bake-item] [class*="stockCell"] {
+      display: flex !important;
+      flex-direction: column !important;
+      align-items: center !important;
+      gap: 1px !important;
+      padding: 4px 2px !important;
+      border-radius: 8px !important;
+      background: #faf9fd !important;
+      min-width: 0;
+    }
+    [data-getirstok-bake-item] [class*="stockLabel"] {
+      font-size: 10.5px !important;
+      color: #8a849d !important;
+      white-space: nowrap;
+    }
+    [data-getirstok-bake-item] [class*="stockValue"] {
+      font-size: 14px !important;
+      font-weight: 700 !important;
+      color: #1f1b2e !important;
+      font-variant-numeric: tabular-nums;
+    }
+  `;
+  document.head.appendChild(style);
+}
+
+/** Satırın başlığına kısa ad + stok bilgisi + adet rozeti ekler / günceller */
+function decorateBakeItem(item, isCurrentSlot) {
+  const header = item.querySelector(":scope > .ant-collapse-header");
+  const nameEl = header?.querySelector(".ant-typography");
+  const labelEl = header?.querySelector('[class*="progressBarLabel"]');
+  const row = header?.querySelector(".ant-collapse-header-text > div");
+  if (!nameEl || !labelEl || !row) return;
+
+  const fullName = normalizeText(nameEl.textContent);
+  const qtyMatch = normalizeText(labelEl.textContent).match(/(\d+)/);
+  const qty = qtyMatch ? Number(qtyMatch[1]) : null;
+  const stock = heatingStocks?.get(bakeNameKey(fullName)) ?? null;
+  const frozenKnown = typeof stock?.frozen === "number";
+  const shelfKnown = typeof stock?.available === "number";
+
+  const hidden = frozenKnown && stock.frozen === 0;
+  const alert = isCurrentSlot && !hidden && qty != null && qty > 0 && shelfKnown && stock.available === 0;
+
+  setDataAttr(item, "data-getirstok-bake-item", "1");
+  setDataAttr(item, "data-getirstok-bake-hidden", hidden ? "1" : null);
+  setDataAttr(item, "data-getirstok-bake-zero", qty === 0 ? "1" : null);
+  setDataAttr(item, "data-getirstok-bake-alert", alert ? "1" : null);
+
+  // React satırı başka bir ürün için yeniden kullanırsa (sıralama) içerik baştan yazılır
+  const stamp = JSON.stringify([fullName, qty, stock?.available ?? null, stock?.frozen ?? null, alert]);
+  let title = nameEl.parentElement.querySelector(":scope > .getirstok-bake-title");
+  let qtyBadge = row.querySelector(":scope > .getirstok-bake-qty");
+  if (title && qtyBadge && title.dataset.stamp === stamp) return;
+
+  if (!title) {
+    title = document.createElement("span");
+    title.className = "getirstok-bake-title";
+    nameEl.insertAdjacentElement("afterend", title);
+  }
+  title.dataset.stamp = stamp;
+  title.replaceChildren();
+  const nameSpan = document.createElement("span");
+  nameSpan.className = "getirstok-bake-name";
+  nameSpan.textContent = fullName.replace(BAKE_BRAND_PREFIX_RE, "");
+  nameSpan.title = fullName;
+  title.appendChild(nameSpan);
+  if (shelfKnown || frozenKnown) {
+    const stockLine = document.createElement("span");
+    stockLine.className = "getirstok-bake-stock";
+    const parts = [];
+    if (shelfKnown) parts.push(["Raf", stock.available]);
+    if (frozenKnown) parts.push(["Donuk", stock.frozen]);
+    parts.forEach(([label, value], i) => {
+      if (i > 0) stockLine.append(" · ");
+      const b = document.createElement("b");
+      b.textContent = String(value);
+      stockLine.append(`${label} `, b);
+    });
+    title.appendChild(stockLine);
+  }
+  if (alert) {
+    const badge = document.createElement("span");
+    badge.className = "getirstok-bake-alert";
+    badge.textContent = "Beni pişir";
+    title.appendChild(badge);
+  }
+
+  if (!qtyBadge) {
+    qtyBadge = document.createElement("span");
+    qtyBadge.className = "getirstok-bake-qty";
+    row.appendChild(qtyBadge);
+  }
+  qtyBadge.textContent = qty == null ? "—" : String(qty);
+  qtyBadge.title = qty == null ? "" : `${qty} pişir`;
+}
+
+function decorateBakeryPage() {
+  if (!BAKE_PAGE_PATH_RE.test(window.location.pathname)) return;
+  const cards = Array.from(document.querySelectorAll('[class*="heatingEstimationCard"]'));
+  if (cards.length === 0) return;
+  ensureBakeStyleOnce();
+  if (!heatingStocks) loadHeatingStocksFromSession();
+
+  const currentIdx = cards.findIndex((c) => /currentPeriodCard/.test(c.className));
+  cards.forEach((card, idx) => {
+    const slotState =
+      currentIdx < 0 ? "" : idx < currentIdx ? "past" : idx === currentIdx ? "current" : "next";
+    setDataAttr(card, "data-getirstok-bake-card", slotState);
+    for (const item of card.querySelectorAll(".ant-collapse-item")) {
+      decorateBakeItem(item, idx === currentIdx);
+    }
+  });
+}
+
+// -----------------------------
+// Depo: genel görünüm — sol menü, üst sekmeler (tüm sayfalar), Kontrol Paneli panosu ve kurye paneli
+// Getir'in CSS modülü sınıflarının sonundaki kod (--rB6oM) her sürümde değişebilir; sadece baş kısmı kullanılır.
+// -----------------------------
+
+const ORDER_STAGE_BY_HEADER = {
+  "toplayıcı bekliyor": "waiting",
+  doğrulanıyor: "verifying",
+  hazırlanıyor: "preparing",
+  hazırlandı: "prepared",
+  "el değiştiriliyor": "handover",
+  "yolda/ulaştı": "onway",
+};
+
+const COURIER_STATUS_BY_TEXT = {
+  yolda: "onway",
+  toplama: "picking",
+  meşgul: "busy",
+  müsait: "available",
+  "geri dönüyor": "returning",
+};
+
+function ensureWarehouseLayoutStyleOnce() {
+  if (document.getElementById("getirstok-layout-style")) return;
+  const style = document.createElement("style");
+  style.id = "getirstok-layout-style";
+  style.textContent = `
+    /* ── Sol menü ──
+       Yapı ve sıra Getir'in; sadece görünüm. Seviyeler: ana başlık → alt başlık (oklu) → sayfa bağlantısı (noktalı).
+       Getir üzerine gelince zemini koyu mor, yazıyı beyaz yapıyor (bazısı !important); burada hepsi açık zemin + koyu yazı. */
+    aside[class*="sider--"] {
+      background: #ffffff !important;
+      border: 1px solid #ece8f6 !important;
+      border-radius: 16px !important;
+      box-shadow: 0 1px 3px rgba(31, 27, 46, 0.05) !important;
+      scrollbar-width: thin;
+      scrollbar-color: #d6cff0 transparent;
+    }
+    aside[class*="sider--"] > .ant-layout-sider-children {
+      padding-bottom: 12px;
+    }
+    aside[class*="sider--"] [class*="searchInput--"] {
+      position: sticky !important;
+      top: 0;
+      z-index: 3;
+      margin: 0 !important;
+      width: 100% !important;
+      padding: 10px 10px 8px !important;
+      border: none !important;
+      border-radius: 0 !important;
+      background: #ffffff !important;
+      box-shadow: 0 1px 0 #f1eef8 !important;
+    }
+    aside[class*="sider--"] [class*="searchInput--"] .ant-input {
+      background: transparent !important;
+    }
+    /* Ant Design bu ::before'u kendi içinde gizli kullanıyor; çerçeve olarak görünür yapılır */
+    aside[class*="sider--"] [class*="searchInput--"]::before {
+      content: "" !important;
+      visibility: visible !important;
+      width: auto !important;
+      position: absolute;
+      inset: 10px 10px 8px;
+      border: 1px solid #d9d2ec;
+      border-radius: 10px;
+      background: #f6f4fb;
+      z-index: -1;
+      pointer-events: none;
+    }
+    aside[class*="sider--"] [class*="searchInput--"]:focus-within::before {
+      border-color: #5d3ebc;
+      box-shadow: 0 0 0 3px rgba(93, 62, 188, 0.15);
+      background: #ffffff;
+    }
+    aside[class*="sider--"] [class*="searchInput--"] .ant-input-prefix {
+      margin-inline-start: 10px;
+      color: #a19bb5;
+    }
+    aside[class*="sider--"] .ant-menu {
+      background: transparent !important;
+      border-inline-end: none !important;
+    }
+    aside[class*="sider--"] .ant-menu-root {
+      padding: 8px 8px 0 !important;
+    }
+
+    /* Ortak satır: sabit yükseklik yok, uzun adlar iki satıra temiz iner */
+    aside[class*="sider--"] .ant-menu .ant-menu-item,
+    aside[class*="sider--"] .ant-menu .ant-menu-submenu-title {
+      position: relative;
+      height: auto !important;
+      min-height: 34px !important;
+      line-height: 18px !important;
+      padding-top: 8px !important;
+      padding-bottom: 8px !important;
+      padding-left: 10px !important;
+      padding-right: 34px !important;
+      margin: 1px 0 !important;
+      width: 100% !important;
+      white-space: normal !important;
+      border-radius: 9px !important;
+      color: #3b3550 !important;
+      transition: background 0.15s ease, color 0.15s ease !important;
+    }
+    aside[class*="sider--"] .ant-menu .ant-menu-item {
+      padding-right: 8px !important;
+    }
+    aside[class*="sider--"] .ant-menu-title-content {
+      white-space: normal !important;
+      line-height: 18px !important;
+    }
+    aside[class*="sider--"] .ant-menu-item .ant-menu-title-content > .ant-flex {
+      align-items: center !important;
+      gap: 6px;
+    }
+    aside[class*="sider--"] .ant-menu-item .ant-menu-title-content > .ant-flex > a {
+      flex: 1 1 auto;
+      min-width: 0;
+      color: inherit !important;
+    }
+    aside[class*="sider--"] .ant-menu-item .ml-8 {
+      display: none;
+    }
+
+    /* 1. seviye: ana başlıklar ve tek sayfalar */
+    aside[class*="sider--"] .ant-menu-root > .ant-menu-item,
+    aside[class*="sider--"] .ant-menu-root > .ant-menu-submenu > .ant-menu-submenu-title {
+      font-size: 14px !important;
+      font-weight: 650 !important;
+      color: #1f1b2e !important;
+    }
+    aside[class*="sider--"] .ant-menu-root > .ant-menu-submenu {
+      margin-top: 2px;
+    }
+
+    /* 2. seviye ve altı: girinti + ağaç çizgisi */
+    aside[class*="sider--"] .ant-menu-sub.ant-menu-inline {
+      margin: 2px 0 4px 16px !important;
+      padding-left: 6px !important;
+      border-left: 1.5px solid #ebe6f6 !important;
+      background: transparent !important;
+    }
+    aside[class*="sider--"] .ant-menu-sub .ant-menu-submenu-title {
+      min-height: 32px !important;
+      padding-top: 7px !important;
+      padding-bottom: 7px !important;
+      font-size: 13px !important;
+      font-weight: 600 !important;
+      color: #3b3550 !important;
+    }
+    aside[class*="sider--"] .ant-menu-sub .ant-menu-item {
+      min-height: 32px !important;
+      padding-top: 7px !important;
+      padding-bottom: 7px !important;
+      font-size: 13px !important;
+      font-weight: 500 !important;
+      color: #5b556e !important;
+    }
+    aside[class*="sider--"] .ant-menu-sub .ant-menu-sub .ant-menu-item,
+    aside[class*="sider--"] .ant-menu-sub .ant-menu-sub .ant-menu-submenu-title {
+      font-size: 12.5px !important;
+    }
+    /* Sayfa bağlantılarının başında nokta: oklu (açılır) başlıklardan ayırt edilsin */
+    aside[class*="sider--"] .ant-menu .ant-menu-sub .ant-menu-item {
+      padding-left: 24px !important;
+    }
+    aside[class*="sider--"] .ant-menu-sub .ant-menu-item::before {
+      content: "";
+      position: absolute;
+      left: 11px;
+      top: 50%;
+      width: 6px;
+      height: 6px;
+      margin-top: -3px;
+      border-radius: 50%;
+      background: #cfc6ea;
+      transition: background 0.15s ease, transform 0.15s ease;
+    }
+
+    /* Ok */
+    aside[class*="sider--"] .ant-menu-submenu-arrow {
+      inset-inline-end: 12px !important;
+      color: #a19bb5 !important;
+    }
+    aside[class*="sider--"] .ant-menu-submenu-arrow::before,
+    aside[class*="sider--"] .ant-menu-submenu-arrow::after {
+      background-color: #a19bb5 !important;
+    }
+
+    /* Üzerine gelince: açık zemin, koyu yazı */
+    aside[class*="sider--"] .ant-menu .ant-menu-item:hover,
+    aside[class*="sider--"] .ant-menu .ant-menu-submenu .ant-menu-submenu-title:hover {
+      background: #f3effc !important;
+    }
+    aside[class*="sider--"] .ant-menu .ant-menu-submenu .ant-menu-submenu-title:hover span,
+    aside[class*="sider--"] .ant-menu .ant-menu-submenu-active > .ant-menu-submenu-title > span,
+    aside[class*="sider--"] .ant-menu .ant-menu-submenu-active > .ant-menu-submenu-title > .ant-menu-submenu-arrow,
+    aside[class*="sider--"] .ant-menu .ant-menu-item:hover span a,
+    aside[class*="sider--"] .ant-menu .ant-menu-item:hover .ant-menu-item-icon,
+    aside[class*="sider--"] .ant-menu .ant-menu-item-active button {
+      color: #2a2440 !important;
+    }
+    aside[class*="sider--"] .ant-menu .ant-menu-submenu .ant-menu-submenu-title:hover .ant-menu-submenu-arrow::before,
+    aside[class*="sider--"] .ant-menu .ant-menu-submenu .ant-menu-submenu-title:hover .ant-menu-submenu-arrow::after {
+      background-color: #5d3ebc !important;
+    }
+    aside[class*="sider--"] .ant-menu-sub .ant-menu-item:hover::before {
+      background: #a99bd8;
+    }
+
+    /* Açık menünün başlığı */
+    aside[class*="sider--"] .ant-menu .ant-menu-submenu-open > .ant-menu-submenu-title,
+    aside[class*="sider--"] .ant-menu .ant-menu-submenu-open > .ant-menu-submenu-title span {
+      color: #5d3ebc !important;
+    }
+    aside[class*="sider--"] .ant-menu .ant-menu-submenu-open > .ant-menu-submenu-title .ant-menu-submenu-arrow::before,
+    aside[class*="sider--"] .ant-menu .ant-menu-submenu-open > .ant-menu-submenu-title .ant-menu-submenu-arrow::after {
+      background-color: #5d3ebc !important;
+    }
+
+    /* Seçili sayfa */
+    aside[class*="sider--"] .ant-menu .ant-menu-item-selected,
+    aside[class*="sider--"] .ant-menu .ant-menu-item-selected:hover {
+      background: #ede7fc !important;
+      color: #5d3ebc !important;
+      font-weight: 700 !important;
+    }
+    aside[class*="sider--"] .ant-menu-root > .ant-menu-item-selected {
+      box-shadow: inset 3px 0 0 #5d3ebc;
+    }
+    aside[class*="sider--"] .ant-menu-item-selected::after {
+      display: none !important;
+    }
+    aside[class*="sider--"] .ant-menu .ant-menu-item-selected span a,
+    aside[class*="sider--"] .ant-menu .ant-menu-item-selected:hover span a,
+    aside[class*="sider--"] .ant-menu .ant-menu-item-selected button,
+    aside[class*="sider--"] .ant-menu .ant-menu-item-selected:hover button,
+    aside[class*="sider--"] .ant-menu .ant-menu-submenu-selected > .ant-menu-submenu-title .ant-menu-title-content {
+      color: #5d3ebc !important;
+    }
+    aside[class*="sider--"] .ant-menu-sub .ant-menu-item-selected::before {
+      background: #5d3ebc;
+      transform: scale(1.3);
+    }
+    aside[class*="sider--"] .ant-menu-submenu-selected > .ant-menu-submenu-title {
+      font-weight: 700 !important;
+    }
+
+    /* Yıldızlar: soluk, üzerine gelince belirgin; küçük ki yıldızlı satırlar uzamasın */
+    aside[class*="sider--"] .ant-menu-item .ant-btn-icon-only {
+      width: 22px !important;
+      min-width: 22px !important;
+      height: 22px !important;
+      padding: 0 !important;
+      flex-shrink: 0;
+      opacity: 0;
+      transition: opacity 0.15s ease;
+    }
+    aside[class*="sider--"] .ant-menu-item:hover .ant-btn-icon-only,
+    aside[class*="sider--"] .ant-menu-item-selected .ant-btn-icon-only,
+    aside[class*="sider--"] .ant-menu-item .ant-btn-icon-only:focus-visible {
+      opacity: 1;
+    }
+    aside[class*="sider--"] .ant-menu-item .ant-btn-icon-only .anticon-star svg {
+      width: 14px;
+      height: 14px;
+    }
+
+    /* ── Üst sekmeler (Siparişler, Harita, …) ── */
+    .ant-tabs[aria-label="Main navigation tabs"] > .ant-tabs-nav {
+      margin-bottom: 14px !important;
+    }
+    .ant-tabs[aria-label="Main navigation tabs"] > .ant-tabs-nav::before {
+      display: none !important;
+    }
+    .ant-tabs[aria-label="Main navigation tabs"] .ant-tabs-ink-bar {
+      display: none !important;
+    }
+    .ant-tabs[aria-label="Main navigation tabs"] .ant-tabs-nav-list {
+      gap: 6px;
+      padding: 4px;
+      border-radius: 12px;
+      background: #f3f0fa;
+    }
+    .ant-tabs[aria-label="Main navigation tabs"] .ant-tabs-tab {
+      margin: 0 !important;
+      padding: 6px 14px !important;
+      border-radius: 9px !important;
+      transition: background 0.15s ease, box-shadow 0.15s ease !important;
+    }
+    .ant-tabs[aria-label="Main navigation tabs"] .ant-tabs-tab .ant-tabs-tab-btn {
+      color: #5b556e !important;
+      font-size: 13px !important;
+      font-weight: 600 !important;
+    }
+    .ant-tabs[aria-label="Main navigation tabs"] .ant-tabs-tab:hover {
+      background: rgba(255, 255, 255, 0.7) !important;
+    }
+    .ant-tabs[aria-label="Main navigation tabs"] .ant-tabs-tab-active {
+      background: #ffffff !important;
+      box-shadow: 0 1px 3px rgba(31, 27, 46, 0.1) !important;
+    }
+    .ant-tabs[aria-label="Main navigation tabs"] .ant-tabs-tab-active .ant-tabs-tab-btn {
+      color: #5d3ebc !important;
+    }
+    .ant-tabs[aria-label="Main navigation tabs"] .ant-tabs-tab .ant-badge {
+      color: inherit !important;
+      font: inherit !important;
+    }
+    .ant-tabs[aria-label="Main navigation tabs"] .ant-badge-count {
+      box-shadow: none !important;
+      font-weight: 700 !important;
+    }
+
+    /* ── Kontrol Paneli: sipariş panosu ── */
+    /* Sütunlar Getir'deki gibi pano yüksekliğine uzar; kartlar sütunun içinde kayar */
+    [class*="ordersList--"] {
+      gap: 10px !important;
+    }
+    [class*="orderColumn--"] {
+      display: flex !important;
+      flex-direction: column !important;
+      min-height: 0 !important;
+      background: #f8f7fc !important;
+      border: 1px solid #ece8f6 !important;
+      border-radius: 14px !important;
+      padding: 0 4px 6px !important;
+    }
+    [class*="orderHeader--"] {
+      display: flex !important;
+      flex-direction: column !important;
+      align-items: center !important;
+      gap: 6px !important;
+      padding: 12px 4px 10px !important;
+      border: none !important;
+    }
+    [class*="orderHeader--"] > p {
+      margin: 0 !important;
+      font-size: 13px !important;
+      font-weight: 700 !important;
+      color: #3b3550 !important;
+    }
+    [class*="orderHeader--"] > .ant-typography {
+      min-width: 34px;
+      padding: 2px 10px;
+      border: none !important;
+      border-radius: 999px !important;
+      background: #5d3ebc !important;
+      color: #ffffff !important;
+      font-size: 14px !important;
+      font-weight: 800 !important;
+      text-align: center;
+      font-variant-numeric: tabular-nums;
+    }
+    [data-getirstok-empty-column] [class*="orderHeader--"] > .ant-typography {
+      background: #e9e6f2 !important;
+      color: #8a849d !important;
+    }
+    [data-getirstok-empty-column] [class*="orderHeader--"] > p {
+      color: #8a849d !important;
+    }
+    [class*="orderCardWrapper--"] {
+      display: flex !important;
+      flex-direction: column !important;
+      flex: 1 1 auto !important;
+      min-height: 0 !important;
+      overflow-y: auto !important;
+      gap: 8px !important;
+      padding: 2px 2px 4px !important;
+      scrollbar-width: thin;
+      scrollbar-color: #a99bd8 #efecf7;
+    }
+    [class*="orderCardWrapper--"] > [class*="orderCard--"] {
+      flex-shrink: 0;
+    }
+    [class*="orderCardWrapper--"]::-webkit-scrollbar {
+      width: 8px;
+    }
+    [class*="orderCardWrapper--"]::-webkit-scrollbar-thumb {
+      background: #a99bd8;
+      border-radius: 999px;
+    }
+    [class*="orderCardWrapper--"]::-webkit-scrollbar-track {
+      background: #efecf7;
+      border-radius: 999px;
+    }
+    [class*="orderCard--"] {
+      position: relative;
+      margin: 0 !important;
+      border: 1px solid #ebe7f5 !important;
+      border-radius: 12px !important;
+      background: #ffffff !important;
+      box-shadow: 0 1px 3px rgba(31, 27, 46, 0.07) !important;
+      overflow: hidden;
+      transition: box-shadow 0.15s ease, transform 0.15s ease;
+    }
+    [class*="orderCard--"]:hover {
+      box-shadow: 0 6px 16px -6px rgba(93, 62, 188, 0.3) !important;
+      transform: translateY(-1px);
+    }
+    [class*="orderCard--"]:has([class*="bgDanger"]) {
+      box-shadow: inset 4px 0 0 #dc2626, 0 1px 3px rgba(31, 27, 46, 0.07) !important;
+    }
+    [class*="orderCard--"]:has([class*="bgWarning"]) {
+      box-shadow: inset 4px 0 0 #f59e0b, 0 1px 3px rgba(31, 27, 46, 0.07) !important;
+    }
+    [class*="orderCard--"]:has([class*="bgSuccess"]) {
+      box-shadow: inset 4px 0 0 #16a34a, 0 1px 3px rgba(31, 27, 46, 0.07) !important;
+    }
+    [class*="orderCard--"] [class*="cardBody--"] {
+      border: none !important;
+      padding: 8px 6px 4px 10px !important;
+    }
+    /* Kartın başındaki boş yer tutucu */
+    [class*="orderCard--"] > div:first-child:empty {
+      display: none !important;
+    }
+    [class*="orderCard--"] [class*="cardBody--"] > [class*="textWithIcons--"][data-getirstok-empty-row] {
+      display: none !important;
+    }
+
+    /* Toplayıcı bekleyen siparişler: dikkat isteyen kartlar, belirgin olsun */
+    [data-getirstok-stage="waiting"] [class*="orderCard--"] {
+      background: #fffaf0 !important;
+      border-color: #fcd9a0 !important;
+      box-shadow: inset 4px 0 0 #f59e0b, 0 2px 6px -2px rgba(217, 119, 6, 0.25) !important;
+    }
+    [data-getirstok-stage="waiting"] [class*="orderCard--"] [class*="cardBody--"] {
+      padding: 10px 8px 10px 12px !important;
+    }
+    [data-getirstok-stage="waiting"] [class*="orderCard--"] [class*="textWithIcons--"] .ant-typography {
+      font-size: 15px !important;
+      font-weight: 800 !important;
+      color: #1f1b2e !important;
+    }
+    [data-getirstok-stage="waiting"] [class*="orderCard--"] [class*="cardBody--"]::after {
+      content: "Toplayıcı bekleniyor";
+      display: inline-block;
+      max-width: 100%;
+      margin-top: 6px;
+      padding: 2px 8px;
+      border-radius: 8px;
+      background: #fef3c7;
+      color: #92400e;
+      font-size: 10.5px;
+      font-weight: 700;
+      line-height: 1.35;
+      white-space: normal;
+    }
+    [data-getirstok-stage="waiting"] [class*="orderHeader--"] > .ant-typography {
+      background: #f59e0b !important;
+    }
+    [data-getirstok-stage="waiting"][data-getirstok-empty-column] [class*="orderHeader--"] > .ant-typography {
+      background: #e9e6f2 !important;
+    }
+
+    /* Doğrulanıyor: mavi şerit */
+    [data-getirstok-stage="verifying"] [class*="orderCard--"] {
+      box-shadow: inset 4px 0 0 #3b82f6, 0 1px 3px rgba(31, 27, 46, 0.07) !important;
+    }
+    [class*="orderTimer--"] {
+      font-size: 16px !important;
+      font-weight: 800 !important;
+      color: #1f1b2e !important;
+      font-variant-numeric: tabular-nums;
+      letter-spacing: 0.02em;
+      text-align: left !important;
+      margin-bottom: 4px !important;
+    }
+    [class*="orderCard--"]:has([class*="bgDanger"]) [class*="orderTimer--"] { color: #b91c1c !important; }
+    [class*="orderCard--"]:has([class*="bgWarning"]) [class*="orderTimer--"] { color: #b45309 !important; }
+    [class*="orderCard--"] [class*="progress--"] {
+      height: 5px !important;
+      margin: 0 0 8px !important;
+      border-radius: 999px !important;
+      background: #f1eff7 !important;
+      overflow: hidden !important;
+    }
+    [class*="orderCard--"] [class*="progress--"] > div {
+      height: 5px !important;
+      max-width: 100% !important;
+      padding: 0 !important;
+      border-radius: 999px !important;
+    }
+    [class*="orderCard--"] [class*="textWithIcons--"] {
+      display: flex !important;
+      align-items: center !important;
+      gap: 4px !important;
+      margin: 2px 0 !important;
+      min-width: 0;
+    }
+    [class*="orderCard--"] [class*="textIcon--"] {
+      flex-shrink: 0;
+      width: 14px !important;
+      margin: 0 !important;
+      opacity: 0.5;
+    }
+    [class*="orderCard--"] [class*="textIcon--"] svg {
+      width: 13px !important;
+      height: 13px !important;
+    }
+    [class*="orderCard--"] [class*="textWithIcons--"] > span {
+      min-width: 0;
+      overflow: hidden;
+    }
+    [class*="orderCard--"] [class*="textWithIcons--"] .ant-typography {
+      font-size: 12.5px !important;
+      font-weight: 600 !important;
+      color: #3b3550 !important;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    /* Sipariş kodu = ilk bilgi satırı (süre/çubuk olan kartta onlardan hemen sonra, olmayanda en başta) */
+    [class*="orderCard--"] [class*="cardBody--"] > :not([class*="textWithIcons--"]) + [class*="textWithIcons--"] .ant-typography,
+    [class*="orderCard--"] [class*="cardBody--"] > [class*="textWithIcons--"]:first-child .ant-typography {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace !important;
+      font-weight: 700 !important;
+      color: #5d3ebc !important;
+    }
+    [class*="orderCard--"] [class*="batched--"] {
+      margin-top: 6px !important;
+    }
+    [class*="orderCard--"] [class*="batchedBadge--"] {
+      display: inline-block !important;
+      width: auto !important;
+      max-width: 100%;
+      padding: 1px 7px !important;
+      border-radius: 999px !important;
+      background: #ede7fc !important;
+      color: #5d3ebc !important;
+      font-size: 10.5px !important;
+      font-weight: 700 !important;
+      line-height: 16px !important;
+      white-space: nowrap !important;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    [class*="orderCard--"] [class*="locationContainer--"] {
+      display: flex !important;
+      justify-content: flex-end !important;
+      padding: 0 10px 8px !important;
+      border: none !important;
+    }
+    [class*="orderCard--"] [class*="locationContainer--"] .ant-tag {
+      margin: 0 !important;
+      border: none !important;
+      border-radius: 6px !important;
+      background: #f3f2f7 !important;
+      color: #5b556e !important;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace !important;
+      font-size: 11px !important;
+      font-weight: 600 !important;
+    }
+
+    /* ── Kurye / toplayıcı paneli ── */
+    [class*="pickerAndCourierPanel--"] .ant-tabs-card > .ant-tabs-nav .ant-tabs-tab {
+      border-radius: 10px 10px 0 0 !important;
+      font-weight: 700 !important;
+    }
+    [class*="courierAndPickerCard--"] {
+      border: 1px solid #ebe7f5 !important;
+      border-radius: 12px !important;
+      box-shadow: 0 1px 3px rgba(31, 27, 46, 0.06) !important;
+      overflow: hidden;
+      transition: box-shadow 0.15s ease;
+    }
+    [class*="courierAndPickerCard--"]:hover {
+      box-shadow: 0 6px 16px -6px rgba(31, 27, 46, 0.25) !important;
+    }
+    [class*="courierAndPickerCard--"] > .ant-card-body {
+      padding: 10px 12px !important;
+    }
+    [class*="courierAndPickerCard--"] [class*="statusInner--"] {
+      background: transparent !important;
+      padding: 0 !important;
+      margin-bottom: 4px !important;
+    }
+    [class*="courierAndPickerCard--"] [class*="statusInnerTag--"] {
+      margin: 0 !important;
+      padding: 1px 9px !important;
+      border: none !important;
+      border-radius: 999px !important;
+      font-size: 11.5px !important;
+      font-weight: 700 !important;
+      background: #ede7fc !important;
+      color: #5d3ebc !important;
+    }
+    [class*="courierAndPickerCard--"] [class*="name--"] {
+      margin: 0 !important;
+    }
+    [class*="courierAndPickerCard--"] [class*="name--"] .ant-tag {
+      margin: 0 !important;
+      padding: 0 !important;
+      border: none !important;
+      background: transparent !important;
+      font-size: 13.5px !important;
+      font-weight: 700 !important;
+      color: #1f1b2e !important;
+    }
+    [class*="courierAndPickerCard--"] [class*="timer--"] {
+      margin: 2px 0 0 !important;
+      font-size: 13px !important;
+      font-weight: 600 !important;
+      color: #6b6580 !important;
+      font-variant-numeric: tabular-nums;
+    }
+    [data-getirstok-courier="onway"] { box-shadow: inset 4px 0 0 #5d3ebc, 0 1px 3px rgba(31, 27, 46, 0.06) !important; }
+    [data-getirstok-courier="picking"] { box-shadow: inset 4px 0 0 #2563eb, 0 1px 3px rgba(31, 27, 46, 0.06) !important; }
+    [data-getirstok-courier="busy"] { box-shadow: inset 4px 0 0 #dc2626, 0 1px 3px rgba(31, 27, 46, 0.06) !important; }
+    [data-getirstok-courier="available"] { box-shadow: inset 4px 0 0 #16a34a, 0 1px 3px rgba(31, 27, 46, 0.06) !important; }
+    [data-getirstok-courier="returning"] { box-shadow: inset 4px 0 0 #d97706, 0 1px 3px rgba(31, 27, 46, 0.06) !important; }
+    [data-getirstok-courier="picking"] [class*="statusInnerTag--"] { background: #dbeafe !important; color: #1d4ed8 !important; }
+    [data-getirstok-courier="busy"] [class*="statusInnerTag--"] { background: #fee2e2 !important; color: #b91c1c !important; }
+    [data-getirstok-courier="available"] [class*="statusInnerTag--"] { background: #dcfce7 !important; color: #15803d !important; }
+    [data-getirstok-courier="returning"] [class*="statusInnerTag--"] { background: #fef3c7 !important; color: #92400e !important; }
+  `;
+  document.head.appendChild(style);
+}
+
+function decorateWarehouseLayout() {
+  ensureWarehouseLayoutStyleOnce();
+
+  for (const column of document.querySelectorAll('[class*="orderColumn--"]')) {
+    const header = column.querySelector('[class*="orderHeader--"]');
+    const countText = header?.querySelector(":scope > .ant-typography")?.textContent;
+    const title = normalizeText(header?.querySelector(":scope > p")?.textContent).toLocaleLowerCase("tr-TR");
+    const hasCards = !!column.querySelector('[class*="orderCard--"]');
+    const empty = !hasCards && /^\s*0\s*(\/\s*0\s*)?$/.test(countText ?? "");
+    setDataAttr(column, "data-getirstok-empty-column", empty ? "1" : null);
+    setDataAttr(column, "data-getirstok-stage", ORDER_STAGE_BY_HEADER[title] ?? null);
+  }
+
+  // Henüz atanmamış bilgi satırları ("-") gizlensin; kart sadece dolu bilgiyi göstersin
+  for (const row of document.querySelectorAll('[class*="orderCard--"] [class*="textWithIcons--"]')) {
+    const value = normalizeText(row.textContent);
+    setDataAttr(row, "data-getirstok-empty-row", value === "-" || value === "" ? "1" : null);
+  }
+
+  for (const card of document.querySelectorAll('[class*="courierAndPickerCard--"]')) {
+    const statusText = normalizeText(card.querySelector('[class*="statusInnerTag--"]')?.textContent).toLocaleLowerCase("tr-TR");
+    setDataAttr(card, "data-getirstok-courier", COURIER_STATUS_BY_TEXT[statusText] ?? null);
+  }
+}
+
+// -----------------------------
+// Depo: Ürün Son Kullanma Tarihleri sayfasını sadeleştir
+// Ürün ID, Saklama Koşulu ve Lokasyon sütunları gizlenir; tarihlere kalan gün etiketi eklenir.
+// Sütunlar sıraya göre değil başlık adına göre bulunur.
+// -----------------------------
+
+const EXPIRATION_PAGE_PATH_RE = /\/stock\/stock-management\/product\/expiration\//;
+const EXPIRATION_COLUMN_BY_HEADER = {
+  "ürün görseli": "image",
+  // tr-TR küçük harfte "ID" → "ıd" olur
+  "ürün ıd": "id",
+  "ürün id": "id",
+  "ürün adı": "name",
+  "saklama koşulu": "storage",
+  lokasyon: "location",
+  "son kullanma tarihi": "expiry",
+  "satıştan kaldırma tarihi": "removal",
+  "ürün sayımı": "count",
+};
+/** Satıştan kaldırmaya bu kadar gün (ve daha az) kalınca sarı uyarı */
+const EXPIRATION_SOON_DAYS = 2;
+
+/** "18.10.2026" → bugüne göre gün farkı (bugün 0, yarın 1, dün -1) */
+function daysFromTodayTr(text) {
+  const m = normalizeText(text).match(/(\d{1,2})\.(\d{1,2})\.(\d{4})/);
+  if (!m) return null;
+  const target = Date.UTC(Number(m[3]), Number(m[2]) - 1, Number(m[1]));
+  const now = new Date();
+  const today = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate());
+  return Math.round((target - today) / 86400000);
+}
+
+function ensureExpirationStyleOnce() {
+  if (document.getElementById("getirstok-exp-style")) return;
+  const style = document.createElement("style");
+  style.id = "getirstok-exp-style";
+  style.textContent = `
+    [data-getirstok-exp-card] {
+      border-radius: 16px !important;
+      border: 1px solid #ebe7f5 !important;
+      box-shadow: 0 1px 3px rgba(31, 27, 46, 0.06) !important;
+    }
+    [data-getirstok-exp-card] > .ant-card-head {
+      min-height: 0 !important;
+      padding: 12px 18px !important;
+      border-bottom: none !important;
+    }
+    [data-getirstok-exp-card] > .ant-card-head .ant-card-head-title {
+      font-size: 17px !important;
+      font-weight: 700 !important;
+      color: #1f1b2e !important;
+    }
+    [data-getirstok-exp-card] > .ant-card-body {
+      padding: 0 18px 18px !important;
+    }
+    /* Sütunlar gizlenince Getir'in dikey yerleşimi içeriğe göre daralmasın */
+    [data-getirstok-exp-card] > .ant-card-body > .ant-space-vertical {
+      display: flex !important;
+      width: 100% !important;
+    }
+    [data-getirstok-exp-card] > .ant-card-body > .ant-space-vertical > .ant-space-item {
+      width: 100% !important;
+    }
+    [data-getirstok-exp-table] .ant-table-thead > tr > th {
+      white-space: nowrap;
+    }
+    [data-getirstok-exp-card] .ant-collapse {
+      background: #faf9fd !important;
+      border: 1px solid #eeebf6 !important;
+      border-radius: 12px !important;
+    }
+    [data-getirstok-exp-card] .ant-collapse > .ant-collapse-item {
+      border-bottom: none !important;
+    }
+    [data-getirstok-exp-card] .ant-collapse-content {
+      background: transparent !important;
+      border-top: none !important;
+    }
+
+    /* Gizlenen sütunlar */
+    [data-getirstok-exp-col="id"],
+    [data-getirstok-exp-col="storage"],
+    [data-getirstok-exp-col="location"] {
+      display: none !important;
+    }
+
+    /* Tablo */
+    [data-getirstok-exp-table] .ant-table {
+      background: transparent !important;
+    }
+    [data-getirstok-exp-table] .ant-table-container {
+      border: 1px solid #eeebf6 !important;
+      border-radius: 14px !important;
+      overflow: hidden;
+    }
+    [data-getirstok-exp-table] .ant-table-thead > tr > th {
+      padding: 10px 14px !important;
+      background: #faf9fd !important;
+      border-bottom: 1px solid #eeebf6 !important;
+      font-size: 12px !important;
+      font-weight: 600 !important;
+      color: #8a849d !important;
+    }
+    [data-getirstok-exp-table] .ant-table-thead > tr > th::before {
+      display: none !important;
+    }
+    [data-getirstok-exp-table] .ant-table-tbody > tr.ant-table-row > td {
+      padding: 10px 14px !important;
+      vertical-align: middle !important;
+      background: #ffffff !important;
+      border-bottom: 1px solid #f4f2f9 !important;
+      transition: background 0.15s ease;
+    }
+    [data-getirstok-exp-table] .ant-table-tbody > tr.ant-table-row:last-child > td {
+      border-bottom: none !important;
+    }
+    [data-getirstok-exp-table] .ant-table-tbody > tr.ant-table-row:hover > td {
+      background: #faf9fe !important;
+    }
+    [data-getirstok-exp-table] th[data-getirstok-exp-col="image"] {
+      width: 72px !important;
+    }
+    [data-getirstok-exp-table] td[data-getirstok-exp-col="image"] .ant-image,
+    [data-getirstok-exp-table] td[data-getirstok-exp-col="image"] .ant-image-img {
+      width: 44px !important;
+      height: 44px !important;
+    }
+    [data-getirstok-exp-table] td[data-getirstok-exp-col="image"] .ant-image-img {
+      box-sizing: border-box;
+      padding: 2px;
+      object-fit: contain;
+      background: #ffffff;
+      border: 1px solid #efecf7;
+      border-radius: 10px;
+    }
+    [data-getirstok-exp-table] td[data-getirstok-exp-col="image"] .ant-image-mask {
+      border-radius: 10px;
+    }
+    [data-getirstok-exp-table] td[data-getirstok-exp-col="name"] .ant-tag {
+      margin: 0 !important;
+      padding: 0 !important;
+      border: none !important;
+      background: transparent !important;
+      white-space: normal !important;
+      font-size: 14px !important;
+      font-weight: 600 !important;
+      line-height: 1.35 !important;
+      color: #1f1b2e !important;
+    }
+    [data-getirstok-exp-table] td[data-getirstok-exp-col="expiry"],
+    [data-getirstok-exp-table] td[data-getirstok-exp-col="removal"] {
+      font-size: 13px !important;
+      font-variant-numeric: tabular-nums;
+      color: #4b4560 !important;
+    }
+    [data-getirstok-exp-table] td[data-getirstok-exp-col="expiry"] .ant-space-item,
+    [data-getirstok-exp-table] td[data-getirstok-exp-col="removal"] .ant-space-item {
+      color: inherit !important;
+    }
+    [data-getirstok-exp-table] td[data-getirstok-exp-col] .ant-space {
+      display: inline-flex !important;
+    }
+    [data-getirstok-exp-table] th[data-getirstok-exp-col="count"],
+    [data-getirstok-exp-table] td[data-getirstok-exp-col="count"] {
+      text-align: center !important;
+    }
+    [data-getirstok-exp-table] td[data-getirstok-exp-col="count"] {
+      font-size: 16px !important;
+      font-weight: 800 !important;
+      color: #5d3ebc !important;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .getirstok-exp-chip {
+      display: block;
+      width: max-content;
+      margin-top: 3px;
+      padding: 1px 8px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 700;
+      line-height: 18px;
+      white-space: nowrap;
+      vertical-align: middle;
+      background: #f3f2f7;
+      color: #6b6580;
+    }
+    .getirstok-exp-chip[data-tone="red"] { background: #fee2e2; color: #b91c1c; }
+    .getirstok-exp-chip[data-tone="amber"] { background: #fef3c7; color: #92400e; }
+    .getirstok-exp-chip[data-tone="solid-red"] { background: #dc2626; color: #ffffff; }
+
+    /* Satıştan kaldırma günü geldi / yaklaştı (genel satır stilinden daha özgül) */
+    [data-getirstok-exp-table] .ant-table-tbody > tr.ant-table-row[data-getirstok-exp-status="due"] > td {
+      background: #fef2f2 !important;
+    }
+    [data-getirstok-exp-table] .ant-table-tbody > tr.ant-table-row[data-getirstok-exp-status="due"] > td:first-child {
+      box-shadow: inset 3px 0 0 #dc2626;
+    }
+    [data-getirstok-exp-table] .ant-table-tbody > tr.ant-table-row[data-getirstok-exp-status="soon"] > td {
+      background: #fffbeb !important;
+    }
+    [data-getirstok-exp-table] .ant-table-tbody > tr.ant-table-row[data-getirstok-exp-status="soon"] > td:first-child {
+      box-shadow: inset 3px 0 0 #f59e0b;
+    }
+    [data-getirstok-exp-table] .ant-table-tbody > tr.ant-table-row[data-getirstok-exp-status="due"]:hover > td {
+      background: #fee2e2 !important;
+    }
+    [data-getirstok-exp-table] .ant-table-tbody > tr.ant-table-row[data-getirstok-exp-status="soon"]:hover > td {
+      background: #fef3c7 !important;
+    }
+  `;
+  document.head.appendChild(style);
+}
+
+function expiryChip(days) {
+  if (days == null) return null;
+  if (days < 0) return { text: `${-days} gün geçti`, tone: "red" };
+  if (days === 0) return { text: "Bugün", tone: "red" };
+  if (days === 1) return { text: "Yarın", tone: "amber" };
+  return { text: `${days} gün`, tone: days <= EXPIRATION_SOON_DAYS ? "amber" : "gray" };
+}
+
+function removalChip(days) {
+  if (days == null) return null;
+  if (days < 0) return { text: `${-days} gün gecikti`, tone: "solid-red" };
+  if (days === 0) return { text: "Bugün kaldır", tone: "solid-red" };
+  if (days === 1) return { text: "Yarın", tone: "amber" };
+  if (days <= EXPIRATION_SOON_DAYS) return { text: `${days} gün`, tone: "amber" };
+  return null;
+}
+
+/** Hücrenin sonuna küçük etiket koyar; aynıysa dokunmaz */
+function setExpirationChip(td, chip) {
+  let el = td.querySelector(":scope > .getirstok-exp-chip");
+  if (!chip) {
+    el?.remove();
+    return;
+  }
+  if (!el) {
+    el = document.createElement("span");
+    el.className = "getirstok-exp-chip";
+    td.appendChild(el);
+  }
+  if (el.textContent !== chip.text) el.textContent = chip.text;
+  setDataAttr(el, "data-tone", chip.tone);
+}
+
+function decorateExpirationTable(table) {
+  const headerCells = Array.from(table.querySelectorAll(":scope > thead > tr > th"));
+  const columns = headerCells.map(
+    (th) => EXPIRATION_COLUMN_BY_HEADER[normalizeText(th.textContent).toLocaleLowerCase("tr-TR")] || null
+  );
+  if (!columns.includes("expiry") || !columns.includes("removal")) return false;
+
+  headerCells.forEach((th, i) => setDataAttr(th, "data-getirstok-exp-col", columns[i]));
+  // Ölçüm satırı da gizlenmeli; yoksa "table-layout: fixed" gizli sütunların genişliğini korur
+  const measureCells = table.querySelectorAll(":scope > tbody > tr.ant-table-measure-row > *");
+  measureCells.forEach((cell, i) => setDataAttr(cell, "data-getirstok-exp-col", columns[i] ?? null));
+
+  for (const tr of table.querySelectorAll(":scope > tbody > tr.ant-table-row")) {
+    const cells = Array.from(tr.children);
+    let removalDays = null;
+    cells.forEach((td, i) => {
+      const col = columns[i] ?? null;
+      setDataAttr(td, "data-getirstok-exp-col", col);
+      if (col !== "expiry" && col !== "removal") return;
+      const dateText = td.querySelector(".ant-space-item")?.textContent ?? td.textContent;
+      const days = daysFromTodayTr(dateText);
+      if (col === "expiry") setExpirationChip(td, expiryChip(days));
+      else {
+        removalDays = days;
+        setExpirationChip(td, removalChip(days));
+      }
+    });
+    const status =
+      removalDays == null ? null : removalDays <= 0 ? "due" : removalDays <= EXPIRATION_SOON_DAYS ? "soon" : null;
+    setDataAttr(tr, "data-getirstok-exp-status", status);
+  }
+  return true;
+}
+
+function decorateExpirationPage() {
+  if (!EXPIRATION_PAGE_PATH_RE.test(window.location.pathname)) return;
+  for (const table of document.querySelectorAll(".ant-table-wrapper table")) {
+    if (!decorateExpirationTable(table)) continue;
+    ensureExpirationStyleOnce();
+    const wrapper = table.closest(".ant-table-wrapper");
+    if (wrapper) setDataAttr(wrapper, "data-getirstok-exp-table", "1");
+    const card = table.closest(".ant-card");
+    if (card) setDataAttr(card, "data-getirstok-exp-card", "1");
+  }
+}
+
+if (isWarehousePanel) {
+  window.addEventListener("message", (event) => {
+    if (event.source !== window) return;
+    if (event.data?.source !== "getirstok-heating-estimations") return;
+    applyHeatingJson(event.data.json);
+    decorateBakeryPage();
+  });
 }
 
 if (isFranchisePanel || isWarehousePanel) {
@@ -1381,6 +3049,10 @@ if (isWarehousePanel) {
   });
 
   function tryScrapeBakePage() {
+    // Getir'in verisi yakalandıysa (heating-estimations) ekrandan okumaya gerek yok;
+    // üstelik sayfa sadeleştirilince gizlenen yazılar ekran okumasını yanıltır
+    if (!heatingStocks) loadHeatingStocksFromSession();
+    if (heatingStocks) return;
     const bodyText = document.body ? document.body.innerText : "";
     if (!bodyText) return;
     if (!/\d+\s*Pişir/i.test(bodyText)) return;

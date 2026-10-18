@@ -17,6 +17,7 @@ import {
   ArrowDown,
   ChefHat,
   ClipboardList,
+  BarChart3,
   Scale,
   X,
   RefreshCw,
@@ -53,6 +54,8 @@ import { ReferenceWaterProductsPanel } from "./components/ReferenceWaterProducts
 import { ReferenceWaterProductsPanelContent } from "./components/ReferenceWaterProductsPanelContent";
 import { SayimTabContent } from "./components/SayimTabContent";
 import { KasaPaletSayimTabContent } from "./components/KasaPaletSayimTabContent";
+import { IstatistiklerTabContent } from "./components/IstatistiklerTabContent";
+import { DpsHeaderSummary } from "./components/DpsHeaderSummary";
 import type { SayimPair } from "@/app/lib/sayimMatch";
 import type { StockItemWithId, ExpiringProductWithId } from "@/app/lib/types";
 import { formatDateTime, formatTryPriceTRY } from "@/app/lib/utils";
@@ -119,7 +122,8 @@ export type TabType =
   | "expiring"
   | "bakery"
   | "sayim"
-  | "kasaPalet";
+  | "kasaPalet"
+  | "istatistik";
 
 interface ToastState {
   message: string;
@@ -1556,9 +1560,12 @@ export default function Home() {
 
   return (
     <div className="flex w-full flex-col gap-6">
-      <h1 className="text-xl font-semibold text-zinc-900 dark:text-zinc-50 sm:text-2xl">
-        Stok Takip Paneli
-      </h1>
+      <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2">
+        <h1 className="text-xl font-semibold text-zinc-900 dark:text-zinc-50 sm:text-2xl">
+          Stok Takip Paneli
+        </h1>
+        <DpsHeaderSummary />
+      </div>
       <div className="-mt-2">
         <SevkiyatControlOpenButton onClick={() => setSevkiyatWizardOpen(true)} />
       </div>
@@ -2010,7 +2017,7 @@ export default function Home() {
         <div className="overflow-hidden rounded-xl border border-zinc-200 dark:border-zinc-700">
           <div
             role="tablist"
-            aria-label="Eksik, fazla, yaklaşan SKT, fırın ürünleri, sayım ve kasa/palet sayımı"
+            aria-label="Eksik, fazla, yaklaşan SKT, fırın ürünleri, sayım, kasa/palet sayımı ve istatistikler"
             className="flex flex-wrap gap-0 border-b border-zinc-200 bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-800"
           >
             <button
@@ -2163,6 +2170,30 @@ export default function Home() {
                 />
               )}
             </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={activeTab === "istatistik"}
+              aria-controls="panel-istatistik"
+              id="tab-istatistik"
+              onClick={() => setActiveTab("istatistik")}
+              className={`relative min-h-[44px] px-4 py-4 text-sm font-medium transition duration-200 sm:px-6 sm:py-4 sm:text-base motion-reduce:transition-none ${
+                activeTab === "istatistik"
+                  ? "text-teal-700 hover:bg-teal-50/80 dark:text-teal-400 dark:hover:bg-teal-950/35"
+                  : "text-zinc-500 hover:bg-zinc-200/80 hover:text-zinc-800 active:bg-zinc-300 dark:text-zinc-400 dark:hover:bg-zinc-700/80 dark:hover:text-zinc-100 dark:active:bg-zinc-600"
+              }`}
+            >
+              <span className="inline-flex items-center gap-1.5">
+                <BarChart3 className="size-4 opacity-80" aria-hidden />
+                İstatistikler
+              </span>
+              {activeTab === "istatistik" && (
+                <span
+                  className="absolute bottom-0 left-0 right-0 h-0.5 bg-teal-600 dark:bg-teal-400"
+                  aria-hidden
+                />
+              )}
+            </button>
           </div>
           <div
             role="tabpanel"
@@ -2179,7 +2210,9 @@ export default function Home() {
                         ? "panel-sayim"
                         : activeTab === "kasaPalet"
                           ? "panel-kasa-palet"
-                          : "panel-missing"
+                          : activeTab === "istatistik"
+                            ? "panel-istatistik"
+                            : "panel-missing"
             }
             aria-labelledby={
               activeTab === "missing"
@@ -2194,7 +2227,9 @@ export default function Home() {
                         ? "tab-sayim"
                         : activeTab === "kasaPalet"
                           ? "tab-kasa-palet"
-                          : "tab-missing"
+                          : activeTab === "istatistik"
+                            ? "tab-istatistik"
+                            : "tab-missing"
             }
             className="min-h-[120px]"
           >
@@ -2814,6 +2849,8 @@ export default function Home() {
                 onSuccess={setSuccessModalMessage}
                 onError={(message) => setToast({ message, type: "error", autoClose: 12000 })}
               />
+            ) : activeTab === "istatistik" ? (
+              <IstatistiklerTabContent />
             ) : isLoading || catalogLoading ? (
               <ListSkeleton />
             ) : activeTab === "sayim" ? (
