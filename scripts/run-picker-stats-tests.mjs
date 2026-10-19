@@ -33,6 +33,9 @@ const tsc = spawnSync(
     join(root, "app", "lib", "pickerStatsMerge.test.ts"),
     join(root, "app", "lib", "pickerStatsPeriod.ts"),
     join(root, "app", "lib", "pickerStatsPeriod.test.ts"),
+    join(root, "app", "lib", "dpsRange.ts"),
+    join(root, "app", "lib", "pickerMetrics.ts"),
+    join(root, "app", "lib", "pickerMetrics.test.ts"),
   ],
   { encoding: "utf8", cwd: root }
 );
@@ -52,6 +55,7 @@ const test = spawnSync(
     join(outDir, "dpsReportParse.test.js"),
     join(outDir, "pickerStatsMerge.test.js"),
     join(outDir, "pickerStatsPeriod.test.js"),
+    join(outDir, "pickerMetrics.test.js"),
   ],
   { stdio: "inherit", cwd: root, env: { ...process.env, NODE_PATH: join(root, "node_modules") } }
 );

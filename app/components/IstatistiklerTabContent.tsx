@@ -7,12 +7,14 @@ import {
   Gauge,
   Loader2,
   RefreshCw,
+  Star,
   UserPlus,
   Users,
 } from "lucide-react";
 import {
   aggregatePickerStats,
   sortPickerStats,
+  type PickerRangeMetrics,
   type PickerSortKey,
   type PickerStatRow,
   type SortDirection,
@@ -28,14 +30,25 @@ import {
   type YmdRange,
 } from "@/app/lib/pickerStatsPeriod";
 import {
+  readPickerMetricDaysRange,
+  readPickerRatingRange,
   readPickerStatsDaysRange,
   readPickerStatsState,
   type PickerStatsState,
 } from "@/app/lib/pickerStatsStore";
+import { clampMetricsRange } from "@/app/lib/pickerMetrics";
 import { PickerManageModal } from "./PickerManageModal";
 import { DpsPanel } from "./DpsPanel";
 
-const SORT_KEYS: readonly PickerSortKey[] = ["total", "green", "red", "greenRate"];
+const SORT_KEYS: readonly PickerSortKey[] = [
+  "total",
+  "sku",
+  "green",
+  "red",
+  "greenRate",
+  "problematic",
+  "rating",
+];
 
 const RANGE_STORAGE_KEY = "getirstok.pickerStats.range";
 const SORT_STORAGE_KEY = "getirstok.pickerStats.sort";
@@ -56,8 +69,25 @@ interface SyncResponse {
   newPickers?: string[];
 }
 
+interface MetricsSyncResponse {
+  success: boolean;
+  error?: string;
+  fetchedDays?: string[];
+  ratingFetched?: boolean;
+  remaining?: number;
+}
+
+/** Bir aralık için en fazla bu kadar metrik çağrısı (her çağrı birkaç gün çeker) */
+const MAX_METRICS_SYNC_CALLS = 25;
+
 function formatPercent(rate: number | null): string {
   return rate == null ? "—" : `%${Math.round(rate * 100)}`;
+}
+
+function formatRating(rating: number | null): string {
+  return rating == null
+    ? "—"
+    : rating.toLocaleString("tr-TR", { maximumFractionDigits: 1, minimumFractionDigits: 1 });
 }
 
 function formatRatio(ratio: number | null): string {
@@ -173,8 +203,26 @@ function ToplayiciPerformansiPanel() {
   const resyncRequestedRef = useRef(false);
   const autoSyncStartedRef = useRef(false);
 
+  /** Gün → bayi paneli metrikleri; `null`: o gün henüz Getir'den çekilmemiş */
+  const [metricDayCache, setMetricDayCache] = useState<
+    Map<string, Record<string, PickerRangeMetrics> | null>
+  >(() => new Map());
+  /** `${from}_${to}` → yıldız ortalamaları; `null`: aralık henüz çekilmemiş */
+  const [ratingCache, setRatingCache] = useState<Map<string, Record<string, number> | null>>(
+    () => new Map()
+  );
+  const [metricsSyncing, setMetricsSyncing] = useState(false);
+  const [metricsError, setMetricsError] = useState<string | null>(null);
+  const metricsSyncingRef = useRef(false);
+  /** Senkron sürerken aralık değişirse / Güncelle'ye basılırsa bitince bir tur daha */
+  const metricsPendingRef = useRef<{ range: YmdRange; refreshSince: string | null } | null>(null);
+
   const range = useMemo(() => normalizeRange(selectedRange), [selectedRange]);
   const rangeDays = useMemo(() => daysInRange(range), [range]);
+  const metricsRange = useMemo(() => clampMetricsRange(range, today), [range, today]);
+  const metricsKey = `${metricsRange.from}_${metricsRange.to}`;
+  const metricDays = useMemo(() => daysInRange(metricsRange), [metricsRange]);
+  const singleDayMetrics = metricsRange.from === metricsRange.to;
 
   useEffect(() => {
     window.localStorage.setItem(RANGE_STORAGE_KEY, JSON.stringify(selectedRange));
@@ -225,6 +273,107 @@ function ToplayiciPerformansiPanel() {
       cancelled = true;
     };
   }, [rangeDays, dayCache]);
+
+  // Günlük metrik kayıtları Firestore'dan (önbellekte olmayan günler)
+  useEffect(() => {
+    const missing = metricDays.filter((d) => !metricDayCache.has(d));
+    if (missing.length === 0) return;
+    let cancelled = false;
+    readPickerMetricDaysRange(missing[0], missing[missing.length - 1])
+      .then((found) => {
+        if (cancelled) return;
+        setMetricDayCache((prev) => {
+          const next = new Map(prev);
+          for (const d of missing) next.set(d, found.get(d)?.pickers ?? null);
+          return next;
+        });
+      })
+      .catch(() => {
+        if (!cancelled) setMetricsError("Kayıtlı SKU / problemli sipariş verisi okunamadı.");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [metricDays, metricDayCache]);
+
+  // Çok günlü aralığın yıldız ortalaması Firestore'dan
+  useEffect(() => {
+    if (singleDayMetrics || ratingCache.has(metricsKey)) return;
+    let cancelled = false;
+    readPickerRatingRange(metricsRange.from, metricsRange.to)
+      .then((found) => {
+        if (!cancelled) setRatingCache((prev) => new Map(prev).set(metricsKey, found?.ratings ?? null));
+      })
+      .catch(() => {
+        if (!cancelled) setMetricsError("Kayıtlı yıldız ortalaması okunamadı.");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [singleDayMetrics, metricsKey, metricsRange, ratingCache]);
+
+  /**
+   * Eksik günleri/yıldızı Getir'den tamamlatır. `refreshSince` sadece "Güncelle"de verilir;
+   * o zaman kesinleşmemiş (son 2 gün) kayıtlar da yenilenir.
+   */
+  const runMetricsSync = useCallback(
+    async (target: YmdRange, refreshSince: string | null): Promise<void> => {
+      if (metricsSyncingRef.current) {
+        const prev = metricsPendingRef.current;
+        metricsPendingRef.current = { range: target, refreshSince: refreshSince ?? prev?.refreshSince ?? null };
+        return;
+      }
+      metricsSyncingRef.current = true;
+      setMetricsSyncing(true);
+      const key = `${target.from}_${target.to}`;
+      try {
+        for (let i = 0; i < MAX_METRICS_SYNC_CALLS; i++) {
+          const res = await fetch("/api/picker-stats/metrics", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ ...target, refreshSince }),
+          });
+          const data = (await res.json().catch(() => null)) as MetricsSyncResponse | null;
+          if (!res.ok || !data?.success) throw new Error(data?.error ?? "Bayi paneli metrikleri alınamadı.");
+          const fetched = data.fetchedDays ?? [];
+          if (fetched.length > 0) {
+            setMetricDayCache((prev) => {
+              const next = new Map(prev);
+              for (const d of fetched) next.delete(d);
+              return next;
+            });
+          }
+          if (data.ratingFetched) {
+            setRatingCache((prev) => {
+              const next = new Map(prev);
+              next.delete(key);
+              return next;
+            });
+          }
+          if (!data.remaining) break;
+        }
+        setMetricsError(null);
+      } catch (error) {
+        setMetricsError(error instanceof Error ? error.message : "Bayi paneli metrikleri alınamadı.");
+      } finally {
+        metricsSyncingRef.current = false;
+        setMetricsSyncing(false);
+        const pending = metricsPendingRef.current;
+        metricsPendingRef.current = null;
+        if (pending) void runMetricsSyncRef.current(pending.range, pending.refreshSince);
+      }
+    },
+    []
+  );
+  const runMetricsSyncRef = useRef(runMetricsSync);
+  useEffect(() => {
+    runMetricsSyncRef.current = runMetricsSync;
+  }, [runMetricsSync]);
+
+  // Aralık değişince sadece hiç çekilmemiş günler/yıldız Getir'den istenir
+  useEffect(() => {
+    void runMetricsSync(metricsRange, null);
+  }, [metricsRange, runMetricsSync]);
 
   const runSync = useCallback(async (): Promise<void> => {
     if (syncingRef.current) {
@@ -294,12 +443,39 @@ function ToplayiciPerformansiPanel() {
   const rows = useMemo<PickerStatRow[]>(() => {
     if (!state) return [];
     const days = rangeDays.map((d) => dayCache.get(d)).filter((d): d is Record<string, StoredPickerOrder> => !!d);
+    const metricDayRecords = metricDays
+      .map((d) => metricDayCache.get(d))
+      .filter((d): d is Record<string, PickerRangeMetrics> => !!d);
+    let ratings: Record<string, number> | undefined;
+    if (singleDayMetrics) {
+      ratings = {};
+      for (const [key, m] of Object.entries(metricDayRecords[0] ?? {})) {
+        if (m.rating != null) ratings[key] = m.rating;
+      }
+    } else {
+      ratings = ratingCache.get(metricsKey) ?? undefined;
+    }
     return sortPickerStats(
-      aggregatePickerStats(days, state.pickers, { includeInactive: showInactive }),
+      aggregatePickerStats(days, state.pickers, {
+        includeInactive: showInactive,
+        metricDays: metricDayRecords,
+        ratings,
+      }),
       sort.key,
       sort.direction
     );
-  }, [state, rangeDays, dayCache, sort, showInactive]);
+  }, [
+    state,
+    rangeDays,
+    dayCache,
+    metricDays,
+    metricDayCache,
+    singleDayMetrics,
+    ratingCache,
+    metricsKey,
+    sort,
+    showInactive,
+  ]);
 
   const inactiveCount = useMemo(
     () => (state ? Object.values(state.pickers).filter((p) => !p.active).length : 0),
@@ -308,13 +484,24 @@ function ToplayiciPerformansiPanel() {
 
   const totals = useMemo(() => {
     const t = rows.reduce(
-      (acc, r) => ({ total: acc.total + r.total, green: acc.green + r.green, red: acc.red + r.red }),
-      { total: 0, green: 0, red: 0 }
+      (acc, r) => ({
+        total: acc.total + r.total,
+        sku: acc.sku + r.sku,
+        problematic: acc.problematic + r.problematic,
+        green: acc.green + r.green,
+        red: acc.red + r.red,
+      }),
+      { total: 0, sku: 0, problematic: 0, green: 0, red: 0 }
     );
     return { ...t, greenRate: t.total > 0 ? t.green / t.total : null };
   }, [rows]);
 
   const dataReady = state != null && rangeDays.every((d) => dayCache.has(d));
+  /** Güncelle sırasında kayıtlı değerler gösterilmeye devam eder */
+  const metricsReady =
+    metricDays.every((d) => metricDayCache.get(d) != null) &&
+    (singleDayMetrics || ratingCache.get(metricsKey) != null);
+  const metricCell = (value: string) => (metricsReady ? value : metricsSyncing ? "…" : "—");
   const rangeAfterData = latestDay != null && range.from > latestDay;
 
   const onHeaderSort = (key: PickerSortKey) => {
@@ -357,11 +544,17 @@ function ToplayiciPerformansiPanel() {
           </button>
           <button
             type="button"
-            onClick={() => void runSync()}
-            disabled={sync.kind === "running"}
+            onClick={() => {
+              const refreshSince = new Date().toISOString();
+              void runSync().then(() => runMetricsSync(metricsRange, refreshSince));
+            }}
+            disabled={sync.kind === "running" || metricsSyncing}
             className="inline-flex min-h-[40px] items-center gap-1.5 rounded-lg border border-zinc-300 bg-white px-3 text-sm font-medium text-zinc-700 transition hover:bg-zinc-50 disabled:opacity-60 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-200 dark:hover:bg-zinc-700"
           >
-            <RefreshCw className={`size-4 ${sync.kind === "running" ? "animate-spin" : ""}`} aria-hidden />
+            <RefreshCw
+              className={`size-4 ${sync.kind === "running" || metricsSyncing ? "animate-spin" : ""}`}
+              aria-hidden
+            />
             Güncelle
           </button>
         </div>
@@ -372,6 +565,15 @@ function ToplayiciPerformansiPanel() {
           <AlertTriangle className="mt-0.5 size-4 shrink-0" aria-hidden />
           <span>
             Yeni raporlar okunamadı: {sync.message} Tablo eldeki verilerle gösteriliyor.
+          </span>
+        </div>
+      )}
+      {metricsError && (
+        <div className="flex items-start gap-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-200">
+          <AlertTriangle className="mt-0.5 size-4 shrink-0" aria-hidden />
+          <span>
+            SKU, problemli sipariş ve yıldız bilgisi güncellenemedi: {metricsError}
+            {metricsReady ? " Kayıtlı son değerler gösteriliyor." : ""}
           </span>
         </div>
       )}
@@ -422,11 +624,17 @@ function ToplayiciPerformansiPanel() {
       </div>
 
       {/* Özet */}
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
         <SummaryCard label="Toplam sipariş" value={dataReady ? String(totals.total) : "…"} tone="neutral" />
+        <SummaryCard label="Toplam SKU" value={dataReady ? metricCell(String(totals.sku)) : "…"} tone="neutral" />
         <SummaryCard label="Yeşil" value={dataReady ? String(totals.green) : "…"} tone="green" />
         <SummaryCard label="Kırmızı" value={dataReady ? String(totals.red) : "…"} tone="red" />
         <SummaryCard label="Yeşil oranı" value={dataReady ? formatPercent(totals.greenRate) : "…"} tone="neutral" />
+        <SummaryCard
+          label="Problemli sipariş"
+          value={dataReady ? metricCell(String(totals.problematic)) : "…"}
+          tone="neutral"
+        />
       </div>
 
       {/* Tablo */}
@@ -440,12 +648,12 @@ function ToplayiciPerformansiPanel() {
           {totals.total === 0 && (
             <p className="rounded-lg border border-dashed border-zinc-300 px-3 py-3 text-center text-sm text-zinc-500 dark:border-zinc-600 dark:text-zinc-400">
               {rangeAfterData
-                ? `Bu dönem için henüz rapor yok. Elde ${formatYmdShort(latestDay!, today.slice(0, 4))} tarihine kadar veri var; bayi panelinde yeni DPS raporu istendiğinde burada görünür.`
-                : "Bu dönemde kayıtlı sipariş yok."}
+                ? `Bu dönem için henüz sipariş raporu yok. Elde ${formatYmdShort(latestDay!, today.slice(0, 4))} tarihine kadar sipariş verisi var; bayi panelinde yeni DPS raporu istendiğinde burada görünür. SKU, problemli sipariş ve yıldız rapordan bağımsız gelir.`
+                : "Bu dönemde kayıtlı sipariş yok. SKU, problemli sipariş ve yıldız rapordan bağımsız gelir."}
             </p>
           )}
           <div className="overflow-x-auto rounded-xl border border-zinc-200 dark:border-zinc-700">
-            <table className="w-full text-sm sm:min-w-[34rem]">
+            <table className="w-full text-sm sm:min-w-[46rem]">
               <thead className="bg-zinc-50 text-left text-xs uppercase tracking-wide text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400">
                 <tr>
                   <th scope="col" className="hidden w-10 px-2 py-2.5 sm:px-3 font-medium sm:table-cell">#</th>
@@ -453,9 +661,12 @@ function ToplayiciPerformansiPanel() {
                   {(
                     [
                       ["total", "Sipariş"],
+                      ["sku", "SKU"],
                       ["green", "Yeşil"],
                       ["red", "Kırmızı"],
                       ["greenRate", "Yeşil %"],
+                      ["problematic", "Problemli"],
+                      ["rating", "Yıldız"],
                     ] as const
                   ).map(([key, label]) => (
                     <th
@@ -500,6 +711,9 @@ function ToplayiciPerformansiPanel() {
                     <td className="px-2 py-2.5 sm:px-3 text-right font-semibold tabular-nums text-zinc-900 dark:text-zinc-100">
                       {r.total}
                     </td>
+                    <td className="px-2 py-2.5 sm:px-3 text-right font-semibold tabular-nums text-zinc-900 dark:text-zinc-100">
+                      {metricCell(String(r.sku))}
+                    </td>
                     <td className="px-2 py-2.5 sm:px-3 text-right tabular-nums text-emerald-700 dark:text-emerald-400">
                       {r.green}
                     </td>
@@ -509,6 +723,25 @@ function ToplayiciPerformansiPanel() {
                         <GreenBar rate={r.greenRate} />
                       </div>
                     </td>
+                    <td
+                      className={`px-2 py-2.5 sm:px-3 text-right tabular-nums ${
+                        metricsReady && r.problematic > 0
+                          ? "font-medium text-amber-700 dark:text-amber-400"
+                          : "text-zinc-600 dark:text-zinc-400"
+                      }`}
+                    >
+                      {metricCell(String(r.problematic))}
+                    </td>
+                    <td className="px-2 py-2.5 sm:px-3 text-right tabular-nums text-zinc-700 dark:text-zinc-300">
+                      {metricsReady && r.rating != null ? (
+                        <span className="inline-flex items-center gap-1">
+                          <Star className="size-3.5 fill-amber-400 text-amber-400" aria-hidden />
+                          {formatRating(r.rating)}
+                        </span>
+                      ) : (
+                        metricCell("—")
+                      )}
+                    </td>
                     <td className="hidden px-2 py-2.5 sm:px-3 text-right tabular-nums text-zinc-600 sm:table-cell dark:text-zinc-400">
                       {formatRatio(r.avgRatio)}
                     </td>
@@ -516,7 +749,7 @@ function ToplayiciPerformansiPanel() {
                 ))}
                 {rows.length === 0 && (
                   <tr>
-                    <td colSpan={7} className="px-3 py-6 text-center text-zinc-500 dark:text-zinc-400">
+                    <td colSpan={10} className="px-3 py-6 text-center text-zinc-500 dark:text-zinc-400">
                       Toplayıcı listesi boş.
                     </td>
                   </tr>

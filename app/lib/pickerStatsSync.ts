@@ -21,15 +21,36 @@ import {
   type PickerEntry,
   type StoredPickerOrder,
 } from "./pickerStatsMerge";
-import { MAX_RANGE_DAYS, addDaysYmd, istanbulTodayYmd } from "./pickerStatsPeriod";
+import { fetchPickerMetrics } from "./getirPickerMetricsService";
 import {
+  clampMetricsRange,
+  needsMetricsFetch,
+  pickerMetricsRetentionCutoff,
+} from "./pickerMetrics";
+import {
+  MAX_RANGE_DAYS,
+  addDaysYmd,
+  daysInRange,
+  istanbulTodayYmd,
+  type YmdRange,
+} from "./pickerStatsPeriod";
+import {
+  deletePickerMetricsBefore,
   patchPickerStatsState,
+  readPickerMetricDaysRange,
+  readPickerRatingRange,
   readPickerStatsDay,
   readPickerStatsState,
   scanLatestPickerStatsDay,
+  writePickerMetricDay,
+  writePickerRatingRange,
   writePickerStatsDayOrders,
   type PickerStatsState,
 } from "./pickerStatsStore";
+
+/** Bir çağrıda Getir'e en fazla bu kadar istek (Netlify süre sınırı) */
+const METRICS_TASKS_PER_CALL = 6;
+const METRICS_CONCURRENCY = 3;
 
 export interface PickerStatsSyncResult {
   /** Bu çağrıda işlenen rapor sayısı (0 veya 1) */
@@ -58,6 +79,69 @@ function initialPickers(now: string): Record<string, PickerEntry> {
     pickers[pickerKey(name)] = { name, active: true, source: "manual", firstSeenAt: now };
   }
   return pickers;
+}
+
+export interface PickerMetricsSyncResult {
+  /** Bu çağrıda Getir'den çekilen günler */
+  fetchedDays: string[];
+  /** Bu çağrıda aralığın yıldız ortalaması çekildi mi */
+  ratingFetched: boolean;
+  /** Hâlâ çekilecek gün sayısı */
+  remaining: number;
+}
+
+/**
+ * Aralığın günlük SKU / problemli kayıtlarını ve (çok günlüyse) yıldız ortalamasını
+ * tamamlar. Kaydı olan gün/aralık sadece `refreshSince` verilirse ve kesinleşmemişse
+ * yeniden çekilir. Panel `remaining` 0 olana kadar tekrar çağırır.
+ */
+export async function syncPickerMetrics(
+  range: YmdRange,
+  refreshSince: string | null
+): Promise<PickerMetricsSyncResult> {
+  const today = istanbulTodayYmd();
+  const { from, to } = clampMetricsRange(range, today);
+  const days = daysInRange({ from, to });
+
+  const [existing, rating] = await Promise.all([
+    readPickerMetricDaysRange(from, to),
+    from === to ? Promise.resolve(null) : readPickerRatingRange(from, to),
+  ]);
+  const pendingDays = days.filter((d) => needsMetricsFetch(existing.get(d), d, refreshSince));
+  const ratingPending = from !== to && needsMetricsFetch(rating, to, refreshSince);
+  if (pendingDays.length === 0 && !ratingPending) {
+    return { fetchedDays: [], ratingFetched: false, remaining: 0 };
+  }
+
+  const token = await requireFranchiseToken();
+  const batchDays = pendingDays.slice(0, METRICS_TASKS_PER_CALL - (ratingPending ? 1 : 0));
+  const tasks: (() => Promise<void>)[] = batchDays.map((ymd) => async () => {
+    const pickers = await fetchPickerMetrics(ymd, ymd, token);
+    await writePickerMetricDay(ymd, { pickers, fetchedAt: new Date().toISOString() });
+  });
+  if (ratingPending) {
+    tasks.push(async () => {
+      const pickers = await fetchPickerMetrics(from, to, token);
+      const ratings: Record<string, number> = {};
+      for (const [key, m] of Object.entries(pickers)) if (m.rating != null) ratings[key] = m.rating;
+      await writePickerRatingRange({ from, to, ratings, fetchedAt: new Date().toISOString() });
+    });
+  }
+  for (let i = 0; i < tasks.length; i += METRICS_CONCURRENCY) {
+    await Promise.all(tasks.slice(i, i + METRICS_CONCURRENCY).map((run) => run()));
+  }
+
+  try {
+    const removed = await deletePickerMetricsBefore(pickerMetricsRetentionCutoff(today));
+    if (removed > 0) console.log("[Toplayıcı metrikleri] 5 aydan eski kayıt silindi:", removed);
+  } catch (cleanupError) {
+    console.warn("[Toplayıcı metrikleri] Eski kayıt temizliği başarısız:", cleanupError);
+  }
+  return {
+    fetchedDays: batchDays,
+    ratingFetched: ratingPending,
+    remaining: pendingDays.length - batchDays.length,
+  };
 }
 
 /** Eskiden yeniye: daha yeni rapor, aynı siparişte eskisinin üstüne yazsın */

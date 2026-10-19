@@ -1,0 +1,9 @@
+/*
+ * Sayfa yüklenir yüklenmez uygulanır (content.js'ten önce). content.js sekmeleri ve sayaçları
+ * düzenleyip <html data-getirstok-ready> koyana kadar bunlar görünmez kalır; eski hal bir an
+ * bile görünmesin diye.
+ */
+html:not([data-getirstok-ready]) .ant-tabs[aria-label="Main navigation tabs"] .ant-tabs-nav-list,
+html:not([data-getirstok-ready]) [class*="orderHeader--"] > .ant-typography {
+  visibility: hidden !important;
+}

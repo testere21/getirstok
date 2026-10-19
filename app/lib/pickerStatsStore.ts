@@ -2,9 +2,12 @@
  * Toplayıcı performansı Firestore katmanı.
  * - `picker_stats_days/{YYYY-MM-DD}`: o günün siparişleri, sipariş id'si anahtar
  * - `picker_stats_meta/state`: okunan raporlar + toplayıcı listesi
+ * - `picker_metric_days/{YYYY-MM-DD}`: bayi panelinden o günün SKU / problemli / yıldız değeri
+ * - `picker_rating_ranges/{from}_{to}`: çok günlü aralığın yıldız ortalaması
  */
 import {
   collection,
+  deleteDoc,
   deleteField,
   doc,
   documentId,
@@ -15,6 +18,7 @@ import {
   where,
 } from "firebase/firestore";
 import { db } from "./firebase";
+import { pickerRatingRangeDocId, type PickerMetrics } from "./pickerMetrics";
 import {
   normalizePickerName,
   pickerKey,
@@ -24,6 +28,8 @@ import {
 
 export const PICKER_STATS_DAYS_COLLECTION = "picker_stats_days";
 export const PICKER_STATS_META_COLLECTION = "picker_stats_meta";
+export const PICKER_METRIC_DAYS_COLLECTION = "picker_metric_days";
+export const PICKER_RATING_RANGES_COLLECTION = "picker_rating_ranges";
 const STATE_DOC_ID = "state";
 
 export interface ProcessedReportInfo {
@@ -192,6 +198,78 @@ export async function removeManualPicker(key: string): Promise<void> {
     throw new PickerListError("Raporlardan otomatik eklenen toplayıcı kaldırılamaz; pasif yapın.");
   }
   await setDoc(stateRef(), { pickers: { [key]: deleteField() } }, { merge: true });
+}
+
+export interface PickerMetricDay {
+  /** pickerKey → o günün metrikleri */
+  pickers: Record<string, PickerMetrics>;
+  fetchedAt: string;
+}
+
+/** Aralıktaki günlük metrik kayıtları; çekilmemiş günler sonuçta yer almaz. */
+export async function readPickerMetricDaysRange(
+  fromYmd: string,
+  toYmd: string
+): Promise<Map<string, PickerMetricDay>> {
+  const snap = await getDocs(
+    query(
+      collection(db, PICKER_METRIC_DAYS_COLLECTION),
+      where(documentId(), ">=", fromYmd),
+      where(documentId(), "<=", toYmd)
+    )
+  );
+  const days = new Map<string, PickerMetricDay>();
+  for (const d of snap.docs) {
+    const data = d.data();
+    days.set(d.id, {
+      pickers: asRecord<PickerMetrics>(data?.pickers),
+      fetchedAt: typeof data?.fetchedAt === "string" ? data.fetchedAt : "",
+    });
+  }
+  return days;
+}
+
+/** Günün tamamını yazar (Getir her seferinde o günün tüm toplayıcılarını verir). */
+export async function writePickerMetricDay(ymd: string, day: PickerMetricDay): Promise<void> {
+  await setDoc(doc(db, PICKER_METRIC_DAYS_COLLECTION, ymd), day);
+}
+
+export interface PickerRatingRange {
+  from: string;
+  to: string;
+  /** pickerKey → yıldız ortalaması (puanı olmayan yer almaz) */
+  ratings: Record<string, number>;
+  fetchedAt: string;
+}
+
+function ratingRef(from: string, to: string) {
+  return doc(db, PICKER_RATING_RANGES_COLLECTION, pickerRatingRangeDocId(from, to));
+}
+
+export async function readPickerRatingRange(from: string, to: string): Promise<PickerRatingRange | null> {
+  const snap = await getDoc(ratingRef(from, to));
+  if (!snap.exists()) return null;
+  const data = snap.data();
+  return {
+    from,
+    to,
+    ratings: asRecord<number>(data?.ratings),
+    fetchedAt: typeof data?.fetchedAt === "string" ? data.fetchedAt : "",
+  };
+}
+
+export async function writePickerRatingRange(range: PickerRatingRange): Promise<void> {
+  await setDoc(ratingRef(range.from, range.to), range);
+}
+
+/** `cutoffYmd`'den önceki günlük kayıtları ve bitişi ondan önce olan aralıkları siler. */
+export async function deletePickerMetricsBefore(cutoffYmd: string): Promise<number> {
+  const [days, ranges] = await Promise.all([
+    getDocs(query(collection(db, PICKER_METRIC_DAYS_COLLECTION), where(documentId(), "<", cutoffYmd))),
+    getDocs(query(collection(db, PICKER_RATING_RANGES_COLLECTION), where("to", "<", cutoffYmd))),
+  ]);
+  await Promise.all([...days.docs, ...ranges.docs].map((d) => deleteDoc(d.ref)));
+  return days.size + ranges.size;
 }
 
 /** Sadece verilen siparişleri yazar; gündeki diğer siparişler korunur. */

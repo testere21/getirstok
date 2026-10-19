@@ -1303,6 +1303,7 @@ function tryInjectButtons() {
     decorateWarehouseLayout();
     decorateBakeryPage();
     decorateExpirationPage();
+    decorateRemovalPage();
   }
   ensureStyleOnce();
   tryInjectBarcodeToggleButton();
@@ -2075,6 +2076,21 @@ function ensureWarehouseLayoutStyleOnce() {
       box-shadow: none !important;
       font-weight: 700 !important;
     }
+    .ant-tabs[aria-label="Main navigation tabs"] .ant-tabs-tab[data-getirstok-hidden-tab] {
+      display: none !important;
+    }
+    .ant-tabs[aria-label="Main navigation tabs"] .getirstok-link-tab {
+      display: inline-flex;
+      align-items: center;
+      cursor: pointer;
+    }
+    .ant-tabs[aria-label="Main navigation tabs"] .getirstok-link-tab > a.ant-tabs-tab-btn {
+      text-decoration: none !important;
+      outline: none;
+    }
+    .ant-tabs[aria-label="Main navigation tabs"] .getirstok-link-tab:hover > a.ant-tabs-tab-btn {
+      color: #5d3ebc !important;
+    }
 
     /* ── Kontrol Paneli: sipariş panosu ── */
     /* Sütunlar Getir'deki gibi pano yüksekliğine uzar; kartlar sütunun içinde kayar */
@@ -2098,30 +2114,34 @@ function ensureWarehouseLayoutStyleOnce() {
       padding: 12px 4px 10px !important;
       border: none !important;
     }
+    /* Sayaç varsayılan gri; sütunda kart varsa CSS'ten hemen mor olur (JS'i beklemeden,
+       açılışta renk atlaması olmasın). Kartsız ama sayısı 0 olmayan sütunu JS işaretler. */
     [class*="orderHeader--"] > p {
       margin: 0 !important;
       font-size: 13px !important;
       font-weight: 700 !important;
-      color: #3b3550 !important;
+      color: #8a849d !important;
     }
     [class*="orderHeader--"] > .ant-typography {
       min-width: 34px;
       padding: 2px 10px;
       border: none !important;
       border-radius: 999px !important;
-      background: #5d3ebc !important;
-      color: #ffffff !important;
+      background: #e9e6f2 !important;
+      color: #8a849d !important;
       font-size: 14px !important;
       font-weight: 800 !important;
       text-align: center;
       font-variant-numeric: tabular-nums;
     }
-    [data-getirstok-empty-column] [class*="orderHeader--"] > .ant-typography {
-      background: #e9e6f2 !important;
-      color: #8a849d !important;
+    [class*="orderColumn--"]:has([class*="orderCard--"]) [class*="orderHeader--"] > p,
+    [data-getirstok-filled-column] [class*="orderHeader--"] > p {
+      color: #3b3550 !important;
     }
-    [data-getirstok-empty-column] [class*="orderHeader--"] > p {
-      color: #8a849d !important;
+    [class*="orderColumn--"]:has([class*="orderCard--"]) [class*="orderHeader--"] > .ant-typography,
+    [data-getirstok-filled-column] [class*="orderHeader--"] > .ant-typography {
+      background: #5d3ebc !important;
+      color: #ffffff !important;
     }
     [class*="orderCardWrapper--"] {
       display: flex !important;
@@ -2211,11 +2231,9 @@ function ensureWarehouseLayoutStyleOnce() {
       line-height: 1.35;
       white-space: normal;
     }
-    [data-getirstok-stage="waiting"] [class*="orderHeader--"] > .ant-typography {
+    [data-getirstok-stage="waiting"]:has([class*="orderCard--"]) [class*="orderHeader--"] > .ant-typography,
+    [data-getirstok-stage="waiting"][data-getirstok-filled-column] [class*="orderHeader--"] > .ant-typography {
       background: #f59e0b !important;
-    }
-    [data-getirstok-stage="waiting"][data-getirstok-empty-column] [class*="orderHeader--"] > .ant-typography {
-      background: #e9e6f2 !important;
     }
 
     /* Doğrulanıyor: mavi şerit */
@@ -2382,18 +2400,130 @@ function ensureWarehouseLayoutStyleOnce() {
   document.head.appendChild(style);
 }
 
-function decorateWarehouseLayout() {
-  ensureWarehouseLayoutStyleOnce();
+// Kontrol Paneli üst sekmeleri: iki sekme gizlenir, yerine başka sayfalara giden sekmeler gelir.
+// Tarihler tıklama anında hesaplanır (gün değişse de adres güncel kalsın).
+const DASHBOARD_HIDDEN_TABS = new Set(["eksik ürünlü siparişler", "ileri tarihli siparişler"]);
+const DASHBOARD_LINK_TABS = [
+  {
+    id: "shelf-label",
+    label: "Raf Etiketi",
+    url: (wid) => `/r/${wid}/stock/stock-management/shelf-label/list`,
+  },
+  {
+    id: "remove-from-sales",
+    label: "Satıştan Kaldırma",
+    url: (wid, today) =>
+      `/r/${wid}/stock/remove-from-sales/list?offset=1&endDate=${today}&startDate=${addDaysLocalYmd(today, -6)}&warehouseIds=${wid}&limit=50`,
+  },
+  {
+    id: "supply-delivery",
+    label: "Tedarik Teslimat Listesi",
+    url: (wid, today) =>
+      `/r/${wid}/stock/inbound/supply/delivery/list?offset=1&endDate=${today}&startDate=${addDaysLocalYmd(today, -14)}`,
+  },
+];
 
+function addDaysLocalYmd(ymd, days) {
+  const [y, m, d] = ymd.split("-").map(Number);
+  return localYmd(new Date(y, m - 1, d + days));
+}
+
+/** Adreste depo kimliği yoksa Soğukkuyu */
+const DEFAULT_WAREHOUSE_ID = "6113e59fbb8549d0f20e65f5";
+
+function currentWarehouseId() {
+  return window.location.pathname.match(/\/r\/([a-f0-9]{24})(\/|$)/i)?.[1] ?? DEFAULT_WAREHOUSE_ID;
+}
+
+function dashboardLinkUrl(tab) {
+  return tab.url(currentWarehouseId(), localYmd(new Date()));
+}
+
+/** Sayfayı baştan yüklemeden geçiş (panelin kendi yönlendiricisi adres değişikliğini dinler) */
+function navigateInPanel(url) {
+  window.history.pushState(window.history.state, "", url);
+  window.dispatchEvent(new PopStateEvent("popstate", { state: window.history.state }));
+  // Yönlendirici tepki vermezse pano yerinde kalır: normal sayfa yüklemesine düş
+  setTimeout(() => {
+    if (document.querySelector('.ant-tabs[aria-label="Main navigation tabs"]')) window.location.assign(url);
+  }, 900);
+}
+
+function createDashboardLinkTab(tab) {
+  const wrap = document.createElement("div");
+  wrap.className = "ant-tabs-tab getirstok-link-tab";
+  wrap.setAttribute("data-getirstok-link-tab", tab.id);
+  const a = document.createElement("a");
+  a.className = "ant-tabs-tab-btn";
+  a.textContent = tab.label;
+  a.href = dashboardLinkUrl(tab);
+  const refreshHref = () => {
+    const url = dashboardLinkUrl(tab);
+    if (a.getAttribute("href") !== url) a.setAttribute("href", url);
+  };
+  a.addEventListener("mouseenter", refreshHref);
+  a.addEventListener("focus", refreshHref);
+  a.addEventListener("click", (event) => {
+    refreshHref();
+    // Ctrl/Shift/orta tık: tarayıcı yeni sekmede açsın
+    if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    event.preventDefault();
+    navigateInPanel(a.getAttribute("href"));
+  });
+  wrap.appendChild(a);
+  return wrap;
+}
+
+function decorateDashboardTabs() {
+  const list = document.querySelector('.ant-tabs[aria-label="Main navigation tabs"] .ant-tabs-nav-list');
+  if (!list) return;
+  let lastHidden = null;
+  for (const tab of list.querySelectorAll(":scope > .ant-tabs-tab:not(.getirstok-link-tab)")) {
+    const label = normalizeText(tab.querySelector(".ant-tabs-tab-btn")?.textContent).toLocaleLowerCase("tr-TR");
+    const hide = DASHBOARD_HIDDEN_TABS.has(label);
+    setDataAttr(tab, "data-getirstok-hidden-tab", hide ? "1" : null);
+    if (hide) lastHidden = tab;
+  }
+
+  // Gizlenen sekmelerin yerine (bizim sekmeler atlanarak bulunan ilk Getir öğesinden önce);
+  // gizlenecek sekme yoksa sona, ink bar'dan önce
+  let anchor = lastHidden ? lastHidden.nextSibling : list.querySelector(":scope > .ant-tabs-ink-bar");
+  while (anchor?.classList?.contains("getirstok-link-tab")) anchor = anchor.nextSibling;
+
+  // Sondan başa: her sekme bir sonrakinin önüne; yerindeyse DOM'a dokunulmaz
+  let ref = anchor;
+  for (let i = DASHBOARD_LINK_TABS.length - 1; i >= 0; i--) {
+    const tab = DASHBOARD_LINK_TABS[i];
+    const el = list.querySelector(`:scope > [data-getirstok-link-tab="${tab.id}"]`) ?? createDashboardLinkTab(tab);
+    if (el.parentNode !== list || el.nextSibling !== ref) list.insertBefore(el, ref);
+    ref = el;
+  }
+}
+
+function decorateDashboardColumns() {
   for (const column of document.querySelectorAll('[class*="orderColumn--"]')) {
     const header = column.querySelector('[class*="orderHeader--"]');
     const countText = header?.querySelector(":scope > .ant-typography")?.textContent;
     const title = normalizeText(header?.querySelector(":scope > p")?.textContent).toLocaleLowerCase("tr-TR");
     const hasCards = !!column.querySelector('[class*="orderCard--"]');
     const empty = !hasCards && /^\s*0\s*(\/\s*0\s*)?$/.test(countText ?? "");
-    setDataAttr(column, "data-getirstok-empty-column", empty ? "1" : null);
+    setDataAttr(column, "data-getirstok-filled-column", empty ? null : "1");
     setDataAttr(column, "data-getirstok-stage", ORDER_STAGE_BY_HEADER[title] ?? null);
   }
+}
+
+/**
+ * Görünümü ilk anda belirleyen hafif işler: Getir sayfayı her değiştirdiğinde ekrana
+ * çizilmeden önce (MutationObserver anında) çalışır, böylece eski hal bir an bile görünmez.
+ */
+function decorateWarehouseFast() {
+  ensureWarehouseLayoutStyleOnce();
+  decorateDashboardTabs();
+  decorateDashboardColumns();
+}
+
+function decorateWarehouseLayout() {
+  decorateWarehouseFast();
 
   // Henüz atanmamış bilgi satırları ("-") gizlensin; kart sadece dolu bilgiyi göstersin
   for (const row of document.querySelectorAll('[class*="orderCard--"] [class*="textWithIcons--"]')) {
@@ -2700,6 +2830,744 @@ function decorateExpirationPage() {
   }
 }
 
+// -----------------------------
+// Depo: Satıştan Kaldırma Listesi sayfasını sadeleştir
+// Depo / Sebep / Alt Neden / Tedarikçiler filtreleri; Tedarikçiler, Birim, Sonuç Tipi ve seçim
+// sütunları gizlenir. Hücrelere eleman eklenmez (React metni değiştirince silinirdi):
+// kısa ad, durum etiketi, birim ve baş harfler data-* nitelikleriyle CSS'ten çizilir.
+// -----------------------------
+
+const REMOVAL_PAGE_PATH_RE = /\/stock\/remove-from-sales\/list\/?$/;
+const REMOVAL_COLUMN_BY_HEADER = {
+  "oluşturulma tarihi": "created",
+  "ürün görseli": "image",
+  ürün: "name",
+  tedarikçiler: "supplier",
+  sebep: "reason",
+  "son kullanma tarihi": "expiry",
+  "miktar:": "qty",
+  miktar: "qty",
+  birim: "unit",
+  durum: "status",
+  oluşturan: "creator",
+  "sonuç tipi": "conclusion",
+};
+/** Bu sebepteki kayıtlar listede gösterilmez */
+const REMOVAL_SKIPPED_REASON = "fırın ürünleri atık";
+/** Sayfa açılınca: bugün dahil son 7 gün, sayfa başına 50 kayıt */
+const REMOVAL_DEFAULT_DAYS = 7;
+const REMOVAL_DEFAULT_PAGE_SIZE = "50";
+/** Sayfaya her girişte varsayılanlar bir kez uygulanır; sayfadan çıkınca sıfırlanır */
+let removalDefaultsStarted = false;
+const REMOVAL_HIDDEN_FILTERS = [
+  "warehouses-filter-item",
+  "reason-filter-item",
+  "subReason-filter-item",
+  "suppliers-filter-item",
+];
+
+function removalStatusTone(text) {
+  const t = text.toLocaleLowerCase("tr-TR");
+  if (t.includes("tamam")) return "green";
+  if (t.includes("iptal") || t.includes("redd") || t === "red") return "red";
+  if (t.includes("bekl") || t.includes("onay") || t.includes("hazır")) return "amber";
+  return "gray";
+}
+
+function removalReasonTone(text) {
+  const t = text.toLocaleLowerCase("tr-TR");
+  if (t.includes("son kullanma") || t.includes("skt") || t.includes("bozuk")) return "red";
+  if (t.includes("hasar") || t.includes("kırık") || t.includes("ezik")) return "orange";
+  if (t.includes("atık") || t.includes("imha")) return "amber";
+  if (t.includes("iade") || t.includes("müşteri")) return "blue";
+  return "gray";
+}
+
+/** "La Lorraine Taze Baget (110 g)" → { name: "Taze Baget", size: "110 g" } */
+function splitRemovalProductName(full) {
+  const clean = normalizeText(full).replace(BAKE_BRAND_PREFIX_RE, "");
+  const m = clean.match(/^(.*\S)\s*\(([^()]+)\)\s*$/);
+  return m ? { name: m[1], size: m[2] } : { name: clean, size: "" };
+}
+
+function personInitials(name) {
+  return normalizeText(name)
+    .split(" ")
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part.charAt(0).toLocaleUpperCase("tr-TR"))
+    .join("");
+}
+
+function ensureRemovalStyleOnce() {
+  if (document.getElementById("getirstok-rfs-style")) return;
+  const style = document.createElement("style");
+  style.id = "getirstok-rfs-style";
+  style.textContent = `
+    /* Kart */
+    [data-getirstok-rfs-card] {
+      border-radius: 18px !important;
+      border: 1px solid #ebe7f5 !important;
+      box-shadow: 0 1px 2px rgba(31, 27, 46, 0.04), 0 8px 24px -12px rgba(93, 62, 188, 0.18) !important;
+      overflow: hidden;
+    }
+    [data-getirstok-rfs-card] > .ant-card-head {
+      min-height: 0 !important;
+      padding: 16px 22px 10px !important;
+      border-bottom: none !important;
+    }
+    [data-getirstok-rfs-card] > .ant-card-head .ant-card-head-title {
+      font-size: 18px !important;
+      font-weight: 700 !important;
+      letter-spacing: -0.01em;
+      color: #1f1b2e !important;
+    }
+    [data-getirstok-rfs-card] > .ant-card-head .ant-card-extra .ant-btn {
+      height: 34px !important;
+      padding: 0 14px !important;
+      border-radius: 10px !important;
+      border-color: #e2dcf3 !important;
+      color: #5d3ebc !important;
+      font-weight: 600 !important;
+    }
+    [data-getirstok-rfs-card] > .ant-card-body {
+      padding: 4px 22px 22px !important;
+    }
+    [data-getirstok-rfs-card] > .ant-card-body > .ant-space-vertical {
+      display: flex !important;
+      width: 100% !important;
+      gap: 16px !important;
+    }
+    [data-getirstok-rfs-card] > .ant-card-body > .ant-space-vertical > .ant-space-item {
+      width: 100% !important;
+    }
+
+    /* Filtreler */
+    [data-getirstok-rfs-card] .ant-collapse {
+      background: linear-gradient(180deg, #faf8ff 0%, #f6f3fd 100%) !important;
+      border: 1px solid #ece7f8 !important;
+      border-radius: 14px !important;
+    }
+    [data-getirstok-rfs-card] .ant-collapse > .ant-collapse-item {
+      border-bottom: none !important;
+    }
+    [data-getirstok-rfs-card] .ant-collapse-header {
+      padding: 10px 16px 0 !important;
+    }
+    [data-getirstok-rfs-card] .ant-collapse-header-text {
+      font-size: 11px !important;
+      font-weight: 700 !important;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: #8a7fb0 !important;
+    }
+    [data-getirstok-rfs-card] .ant-collapse-expand-icon {
+      display: none !important;
+    }
+    [data-getirstok-rfs-card] .ant-collapse-content {
+      background: transparent !important;
+      border-top: none !important;
+    }
+    [data-getirstok-rfs-card] .ant-collapse-content-box {
+      padding: 10px 16px 14px !important;
+    }
+    [data-getirstok-rfs-card] .layout__filter-gap > :not(:last-child) {
+      margin-bottom: 12px !important;
+    }
+    [data-getirstok-rfs-card] .layout__filter {
+      grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)) !important;
+      gap: 10px !important;
+    }
+    ${REMOVAL_HIDDEN_FILTERS.map(
+      (label) => `[data-getirstok-rfs-card] .layout__filter > [aria-label="${label}"]`
+    ).join(",\n    ")} {
+      display: none !important;
+    }
+    [data-getirstok-rfs-card] .layout__filter > .ant-select,
+    [data-getirstok-rfs-card] .layout__filter > .ant-picker {
+      width: 100% !important;
+      min-height: 38px;
+    }
+    [data-getirstok-rfs-card] .layout__filter .ant-select-selector,
+    [data-getirstok-rfs-card] .layout__filter > .ant-picker {
+      min-height: 38px !important;
+      border-radius: 10px !important;
+      border-color: #e4def4 !important;
+      background: #ffffff !important;
+      box-shadow: none !important;
+    }
+    [data-getirstok-rfs-card] .layout__filter .ant-select-selection-placeholder,
+    [data-getirstok-rfs-card] .layout__filter .ant-picker-input > input::placeholder {
+      color: #a59dbd !important;
+    }
+    [data-getirstok-rfs-card] .layout__filter .ant-select:hover .ant-select-selector,
+    [data-getirstok-rfs-card] .layout__filter > .ant-picker:hover,
+    [data-getirstok-rfs-card] .layout__filter .ant-select-focused .ant-select-selector,
+    [data-getirstok-rfs-card] .layout__filter > .ant-picker-focused {
+      border-color: #a78bfa !important;
+    }
+    [data-getirstok-rfs-card] .onboarding-apply-filter,
+    [data-getirstok-rfs-card] .onboarding-clear-filter {
+      height: 36px !important;
+      padding: 0 18px !important;
+      border-radius: 10px !important;
+      font-weight: 600 !important;
+    }
+    [data-getirstok-rfs-card] .onboarding-apply-filter {
+      background: #5d3ebc !important;
+      border-color: #5d3ebc !important;
+      box-shadow: 0 4px 12px -4px rgba(93, 62, 188, 0.55) !important;
+    }
+    [data-getirstok-rfs-card] .onboarding-clear-filter {
+      border-color: #e4def4 !important;
+      color: #5b5570 !important;
+    }
+    [data-getirstok-rfs-card] .onboarding-save-filter {
+      border-radius: 10px !important;
+      border-color: #e4def4 !important;
+    }
+    [data-getirstok-rfs-card] [aria-label="saved-queries-dropdown"] .ant-select-selector {
+      border-radius: 10px !important;
+      border-color: #e4def4 !important;
+    }
+
+    /* Fırın ürünleri atığı satırları listede görünmez */
+    [data-getirstok-rfs-table] .ant-table-tbody > tr.ant-table-row[data-getirstok-rfs-skip] {
+      display: none !important;
+    }
+    [data-getirstok-rfs-table][data-getirstok-rfs-skipped]::before {
+      content: attr(data-getirstok-rfs-skipped) " fırın ürünü atığı bu sayfada gizlendi";
+      display: inline-block;
+      margin: 0 0 10px;
+      padding: 3px 10px;
+      border-radius: 999px;
+      background: #f3f1f8;
+      font-size: 11.5px;
+      font-weight: 600;
+      color: #7a7491;
+    }
+
+    /* Gizlenen sütunlar */
+    [data-getirstok-rfs-col="select"],
+    [data-getirstok-rfs-col="supplier"],
+    [data-getirstok-rfs-col="unit"],
+    [data-getirstok-rfs-col="conclusion"] {
+      display: none !important;
+    }
+
+    /* Tablo */
+    [data-getirstok-rfs-table] .ant-table {
+      background: transparent !important;
+    }
+    [data-getirstok-rfs-table] .ant-table-container {
+      border: 1px solid #eeebf6 !important;
+      border-radius: 14px !important;
+      overflow: hidden;
+    }
+    [data-getirstok-rfs-table] .ant-table-thead > tr > th {
+      padding: 11px 14px !important;
+      background: #faf9fd !important;
+      border-bottom: 1px solid #eeebf6 !important;
+      font-size: 11px !important;
+      font-weight: 700 !important;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      white-space: nowrap;
+      color: #8a849d !important;
+    }
+    [data-getirstok-rfs-table] .ant-table-thead > tr > th::before {
+      display: none !important;
+    }
+    /* Uzun başlıklar sütunu genişletmesin: kısa adla yeniden yazılır */
+    [data-getirstok-rfs-table] .ant-table-thead > tr > th[data-getirstok-rfs-col="image"],
+    [data-getirstok-rfs-table] .ant-table-thead > tr > th[data-getirstok-rfs-col="qty"],
+    [data-getirstok-rfs-table] .ant-table-thead > tr > th[data-getirstok-rfs-col="created"],
+    [data-getirstok-rfs-table] .ant-table-thead > tr > th[data-getirstok-rfs-col="expiry"] {
+      font-size: 0 !important;
+    }
+    [data-getirstok-rfs-table] .ant-table-thead > tr > th[data-getirstok-rfs-col="qty"]::after { content: "Miktar"; font-size: 11px; }
+    [data-getirstok-rfs-table] .ant-table-thead > tr > th[data-getirstok-rfs-col="created"]::after { content: "Tarih"; font-size: 11px; }
+    [data-getirstok-rfs-table] .ant-table-thead > tr > th[data-getirstok-rfs-col="expiry"]::after { content: "SKT"; font-size: 11px; }
+    [data-getirstok-rfs-table] .ant-table-thead > tr > th,
+    [data-getirstok-rfs-table] .ant-table-tbody > tr.ant-table-row > td {
+      padding-left: 10px !important;
+      padding-right: 10px !important;
+    }
+    [data-getirstok-rfs-table] .ant-table-thead > tr > th[data-getirstok-rfs-col="created"],
+    [data-getirstok-rfs-table] .ant-table-tbody > tr.ant-table-row > td[data-getirstok-rfs-col="created"] {
+      padding-left: 18px !important;
+    }
+    /* Dar sütunlara sabit genişlik, kalan alan ürün adına. "table-layout: fixed" genişlik
+       "auto" iken uygulanmadığı için tablo %100 yapılır. */
+    [data-getirstok-rfs-table] table {
+      width: 100% !important;
+      min-width: 1080px !important;
+    }
+    /* Gizlenen seçim sütununun dar genişliği (colgroup) ilk görünen sütuna kaymasın */
+    [data-getirstok-rfs-table] col.ant-table-selection-col {
+      width: auto !important;
+    }
+    [data-getirstok-rfs-table] th[data-getirstok-rfs-col="created"] { width: 152px !important; }
+    [data-getirstok-rfs-table] th[data-getirstok-rfs-col="image"] { width: 62px !important; }
+    [data-getirstok-rfs-table] th[data-getirstok-rfs-col="reason"] { width: 200px !important; }
+    [data-getirstok-rfs-table] th[data-getirstok-rfs-col="expiry"] { width: 90px !important; }
+    [data-getirstok-rfs-table] th[data-getirstok-rfs-col="qty"] { width: 76px !important; }
+    [data-getirstok-rfs-table] th[data-getirstok-rfs-col="status"] { width: 120px !important; }
+    [data-getirstok-rfs-table] th[data-getirstok-rfs-col="creator"] { width: 140px !important; }
+    [data-getirstok-rfs-table] th[data-getirstok-rfs-col="action"] { width: 56px !important; }
+    [data-getirstok-rfs-table] td[data-getirstok-rfs-col="name"],
+    [data-getirstok-rfs-table] td[data-getirstok-rfs-col="reason"],
+    [data-getirstok-rfs-table] td[data-getirstok-rfs-col="reason"] .ant-tag {
+      white-space: normal !important;
+      overflow-wrap: break-word;
+      word-break: normal !important;
+    }
+    [data-getirstok-rfs-table] .ant-table-tbody > tr.ant-table-row > td {
+      padding-top: 10px !important;
+      padding-bottom: 10px !important;
+      vertical-align: middle !important;
+      background: #ffffff !important;
+      border-bottom: 1px solid #f4f2f9 !important;
+      transition: background 0.15s ease;
+    }
+    [data-getirstok-rfs-table] .ant-table-tbody > tr.ant-table-row:last-child > td {
+      border-bottom: none !important;
+    }
+    [data-getirstok-rfs-table] .ant-table-tbody > tr.ant-table-row:hover > td {
+      background: #faf8ff !important;
+    }
+
+    /* Duruma göre satır: soldan sağa açılan renk, solda şerit, üzerine gelince koyulaşır.
+       Renk satıra verilir, hücreler saydam; sabit sağ sütun kaydırınca altı görünmesin diye dolu. */
+    [data-getirstok-rfs-table] .ant-table-tbody > tr.ant-table-row[data-getirstok-rfs-row] > td {
+      background: transparent !important;
+    }
+    [data-getirstok-rfs-table] .ant-table-tbody > tr.ant-table-row[data-getirstok-rfs-row] > td[data-getirstok-rfs-col="created"] {
+      box-shadow: inset 4px 0 0 var(--getirstok-rfs-accent);
+    }
+    [data-getirstok-rfs-table] .ant-table-tbody > tr.ant-table-row[data-getirstok-rfs-row] > td.ant-table-cell-fix-right {
+      background: var(--getirstok-rfs-end) !important;
+    }
+    [data-getirstok-rfs-table] .ant-table-tbody > tr.ant-table-row[data-getirstok-rfs-row] {
+      background: linear-gradient(90deg, var(--getirstok-rfs-start) 0%, var(--getirstok-rfs-mid) 55%, var(--getirstok-rfs-end) 100%);
+      transition: filter 0.15s ease;
+    }
+    [data-getirstok-rfs-table] .ant-table-tbody > tr.ant-table-row[data-getirstok-rfs-row]:hover {
+      background: linear-gradient(90deg, var(--getirstok-rfs-hover-start) 0%, var(--getirstok-rfs-hover-end) 100%);
+    }
+    [data-getirstok-rfs-table] .ant-table-tbody > tr.ant-table-row[data-getirstok-rfs-row]:hover > td.ant-table-cell-fix-right {
+      background: var(--getirstok-rfs-hover-end) !important;
+    }
+    [data-getirstok-rfs-table] tr[data-getirstok-rfs-row="amber"] {
+      --getirstok-rfs-accent: #f59e0b;
+      --getirstok-rfs-start: #fff1cc;
+      --getirstok-rfs-mid: #fff8e6;
+      --getirstok-rfs-end: #fffdf7;
+      --getirstok-rfs-hover-start: #ffe3a1;
+      --getirstok-rfs-hover-end: #fff4d6;
+    }
+    [data-getirstok-rfs-table] tr[data-getirstok-rfs-row="red"] {
+      --getirstok-rfs-accent: #ef4444;
+      --getirstok-rfs-start: #fde0e0;
+      --getirstok-rfs-mid: #fef1f1;
+      --getirstok-rfs-end: #fffbfb;
+      --getirstok-rfs-hover-start: #fbc8c8;
+      --getirstok-rfs-hover-end: #fde6e6;
+    }
+    /* Renkli satırların arası beyaz çizgiyle ayrılsın */
+    [data-getirstok-rfs-table] .ant-table-tbody > tr.ant-table-row[data-getirstok-rfs-row] > td {
+      border-bottom: 2px solid #ffffff !important;
+    }
+
+    /* Tarih */
+    [data-getirstok-rfs-table] td[data-getirstok-rfs-col="created"] {
+      white-space: nowrap;
+      font-size: 12.5px !important;
+      font-variant-numeric: tabular-nums;
+      color: #6b6580 !important;
+    }
+
+    /* Görsel + ad: tek blok gibi dursun */
+    [data-getirstok-rfs-table] th[data-getirstok-rfs-col="image"],
+    [data-getirstok-rfs-table] td[data-getirstok-rfs-col="image"] {
+      padding-right: 0 !important;
+    }
+    [data-getirstok-rfs-table] td[data-getirstok-rfs-col="image"] .ant-image,
+    [data-getirstok-rfs-table] td[data-getirstok-rfs-col="image"] .ant-image-img {
+      width: 46px !important;
+      height: 46px !important;
+    }
+    [data-getirstok-rfs-table] td[data-getirstok-rfs-col="image"] .ant-image {
+      border-radius: 12px;
+      background: linear-gradient(135deg, #f3effc, #ebe5fa);
+      overflow: hidden;
+    }
+    [data-getirstok-rfs-table] td[data-getirstok-rfs-col="image"] .ant-image-img {
+      box-sizing: border-box;
+      padding: 4px;
+      object-fit: contain;
+      mix-blend-mode: multiply;
+      background: transparent !important;
+    }
+    [data-getirstok-rfs-table] td[data-getirstok-rfs-col="image"] .ant-image-mask {
+      border-radius: 12px;
+    }
+    [data-getirstok-rfs-table] td[data-getirstok-rfs-col="name"][data-getirstok-rfs-name] > .ant-tag {
+      display: none !important;
+    }
+    [data-getirstok-rfs-table] td[data-getirstok-rfs-col="name"][data-getirstok-rfs-name]::before {
+      content: attr(data-getirstok-rfs-name);
+      display: block;
+      font-size: 14px;
+      font-weight: 700;
+      line-height: 1.3;
+      color: #1f1b2e;
+    }
+    [data-getirstok-rfs-table] td[data-getirstok-rfs-col="name"][data-getirstok-rfs-size]::after {
+      content: attr(data-getirstok-rfs-size);
+      display: inline-block;
+      margin-top: 4px;
+      padding: 0 7px;
+      border-radius: 6px;
+      background: #f3f1f8;
+      font-size: 11px;
+      font-weight: 600;
+      line-height: 18px;
+      color: #7a7491;
+    }
+
+    /* Sebep */
+    [data-getirstok-rfs-table] td[data-getirstok-rfs-col="reason"] .ant-tag {
+      margin: 0 !important;
+      padding: 2px 10px !important;
+      border: none !important;
+      border-radius: 999px !important;
+      font-size: 12px !important;
+      font-weight: 600 !important;
+      line-height: 18px !important;
+      background: #f3f2f7 !important;
+      color: #5b5570 !important;
+    }
+    [data-getirstok-rfs-table] td[data-getirstok-rfs-reason="amber"] .ant-tag { background: #fef3c7 !important; color: #92400e !important; }
+    [data-getirstok-rfs-table] td[data-getirstok-rfs-reason="red"] .ant-tag { background: #fee2e2 !important; color: #b91c1c !important; }
+    [data-getirstok-rfs-table] td[data-getirstok-rfs-reason="orange"] .ant-tag { background: #ffedd5 !important; color: #c2410c !important; }
+    [data-getirstok-rfs-table] td[data-getirstok-rfs-reason="blue"] .ant-tag { background: #dbeafe !important; color: #1d4ed8 !important; }
+
+    /* SKT */
+    [data-getirstok-rfs-table] td[data-getirstok-rfs-col="expiry"] {
+      white-space: nowrap;
+      font-size: 13px !important;
+      font-variant-numeric: tabular-nums;
+      color: #4b4560 !important;
+    }
+    [data-getirstok-rfs-table] td[data-getirstok-rfs-col="expiry"] .ant-space-item {
+      color: inherit !important;
+    }
+
+    /* Miktar (+ birim) */
+    [data-getirstok-rfs-table] th[data-getirstok-rfs-col="qty"],
+    [data-getirstok-rfs-table] td[data-getirstok-rfs-col="qty"] {
+      text-align: center !important;
+    }
+    [data-getirstok-rfs-table] td[data-getirstok-rfs-col="qty"] {
+      white-space: nowrap;
+      font-size: 17px !important;
+      font-weight: 800 !important;
+      font-variant-numeric: tabular-nums;
+      color: #5d3ebc !important;
+    }
+    [data-getirstok-rfs-table] td[data-getirstok-rfs-col="qty"][data-getirstok-rfs-unit]::after {
+      content: attr(data-getirstok-rfs-unit);
+      margin-left: 4px;
+      font-size: 11px;
+      font-weight: 600;
+      color: #a59dbd;
+    }
+
+    /* Durum: metin gizlenir, aynı metin etiket olarak çizilir */
+    [data-getirstok-rfs-table] td[data-getirstok-rfs-col="status"][data-getirstok-rfs-status] {
+      font-size: 0 !important;
+      white-space: nowrap;
+    }
+    [data-getirstok-rfs-table] td[data-getirstok-rfs-col="status"][data-getirstok-rfs-status]::before {
+      content: attr(data-getirstok-rfs-status);
+      display: inline-flex;
+      align-items: center;
+      padding: 3px 10px 3px 22px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 700;
+      line-height: 16px;
+      background: #f3f2f7 radial-gradient(circle at 11px 50%, #9ca3af 3.5px, transparent 4px);
+      color: #5b5570;
+    }
+    [data-getirstok-rfs-table] td[data-getirstok-rfs-tone="green"]::before {
+      background: #dcfce7 radial-gradient(circle at 11px 50%, #16a34a 3.5px, transparent 4px) !important;
+      color: #166534 !important;
+    }
+    [data-getirstok-rfs-table] td[data-getirstok-rfs-tone="amber"]::before {
+      background: #fef3c7 radial-gradient(circle at 11px 50%, #d97706 3.5px, transparent 4px) !important;
+      color: #92400e !important;
+    }
+    [data-getirstok-rfs-table] td[data-getirstok-rfs-tone="red"]::before {
+      background: #fee2e2 radial-gradient(circle at 11px 50%, #dc2626 3.5px, transparent 4px) !important;
+      color: #991b1b !important;
+    }
+
+    /* Oluşturan: baş harf rozeti */
+    [data-getirstok-rfs-table] td[data-getirstok-rfs-col="creator"] {
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      font-size: 12.5px !important;
+      font-weight: 600 !important;
+      color: #3f3a52 !important;
+    }
+    [data-getirstok-rfs-table] td[data-getirstok-rfs-col="creator"][data-getirstok-rfs-initials]::before {
+      content: attr(data-getirstok-rfs-initials);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 26px;
+      height: 26px;
+      margin-right: 8px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #7c5cdb, #5d3ebc);
+      font-size: 10.5px;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+      color: #ffffff;
+      vertical-align: middle;
+    }
+
+    /* Satır sonu butonu */
+    [data-getirstok-rfs-table] td[data-getirstok-rfs-col="action"] .ant-btn {
+      width: 32px !important;
+      height: 32px !important;
+      border-radius: 10px !important;
+      border-color: #e4def4 !important;
+      color: #5d3ebc !important;
+      background: #ffffff !important;
+    }
+    [data-getirstok-rfs-table] td[data-getirstok-rfs-col="action"] .ant-btn:hover {
+      background: #f3effc !important;
+      border-color: #c4b5fd !important;
+    }
+
+    /* Sayfalama */
+    [data-getirstok-rfs-table] .ant-pagination {
+      margin: 14px 0 0 !important;
+    }
+    [data-getirstok-rfs-table] .ant-pagination-item {
+      border-radius: 8px !important;
+    }
+    [data-getirstok-rfs-table] .ant-pagination-item-active {
+      border-color: #5d3ebc !important;
+      background: #5d3ebc !important;
+    }
+    [data-getirstok-rfs-table] .ant-pagination-item-active a {
+      color: #ffffff !important;
+    }
+  `;
+  document.head.appendChild(style);
+}
+
+function decorateRemovalTable(table) {
+  const headerCells = Array.from(table.querySelectorAll(":scope > thead > tr > th"));
+  const columns = headerCells.map((th) => {
+    if (th.classList.contains("ant-table-selection-column")) return "select";
+    const key = normalizeText(th.textContent).toLocaleLowerCase("tr-TR");
+    if (!key && th.classList.contains("ant-table-cell-fix-right")) return "action";
+    return REMOVAL_COLUMN_BY_HEADER[key] || null;
+  });
+  if (!columns.includes("name") || !columns.includes("reason")) return null;
+
+  headerCells.forEach((th, i) => setDataAttr(th, "data-getirstok-rfs-col", columns[i]));
+  let skipped = 0;
+  // Ölçüm satırı da gizlenmeli; yoksa gizli sütunların genişliği korunur
+  table
+    .querySelectorAll(":scope > tbody > tr.ant-table-measure-row > *")
+    .forEach((cell, i) => setDataAttr(cell, "data-getirstok-rfs-col", columns[i] ?? null));
+
+  for (const tr of table.querySelectorAll(":scope > tbody > tr.ant-table-row")) {
+    const cells = Array.from(tr.children);
+    const cellOf = (col) => {
+      const i = columns.indexOf(col);
+      return i >= 0 ? cells[i] ?? null : null;
+    };
+    cells.forEach((td, i) => setDataAttr(td, "data-getirstok-rfs-col", columns[i] ?? null));
+
+    const nameCell = cellOf("name");
+    if (nameCell) {
+      const full = normalizeText(nameCell.querySelector(".ant-tag")?.textContent ?? nameCell.textContent);
+      const { name, size } = splitRemovalProductName(full);
+      setDataAttr(nameCell, "data-getirstok-rfs-name", name || null);
+      setDataAttr(nameCell, "data-getirstok-rfs-size", size || null);
+      if (nameCell.title !== full) nameCell.title = full;
+    }
+
+    const reasonCell = cellOf("reason");
+    const reason = normalizeText(reasonCell?.textContent);
+    if (reasonCell) setDataAttr(reasonCell, "data-getirstok-rfs-reason", removalReasonTone(reason));
+    const skip = reason.toLocaleLowerCase("tr-TR") === REMOVAL_SKIPPED_REASON;
+    setDataAttr(tr, "data-getirstok-rfs-skip", skip ? "1" : null);
+    if (skip) skipped++;
+
+    const qtyCell = cellOf("qty");
+    if (qtyCell) {
+      const unit = normalizeText(cellOf("unit")?.textContent).toLocaleLowerCase("tr-TR");
+      setDataAttr(qtyCell, "data-getirstok-rfs-unit", unit || null);
+    }
+
+    const statusCell = cellOf("status");
+    const status = normalizeText(statusCell?.textContent);
+    const statusTone = status ? removalStatusTone(status) : null;
+    if (statusCell) {
+      setDataAttr(statusCell, "data-getirstok-rfs-status", status || null);
+      setDataAttr(statusCell, "data-getirstok-rfs-tone", statusTone);
+    }
+    setDataAttr(tr, "data-getirstok-rfs-row", statusTone === "amber" || statusTone === "red" ? statusTone : null);
+
+    const creatorCell = cellOf("creator");
+    if (creatorCell) {
+      const creator = normalizeText(creatorCell.textContent);
+      setDataAttr(creatorCell, "data-getirstok-rfs-initials", personInitials(creator) || null);
+      if (creatorCell.title !== creator) creatorCell.title = creator;
+    }
+  }
+  return skipped;
+}
+
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+async function waitForElement(find, timeoutMs = 4000) {
+  const end = Date.now() + timeoutMs;
+  while (Date.now() < end) {
+    const el = find();
+    if (el) return el;
+    await sleep(80);
+  }
+  return null;
+}
+
+/** Ant Design bileşenleri mousedown/click'e göre açılıp seçtiği için tam tıklama dizisi */
+function simulateClick(el) {
+  const opts = { bubbles: true, cancelable: true, view: window };
+  el.dispatchEvent(new PointerEvent("pointerdown", opts));
+  el.dispatchEvent(new MouseEvent("mousedown", opts));
+  el.dispatchEvent(new PointerEvent("pointerup", opts));
+  el.dispatchEvent(new MouseEvent("mouseup", opts));
+  el.dispatchEvent(new MouseEvent("click", opts));
+}
+
+function localYmd(date) {
+  const p = (n) => String(n).padStart(2, "0");
+  return `${date.getFullYear()}-${p(date.getMonth() + 1)}-${p(date.getDate())}`;
+}
+
+function ymdToTr(ymd) {
+  const [y, m, d] = ymd.split("-");
+  return `${d}.${m}.${y}`;
+}
+
+/** Açık tarih seçicide günün hücresi (antd hücre başlığı "YYYY-MM-DD") */
+function findPickerCell(ymd) {
+  return document.querySelector(
+    `.ant-picker-dropdown:not(.ant-picker-dropdown-hidden) td.ant-picker-cell[title="${ymd}"]`
+  );
+}
+
+/** Tarih aralığını bugün dahil son 7 güne çeker. @returns değişti mi */
+async function applyRemovalDefaultRange(card) {
+  const startInput = card.querySelector('.layout__filter .ant-picker-range input[date-range="start"]');
+  const endInput = card.querySelector('.layout__filter .ant-picker-range input[date-range="end"]');
+  if (!startInput || !endInput) return false;
+
+  const today = new Date();
+  const from = new Date(today.getFullYear(), today.getMonth(), today.getDate() - (REMOVAL_DEFAULT_DAYS - 1));
+  const fromYmd = localYmd(from);
+  const toYmd = localYmd(today);
+  if (startInput.value === ymdToTr(fromYmd) && endInput.value === ymdToTr(toYmd)) return false;
+
+  startInput.focus();
+  simulateClick(startInput);
+  const fromCell = await waitForElement(() => findPickerCell(fromYmd), 2500);
+  if (fromCell) {
+    simulateClick(fromCell.querySelector(".ant-picker-cell-inner") || fromCell);
+    const toCell = await waitForElement(() => findPickerCell(toYmd), 1500);
+    if (!toCell) return false;
+    simulateClick(toCell.querySelector(".ant-picker-cell-inner") || toCell);
+  } else {
+    // Hücre bulunamazsa (ör. başlangıç önceki ayda) Getir'in hazır seçeneği: bugünü içermez
+    const preset = Array.from(
+      document.querySelectorAll(".ant-picker-dropdown:not(.ant-picker-dropdown-hidden) .ant-picker-presets li")
+    ).find((li) => normalizeText(li.textContent).toLocaleLowerCase("tr-TR") === "son 7 gün");
+    if (!preset) return false;
+    simulateClick(preset);
+  }
+  await sleep(250);
+  return true;
+}
+
+/** Sayfa başına kayıt sayısını 50 yapar. @returns değişti mi */
+async function applyRemovalDefaultPageSize(card) {
+  const changer = await waitForElement(() => card.querySelector(".ant-pagination-options-size-changer"), 6000);
+  if (!changer) return false;
+  const current = normalizeText(changer.querySelector(".ant-select-selection-item")?.textContent);
+  if (current.startsWith(REMOVAL_DEFAULT_PAGE_SIZE)) return false;
+
+  simulateClick(changer.querySelector(".ant-select-selector") || changer);
+  const option = await waitForElement(
+    () =>
+      Array.from(
+        document.querySelectorAll(".ant-select-dropdown:not(.ant-select-dropdown-hidden) .ant-select-item-option")
+      ).find((o) => normalizeText(o.textContent).startsWith(`${REMOVAL_DEFAULT_PAGE_SIZE} `)),
+    2000
+  );
+  if (!option) return false;
+  simulateClick(option);
+  return true;
+}
+
+/** Sadece listeleme ayarı (veri değişmez): tarih → Uygula → sayfa boyutu */
+async function applyRemovalDefaults(card) {
+  try {
+    if (await applyRemovalDefaultRange(card)) {
+      const apply = card.querySelector(".onboarding-apply-filter");
+      if (apply) simulateClick(apply);
+      await sleep(900);
+    }
+    await applyRemovalDefaultPageSize(card);
+  } catch (error) {
+    console.warn("[GetirStok] Satıştan kaldırma varsayılanları uygulanamadı:", error);
+  }
+}
+
+function decorateRemovalPage() {
+  if (!REMOVAL_PAGE_PATH_RE.test(window.location.pathname)) {
+    removalDefaultsStarted = false;
+    return;
+  }
+  for (const table of document.querySelectorAll(".ant-table-wrapper table")) {
+    const skipped = decorateRemovalTable(table);
+    if (skipped == null) continue;
+    ensureRemovalStyleOnce();
+    const wrapper = table.closest(".ant-table-wrapper");
+    if (wrapper) {
+      setDataAttr(wrapper, "data-getirstok-rfs-table", "1");
+      setDataAttr(wrapper, "data-getirstok-rfs-skipped", skipped > 0 ? String(skipped) : null);
+    }
+    const card = table.closest(".ant-card");
+    if (card) {
+      setDataAttr(card, "data-getirstok-rfs-card", "1");
+      if (!removalDefaultsStarted) {
+        removalDefaultsStarted = true;
+        void applyRemovalDefaults(card);
+      }
+    }
+  }
+}
+
 if (isWarehousePanel) {
   window.addEventListener("message", (event) => {
     if (event.source !== window) return;
@@ -2730,13 +3598,42 @@ if (isFranchisePanel || isWarehousePanel) {
     }
   }
 
+  // Sayfa sürekli değişirken (ilk yükleme) bekleme her seferinde uzamasın: en geç 400 ms'de bir çalış
+  let debounceStartedAt = 0;
   function debouncedInject() {
+    const now = Date.now();
     if (debounceTimer) clearTimeout(debounceTimer);
-    debounceTimer = setTimeout(safeInjectButtons, 120);
+    else debounceStartedAt = now;
+    const wait = now - debounceStartedAt >= 400 ? 0 : 120;
+    debounceTimer = setTimeout(() => {
+      debounceTimer = null;
+      safeInjectButtons();
+    }, wait);
   }
 
-  var mo = new MutationObserver(debouncedInject);
+  /** Hafif işler beklemeden: gözlemci geri çağrısı ekran çizilmeden önce çalışır */
+  function runFastDecorations() {
+    if (!isWarehousePanel || isInjecting) return;
+    mo.disconnect();
+    try {
+      decorateWarehouseFast();
+    } catch (error) {
+      console.warn("[GetirStok] Hızlı düzenleme hatası:", error);
+    } finally {
+      // warehouse-early.css bu işarete kadar sekmeleri ve sayaçları gizli tutar
+      if (!document.documentElement.hasAttribute("data-getirstok-ready")) {
+        document.documentElement.setAttribute("data-getirstok-ready", "1");
+      }
+      mo.observe(document.documentElement, { childList: true, subtree: true });
+    }
+  }
+
+  var mo = new MutationObserver(() => {
+    runFastDecorations();
+    debouncedInject();
+  });
   mo.observe(document.documentElement, { childList: true, subtree: true });
+  runFastDecorations();
   // İlk deneme
   setTimeout(safeInjectButtons, 800);
   setTimeout(safeInjectButtons, 2500);

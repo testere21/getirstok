@@ -83,7 +83,7 @@ async function fetchWithTimeout(url: string, init: RequestInit, timeoutMs: numbe
   }
 }
 
-async function gatewayJson(url: string, init: RequestInit, token: string): Promise<unknown> {
+export async function gatewayJson(url: string, init: RequestInit, token: string): Promise<unknown> {
   const headers: Record<string, string> = {
     Authorization: `Bearer ${token}`,
     Accept: "application/json",

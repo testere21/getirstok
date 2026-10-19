@@ -151,16 +151,35 @@ export interface PickerStatRow {
   greenRate: number | null;
   /** Ortalama tahmin uyum performansı; hiç sipariş yoksa null */
   avgRatio: number | null;
+  /** Bayi paneli Toplayıcı Performansı: sipariş SKU sayısı */
+  sku: number;
+  /** Bayi paneli: problemli sipariş sayısı */
+  problematic: number;
+  /** Bayi paneli: yıldız puanı ortalaması; puan yoksa null */
+  rating: number | null;
+}
+
+/** Bayi panelinden gelen metrikler (toplayıcı başına, bir gün ya da aralık) */
+export interface PickerRangeMetrics {
+  sku: number;
+  problematic: number;
+  rating: number | null;
 }
 
 /**
  * Seçilen günlerin siparişlerini toplayıcı başına toplar.
  * Aktif toplayıcılar siparişi olmasa da 0 ile listelenir; pasifler sadece istenirse.
+ * `metricDays`: günlük bayi paneli metrikleri (SKU ve problemli toplanır).
+ * `ratings`: aynı aralığın yıldız ortalaması (pickerKey → puan).
  */
 export function aggregatePickerStats(
   days: Iterable<Readonly<Record<string, StoredPickerOrder>>>,
   pickers: Readonly<Record<string, PickerEntry>>,
-  options: { includeInactive?: boolean } = {}
+  options: {
+    includeInactive?: boolean;
+    metricDays?: Iterable<Readonly<Record<string, Pick<PickerRangeMetrics, "sku" | "problematic">>>>;
+    ratings?: Readonly<Record<string, number>>;
+  } = {}
 ): PickerStatRow[] {
   const rows = new Map<string, PickerStatRow & { ratioSum: number }>();
   const include = (p: PickerEntry) => p.active || options.includeInactive === true;
@@ -175,8 +194,19 @@ export function aggregatePickerStats(
       red: 0,
       greenRate: null,
       avgRatio: null,
+      sku: 0,
+      problematic: 0,
+      rating: options.ratings?.[key] ?? null,
       ratioSum: 0,
     });
+  }
+  for (const day of options.metricDays ?? []) {
+    for (const [key, m] of Object.entries(day)) {
+      const row = rows.get(key);
+      if (!row) continue;
+      row.sku += m.sku;
+      row.problematic += m.problematic;
+    }
   }
   for (const orders of days) {
     for (const o of Object.values(orders)) {
@@ -195,7 +225,14 @@ export function aggregatePickerStats(
   }));
 }
 
-export type PickerSortKey = "total" | "green" | "red" | "greenRate";
+export type PickerSortKey =
+  | "total"
+  | "sku"
+  | "green"
+  | "red"
+  | "greenRate"
+  | "problematic"
+  | "rating";
 export type SortDirection = "desc" | "asc";
 
 /** Eşitlikte isim sırası; siparişi olmayanın yüzdesi (null) her zaman en sonda. */

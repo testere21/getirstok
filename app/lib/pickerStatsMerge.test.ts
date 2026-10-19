@@ -136,12 +136,36 @@ test("aggregatePickerStats: günler toplanır, siparişsiz aktif 0 ile görünü
   assert.equal(withInactive.find((r) => r.name === "Eski Eleman")?.total, 1);
 });
 
+test("aggregatePickerStats: günlük SKU/problemli toplanır, yıldız aralıktan gelir", () => {
+  const pickers = Object.fromEntries([picker("Baran Özgün"), picker("Ferhat Kortak")]);
+  const metricDays = [
+    {
+      [pickerKey("Ferhat Kortak")]: { sku: 230, problematic: 2 },
+      [pickerKey("Yabancı")]: { sku: 99, problematic: 1 },
+    },
+    { [pickerKey("Ferhat Kortak")]: { sku: 429, problematic: 3 } },
+  ];
+  const ratings = { [pickerKey("Ferhat Kortak")]: 4.3, [pickerKey("Yabancı")]: 5 };
+  const rows = aggregatePickerStats([], pickers, { metricDays, ratings });
+  const ferhat = rows.find((r) => r.name === "Ferhat Kortak");
+  assert.deepEqual(
+    { sku: ferhat?.sku, problematic: ferhat?.problematic, rating: ferhat?.rating },
+    { sku: 659, problematic: 5, rating: 4.3 }
+  );
+  const baran = rows.find((r) => r.name === "Baran Özgün");
+  assert.deepEqual(
+    { sku: baran?.sku, problematic: baran?.problematic, rating: baran?.rating, total: baran?.total },
+    { sku: 0, problematic: 0, rating: null, total: 0 }
+  );
+  assert.equal(rows.length, 2);
+});
+
 test("sortPickerStats: sipariş, yeşil, kırmızı, yüzde; iki yön", () => {
   const rows = [
-    { key: "a", name: "Ali", active: true, total: 10, green: 8, red: 2, greenRate: 0.8, avgRatio: 0.7 },
-    { key: "b", name: "Can", active: true, total: 20, green: 6, red: 14, greenRate: 0.3, avgRatio: 1.2 },
-    { key: "c", name: "Ece", active: true, total: 0, green: 0, red: 0, greenRate: null, avgRatio: null },
-    { key: "d", name: "Banu", active: true, total: 10, green: 5, red: 5, greenRate: 0.5, avgRatio: 1 },
+    { key: "a", name: "Ali", active: true, total: 10, green: 8, red: 2, greenRate: 0.8, avgRatio: 0.7, sku: 30, problematic: 3, rating: 4.6 },
+    { key: "b", name: "Can", active: true, total: 20, green: 6, red: 14, greenRate: 0.3, avgRatio: 1.2, sku: 25, problematic: 9, rating: 4.1 },
+    { key: "c", name: "Ece", active: true, total: 0, green: 0, red: 0, greenRate: null, avgRatio: null, sku: 0, problematic: 0, rating: null },
+    { key: "d", name: "Banu", active: true, total: 10, green: 5, red: 5, greenRate: 0.5, avgRatio: 1, sku: 40, problematic: 1, rating: 4.4 },
   ];
   const names = (key: Parameters<typeof sortPickerStats>[1], dir: "asc" | "desc") =>
     sortPickerStats(rows, key, dir).map((r) => r.name);
@@ -150,6 +174,11 @@ test("sortPickerStats: sipariş, yeşil, kırmızı, yüzde; iki yön", () => {
   assert.deepEqual(names("total", "asc"), ["Ece", "Ali", "Banu", "Can"]);
   assert.deepEqual(names("green", "desc"), ["Ali", "Can", "Banu", "Ece"]);
   assert.deepEqual(names("red", "desc"), ["Can", "Banu", "Ali", "Ece"]);
+  assert.deepEqual(names("sku", "desc"), ["Banu", "Ali", "Can", "Ece"]);
+  assert.deepEqual(names("problematic", "desc"), ["Can", "Ali", "Banu", "Ece"]);
+  // Puanı olmayan her iki yönde de en sonda
+  assert.deepEqual(names("rating", "desc"), ["Ali", "Banu", "Can", "Ece"]);
+  assert.deepEqual(names("rating", "asc"), ["Can", "Banu", "Ali", "Ece"]);
   // Siparişi olmayanın yüzdesi her iki yönde de en sonda
   assert.deepEqual(names("greenRate", "desc"), ["Ali", "Banu", "Can", "Ece"]);
   assert.deepEqual(names("greenRate", "asc"), ["Can", "Banu", "Ali", "Ece"]);
