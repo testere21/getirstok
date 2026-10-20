@@ -50,6 +50,39 @@ export function parsePickerMetrics(json: unknown): PickerMetricsPage {
   };
 }
 
+/** Depo bazlı istekte toplayıcının o depodaki sipariş sayısı (depo eşleştirmesi için) */
+export function parsePickerOrderCounts(json: unknown): Record<string, { name: string; orders: number }> {
+  const o = (json && typeof json === "object" ? json : {}) as Record<string, unknown>;
+  const data = Array.isArray(o.data) ? o.data : [];
+  const out: Record<string, { name: string; orders: number }> = {};
+  for (const item of data) {
+    if (!item || typeof item !== "object") continue;
+    const row = item as Record<string, unknown>;
+    const name = typeof row.name === "string" ? row.name.trim() : "";
+    if (!name) continue;
+    const orders = Math.max(0, Math.round(toNumber(row.total_order_count) ?? 0));
+    if (orders > 0) out[pickerKey(name)] = { name, orders };
+  }
+  return out;
+}
+
+/**
+ * Her toplayıcıyı en çok sipariş topladığı depoya atar (depocular depo değiştirmiyor;
+ * nadir ödünç günler sonucu değiştirmesin diye çoğunluk alınır).
+ */
+export function assignPickerWarehouses(
+  countsByWarehouse: ReadonlyMap<string, Readonly<Record<string, { name: string; orders: number }>>>
+): Map<string, { name: string; warehouseId: string }> {
+  const best = new Map<string, { name: string; warehouseId: string; orders: number }>();
+  for (const [warehouseId, counts] of countsByWarehouse) {
+    for (const [key, c] of Object.entries(counts)) {
+      const prev = best.get(key);
+      if (!prev || c.orders > prev.orders) best.set(key, { name: c.name, warehouseId, orders: c.orders });
+    }
+  }
+  return new Map([...best].map(([key, { name, warehouseId }]) => [key, { name, warehouseId }]));
+}
+
 /**
  * Getir günü geç tamamlayabilir: son günden sonraki ikinci gün (İstanbul) veya daha sonra
  * çekilen değer kesin sayılır. Kesinleşmemiş kayıt sadece "Güncelle" ile yenilenir.

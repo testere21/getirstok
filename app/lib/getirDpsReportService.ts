@@ -3,8 +3,6 @@
  * Rapor istenmez; sadece var olanlar okunur.
  */
 import { getGetirFranchiseToken } from "./getirTokenService";
-import { FRANCHISE_WAREHOUSE_ID_SOGUKKUYU } from "./types";
-
 const GATEWAY = "https://franchise-api-gateway.getirapi.com";
 const LIST_URL = `${GATEWAY}/generic-report/report-request/list`;
 
@@ -41,14 +39,6 @@ export interface DpsReportSummary {
   startDate: string | null;
   endDate: string | null;
   createdAt: string | null;
-}
-
-/** Sadece Soğukkuyu'yu kapsayan rapor: içindeki tüm toplayıcılar Soğukkuyu'nun. */
-export function isSogukkuyuOnlyReport(report: Pick<DpsReportSummary, "warehouseIds">): boolean {
-  return (
-    report.warehouseIds.length === 1 &&
-    report.warehouseIds[0] === FRANCHISE_WAREHOUSE_ID_SOGUKKUYU
-  );
 }
 
 /** Bayi token'ını okur; aynı istekte liste + indirme için bir kez okuyup ikisine de verin. */

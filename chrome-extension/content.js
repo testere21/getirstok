@@ -1302,8 +1302,6 @@ function tryInjectButtons() {
   if (isWarehousePanel) {
     decorateWarehouseLayout();
     decorateBakeryPage();
-    decorateExpirationPage();
-    decorateRemovalPage();
   }
   ensureStyleOnce();
   tryInjectBarcodeToggleButton();
@@ -2520,6 +2518,9 @@ function decorateWarehouseFast() {
   ensureWarehouseLayoutStyleOnce();
   decorateDashboardTabs();
   decorateDashboardColumns();
+  // Tablo sayfaları: gizlenen sütun/filtreler bir an bile görünmesin (sayfa dışında hemen döner)
+  decorateRemovalPage();
+  decorateExpirationPage();
 }
 
 function decorateWarehouseLayout() {

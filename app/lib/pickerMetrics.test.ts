@@ -1,10 +1,12 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
+  assignPickerWarehouses,
   clampMetricsRange,
   isPickerMetricsFinal,
   needsMetricsFetch,
   parsePickerMetrics,
+  parsePickerOrderCounts,
   pickerMetricsRetentionCutoff,
 } from "./pickerMetrics";
 import { pickerKey } from "./pickerStatsMerge";
@@ -74,6 +76,35 @@ test("clampMetricsRange: bugünü aşan aralık bugüne kırpılır", () => {
     from: "2026-10-19",
     to: "2026-10-19",
   });
+});
+
+test("parsePickerOrderCounts: siparişi olmayan atlanır", () => {
+  const counts = parsePickerOrderCounts({
+    data: [
+      { name: "Özge Turhan", total_order_count: 412 },
+      { name: "Stock System Picker", total_order_count: 0 },
+      { name: "", total_order_count: 9 },
+    ],
+  });
+  assert.deepEqual(counts, { [pickerKey("Özge Turhan")]: { name: "Özge Turhan", orders: 412 } });
+});
+
+test("assignPickerWarehouses: toplayıcı en çok sipariş topladığı depoya atanır", () => {
+  const assigned = assignPickerWarehouses(
+    new Map([
+      ["SOG", { [pickerKey("Ferhat Kortak")]: { name: "Ferhat Kortak", orders: 300 } }],
+      [
+        "BOS",
+        {
+          [pickerKey("Özge Turhan")]: { name: "Özge Turhan", orders: 412 },
+          // Bir günlük ödünç: çoğunluk Soğukkuyu
+          [pickerKey("Ferhat Kortak")]: { name: "Ferhat Kortak", orders: 12 },
+        },
+      ],
+    ])
+  );
+  assert.deepEqual(assigned.get(pickerKey("Ferhat Kortak")), { name: "Ferhat Kortak", warehouseId: "SOG" });
+  assert.deepEqual(assigned.get(pickerKey("Özge Turhan")), { name: "Özge Turhan", warehouseId: "BOS" });
 });
 
 test("pickerMetricsRetentionCutoff: 5 ay öncesi", () => {

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertTriangle,
   CalendarDays,
+  FileText,
   Gauge,
   Loader2,
   RefreshCw,
@@ -13,6 +14,7 @@ import {
 } from "lucide-react";
 import {
   aggregatePickerStats,
+  pickerWarehouseId,
   sortPickerStats,
   type PickerRangeMetrics,
   type PickerSortKey,
@@ -37,7 +39,16 @@ import {
   type PickerStatsState,
 } from "@/app/lib/pickerStatsStore";
 import { clampMetricsRange } from "@/app/lib/pickerMetrics";
+import {
+  FRANCHISE_WAREHOUSES,
+  FRANCHISE_WAREHOUSE_IDS,
+  SOGUKKUYU_WAREHOUSE_ID,
+  isFranchiseWarehouseId,
+  warehouseName,
+} from "@/app/lib/franchiseWarehouses";
 import { PickerManageModal } from "./PickerManageModal";
+import { PickerPrimReportModal } from "./PickerPrimReportModal";
+import { PickerDailyModal, type PickerDailyRow } from "./PickerDailyModal";
 import { DpsPanel } from "./DpsPanel";
 
 const SORT_KEYS: readonly PickerSortKey[] = [
@@ -52,6 +63,20 @@ const SORT_KEYS: readonly PickerSortKey[] = [
 
 const RANGE_STORAGE_KEY = "getirstok.pickerStats.range";
 const SORT_STORAGE_KEY = "getirstok.pickerStats.sort";
+const WAREHOUSE_STORAGE_KEY = "getirstok.pickerStats.warehouse";
+
+/** "all" veya depo id */
+type WarehouseFilter = string;
+
+function readStoredWarehouseFilter(): WarehouseFilter {
+  if (typeof window === "undefined") return SOGUKKUYU_WAREHOUSE_ID;
+  const v = window.localStorage.getItem(WAREHOUSE_STORAGE_KEY);
+  return v === "all" || (v && isFranchiseWarehouseId(v)) ? v : SOGUKKUYU_WAREHOUSE_ID;
+}
+
+function dayCacheKey(warehouseId: string, ymd: string): string {
+  return `${warehouseId}|${ymd}`;
+}
 /** Bir sekme açılışında en fazla bu kadar rapor işlenir (sonsuz döngüye karşı) */
 const MAX_SYNC_CALLS = 30;
 
@@ -197,6 +222,8 @@ function ToplayiciPerformansiPanel() {
   const [sync, setSync] = useState<SyncStatus>({ kind: "idle" });
   const [newPickers, setNewPickers] = useState<string[]>([]);
   const [manageOpen, setManageOpen] = useState(false);
+  const [reportOpen, setReportOpen] = useState(false);
+  const [dailyPickerKey, setDailyPickerKey] = useState<string | null>(null);
   const [showInactive, setShowInactive] = useState(false);
   const syncingRef = useRef(false);
   /** Senkron sürerken kişi eklenirse, bitince bir tur daha (işaretlenen raporlar için) */
@@ -216,6 +243,12 @@ function ToplayiciPerformansiPanel() {
   const metricsSyncingRef = useRef(false);
   /** Senkron sürerken aralık değişirse / Güncelle'ye basılırsa bitince bir tur daha */
   const metricsPendingRef = useRef<{ range: YmdRange; refreshSince: string | null } | null>(null);
+
+  const [warehouseFilter, setWarehouseFilter] = useState<WarehouseFilter>(readStoredWarehouseFilter);
+  const selectedWarehouseIds = useMemo<readonly string[]>(
+    () => (warehouseFilter === "all" ? FRANCHISE_WAREHOUSE_IDS : [warehouseFilter]),
+    [warehouseFilter]
+  );
 
   const range = useMemo(() => normalizeRange(selectedRange), [selectedRange]);
   const rangeDays = useMemo(() => daysInRange(range), [range]);
@@ -247,18 +280,35 @@ function ToplayiciPerformansiPanel() {
     );
   }, [refreshMeta]);
 
-  // Sadece önbellekte olmayan günler okunur (dönem değiştirince aynı gün tekrar okunmaz)
   useEffect(() => {
-    const missing = rangeDays.filter((d) => !dayCache.has(d));
-    if (missing.length === 0) return;
+    window.localStorage.setItem(WAREHOUSE_STORAGE_KEY, warehouseFilter);
+  }, [warehouseFilter]);
+
+  // Sadece önbellekte olmayan depo-günler okunur (dönem/depo değiştirince aynı gün tekrar okunmaz)
+  useEffect(() => {
+    const missingByWarehouse = selectedWarehouseIds
+      .map((warehouseId) => ({
+        warehouseId,
+        days: rangeDays.filter((d) => !dayCache.has(dayCacheKey(warehouseId, d))),
+      }))
+      .filter((m) => m.days.length > 0);
+    if (missingByWarehouse.length === 0) return;
     let cancelled = false;
     setLoadingDays(true);
-    readPickerStatsDaysRange(missing[0], missing[missing.length - 1])
-      .then((found) => {
+    Promise.all(
+      missingByWarehouse.map(async ({ warehouseId, days }) => ({
+        warehouseId,
+        days,
+        found: await readPickerStatsDaysRange(warehouseId, days[0], days[days.length - 1]),
+      }))
+    )
+      .then((results) => {
         if (cancelled) return;
         setDayCache((prev) => {
           const next = new Map(prev);
-          for (const d of missing) next.set(d, found.get(d) ?? {});
+          for (const { warehouseId, days, found } of results) {
+            for (const d of days) next.set(dayCacheKey(warehouseId, d), found.get(d) ?? {});
+          }
           return next;
         });
         setDayError(null);
@@ -272,7 +322,7 @@ function ToplayiciPerformansiPanel() {
     return () => {
       cancelled = true;
     };
-  }, [rangeDays, dayCache]);
+  }, [selectedWarehouseIds, rangeDays, dayCache]);
 
   // Günlük metrik kayıtları Firestore'dan (önbellekte olmayan günler)
   useEffect(() => {
@@ -442,7 +492,9 @@ function ToplayiciPerformansiPanel() {
 
   const rows = useMemo<PickerStatRow[]>(() => {
     if (!state) return [];
-    const days = rangeDays.map((d) => dayCache.get(d)).filter((d): d is Record<string, StoredPickerOrder> => !!d);
+    const days = selectedWarehouseIds
+      .flatMap((warehouseId) => rangeDays.map((d) => dayCache.get(dayCacheKey(warehouseId, d))))
+      .filter((d): d is Record<string, StoredPickerOrder> => !!d);
     const metricDayRecords = metricDays
       .map((d) => metricDayCache.get(d))
       .filter((d): d is Record<string, PickerRangeMetrics> => !!d);
@@ -458,6 +510,7 @@ function ToplayiciPerformansiPanel() {
     return sortPickerStats(
       aggregatePickerStats(days, state.pickers, {
         includeInactive: showInactive,
+        warehouseIds: new Set(selectedWarehouseIds),
         metricDays: metricDayRecords,
         ratings,
       }),
@@ -466,6 +519,7 @@ function ToplayiciPerformansiPanel() {
     );
   }, [
     state,
+    selectedWarehouseIds,
     rangeDays,
     dayCache,
     metricDays,
@@ -478,8 +532,13 @@ function ToplayiciPerformansiPanel() {
   ]);
 
   const inactiveCount = useMemo(
-    () => (state ? Object.values(state.pickers).filter((p) => !p.active).length : 0),
-    [state]
+    () =>
+      state
+        ? Object.values(state.pickers).filter(
+            (p) => !p.active && selectedWarehouseIds.includes(pickerWarehouseId(p))
+          ).length
+        : 0,
+    [state, selectedWarehouseIds]
   );
 
   const totals = useMemo(() => {
@@ -496,7 +555,34 @@ function ToplayiciPerformansiPanel() {
     return { ...t, greenRate: t.total > 0 ? t.green / t.total : null };
   }, [rows]);
 
-  const dataReady = state != null && rangeDays.every((d) => dayCache.has(d));
+  const dataReady =
+    state != null &&
+    selectedWarehouseIds.every((warehouseId) => rangeDays.every((d) => dayCache.has(dayCacheKey(warehouseId, d))));
+  const showWarehouseColumn = warehouseFilter === "all";
+
+  /** Ada tıklanınca: aynı gün verisinden kişinin günlük dökümü (ek okuma yok) */
+  const dailyPicker = dailyPickerKey ? rows.find((r) => r.key === dailyPickerKey) ?? null : null;
+  const dailyPickerRows: PickerDailyRow[] = dailyPicker
+    ? rangeDays.map((ymd) => {
+        const orders = dayCache.get(dayCacheKey(dailyPicker.warehouseId, ymd)) ?? {};
+        let total = 0;
+        let green = 0;
+        for (const o of Object.values(orders)) {
+          if (o.p !== dailyPicker.key) continue;
+          total++;
+          if (o.c === "g") green++;
+        }
+        const metrics = metricDayCache.get(ymd);
+        return {
+          ymd,
+          total,
+          green,
+          red: total - green,
+          sku: metrics == null ? null : (metrics[dailyPicker.key]?.sku ?? 0),
+          noReport: !latestDay || ymd > latestDay,
+        };
+      })
+    : [];
   /** Güncelle sırasında kayıtlı değerler gösterilmeye devam eder */
   const metricsReady =
     metricDays.every((d) => metricDayCache.get(d) != null) &&
@@ -586,9 +672,49 @@ function ToplayiciPerformansiPanel() {
       {newPickers.length > 0 && (
         <div className="flex items-start gap-2 rounded-lg border border-teal-300 bg-teal-50 px-3 py-2 text-sm text-teal-900 dark:border-teal-700 dark:bg-teal-950/40 dark:text-teal-200">
           <UserPlus className="mt-0.5 size-4 shrink-0" aria-hidden />
-          <span>Yeni toplayıcı bulundu ve listeye eklendi: {newPickers.join(", ")}</span>
+          <span>
+            {newPickers.length > 6
+              ? `${newPickers.length} yeni toplayıcı bulundu ve depolarıyla listeye eklendi (${newPickers.slice(0, 6).join(", ")}…). Depoları Toplayıcılar penceresinden kontrol edebilirsin.`
+              : `Yeni toplayıcı bulundu ve listeye eklendi: ${newPickers.join(", ")}`}
+          </span>
         </div>
       )}
+
+      {/* Depo + rapor */}
+      <div className="flex flex-wrap items-center gap-2">
+        <div
+          role="radiogroup"
+          aria-label="Depo"
+          className="inline-flex flex-wrap rounded-lg bg-zinc-100 p-1 dark:bg-zinc-800"
+        >
+          {[{ id: "all", name: "Tüm depolar" }, ...FRANCHISE_WAREHOUSES].map((w) => (
+            <button
+              key={w.id}
+              type="button"
+              role="radio"
+              aria-checked={warehouseFilter === w.id}
+              onClick={() => setWarehouseFilter(w.id)}
+              className={`min-h-[34px] rounded-md px-3 text-sm font-medium transition ${
+                warehouseFilter === w.id
+                  ? "bg-white text-teal-700 shadow-sm dark:bg-zinc-900 dark:text-teal-400"
+                  : "text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100"
+              }`}
+            >
+              {w.name}
+            </button>
+          ))}
+        </div>
+        <button
+          type="button"
+          onClick={() => setReportOpen(true)}
+          disabled={warehouseFilter === "all" || !dataReady}
+          title={warehouseFilter === "all" ? "Rapor için bir depo seç" : "Seçili depo ve tarih aralığı için prim raporu"}
+          className="inline-flex min-h-[40px] items-center gap-1.5 rounded-lg bg-violet-700 px-3 text-sm font-medium text-white shadow-sm transition hover:bg-violet-800 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          <FileText className="size-4" aria-hidden />
+          Rapor al
+        </button>
+      </div>
 
       {/* Tarih aralığı */}
       <div className="flex flex-col gap-2">
@@ -701,10 +827,22 @@ function ToplayiciPerformansiPanel() {
                   >
                     <td className="hidden px-2 py-2.5 sm:px-3 tabular-nums text-zinc-400 sm:table-cell">{i + 1}</td>
                     <td className="px-2 py-2.5 sm:px-3 font-medium text-zinc-900 dark:text-zinc-100">
-                      {r.name}
+                      <button
+                        type="button"
+                        onClick={() => setDailyPickerKey(r.key)}
+                        title="Günlük dökümü göster"
+                        className="text-left underline-offset-2 transition hover:text-teal-700 hover:underline dark:hover:text-teal-400"
+                      >
+                        {r.name}
+                      </button>
                       {!r.active && (
                         <span className="ml-1.5 rounded bg-zinc-200 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-zinc-600 dark:bg-zinc-700 dark:text-zinc-300">
                           Pasif
+                        </span>
+                      )}
+                      {showWarehouseColumn && (
+                        <span className="mt-0.5 block text-[11px] font-normal text-zinc-500 dark:text-zinc-400">
+                          {warehouseName(r.warehouseId)}
                         </span>
                       )}
                     </td>
@@ -771,12 +909,33 @@ function ToplayiciPerformansiPanel() {
         </>
       )}
 
+      {dailyPicker && (
+        <PickerDailyModal
+          name={dailyPicker.name}
+          subtitle={`${warehouseName(dailyPicker.warehouseId)} · ${rangeLabel(range, today)} · günlük`}
+          year={today.slice(0, 4)}
+          rows={dailyPickerRows}
+          skuLoading={metricsSyncing}
+          onClose={() => setDailyPickerKey(null)}
+        />
+      )}
+
+      {reportOpen && warehouseFilter !== "all" && (
+        <PickerPrimReportModal
+          rows={rows.filter((r) => r.active && r.total > 0)}
+          title={`${warehouseName(warehouseFilter)} · ${rangeLabel(range, today)}`}
+          onClose={() => setReportOpen(false)}
+        />
+      )}
+
       {manageOpen && state && (
         <PickerManageModal
           pickers={state.pickers}
+          defaultWarehouseId={warehouseFilter === "all" ? SOGUKKUYU_WAREHOUSE_ID : warehouseFilter}
           onClose={() => setManageOpen(false)}
           onChanged={onPickerListChanged}
           onAdded={onPickerAdded}
+          onMoved={() => setDayCache(new Map())}
         />
       )}
     </div>

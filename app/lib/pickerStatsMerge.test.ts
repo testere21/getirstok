@@ -3,6 +3,7 @@ import { test } from "node:test";
 import {
   INITIAL_PICKER_NAMES,
   aggregatePickerStats,
+  pickerWarehouseId,
   groupByDay,
   sortPickerStats,
   type PickerEntry,
@@ -30,7 +31,7 @@ function order(
     prepareDuration: prepare,
     estimatedDuration: estimated,
     ratio,
-    color: ratio < 1 ? "green" : "red",
+    color: ratio <= 1 ? "green" : "red",
   };
 }
 
@@ -52,24 +53,39 @@ test("toStoredOrder: renk orandan ayrı saklanır, yuvarlama rengi değiştirmez
   assert.equal(stored.p, "baran ozgun");
 });
 
-test("selectReportOrders: sadece Soğukkuyu raporunda hepsi alınır, yeni isim önerilir", () => {
-  const known = new Set([pickerKey("Baran Özgün")]);
-  const { kept, newPickers } = selectReportOrders(
+const SOG = "6113e59fbb8549d0f20e65f5";
+const BOS = "5dc32dc9734a192200caddfb";
+
+test("selectReportOrders: tek depolu raporda hepsi o depoya, yeni isim o depoyla önerilir", () => {
+  const known = new Map([[pickerKey("Baran Özgün"), SOG]]);
+  const { byWarehouse, newPickers, unassigned } = selectReportOrders(
     [order("a", "Baran Özgün"), order("b", "Yeni Kişi"), order("c", "YENİ  KİŞİ")],
-    { sogukkuyuOnly: true, knownPickerKeys: known }
+    { reportWarehouseId: BOS, pickerWarehouses: known }
   );
-  assert.equal(kept.length, 3);
-  assert.deepEqual(newPickers, [{ key: "yeni kisi", name: "Yeni Kişi" }]);
+  assert.deepEqual([...byWarehouse.keys()], [BOS]);
+  assert.equal(byWarehouse.get(BOS)?.length, 3);
+  assert.deepEqual(newPickers, [{ key: "yeni kisi", name: "Yeni Kişi", warehouseId: BOS }]);
+  assert.deepEqual(unassigned, []);
 });
 
-test("selectReportOrders: çok depolu raporda sadece listedekiler, öneri yok", () => {
-  const known = new Set([pickerKey("Hüseyin Sarıkaya")]);
-  const { kept, newPickers } = selectReportOrders(
-    [order("a", "Hüseyin Sarikaya"), order("b", "Başka Mağaza")],
-    { sogukkuyuOnly: false, knownPickerKeys: known }
+test("selectReportOrders: çok depolu raporda toplayıcının deposuna, bilinmeyen ayrı", () => {
+  const known = new Map([
+    [pickerKey("Hüseyin Sarıkaya"), SOG],
+    [pickerKey("Özge Turhan"), BOS],
+  ]);
+  const { byWarehouse, newPickers, unassigned } = selectReportOrders(
+    [order("a", "Hüseyin Sarikaya"), order("b", "Özge Turhan"), order("c", "Bilinmeyen Kişi")],
+    { reportWarehouseId: null, pickerWarehouses: known }
   );
-  assert.deepEqual(kept.map((o) => o.orderId), ["a"]);
+  assert.deepEqual(byWarehouse.get(SOG)?.map((o) => o.orderId), ["a"]);
+  assert.deepEqual(byWarehouse.get(BOS)?.map((o) => o.orderId), ["b"]);
+  assert.deepEqual(unassigned.map((o) => o.orderId), ["c"]);
   assert.deepEqual(newPickers, []);
+});
+
+test("pickerWarehouseId: deposu yazılmamış eski kayıt Soğukkuyu", () => {
+  assert.equal(pickerWarehouseId({}), SOG);
+  assert.equal(pickerWarehouseId({ warehouseId: BOS }), BOS);
 });
 
 test("groupByDay: siparişler İstanbul gününe göre ayrılır", () => {
@@ -121,11 +137,12 @@ test("aggregatePickerStats: günler toplanır, siparişsiz aktif 0 ile görünü
 
   const rows = aggregatePickerStats([day1, day2], pickers);
   const baran = rows.find((r) => r.name === "Baran Özgün");
+  // 30/60 ve tam 60/60 yeşil, 90/60 kırmızı
   assert.deepEqual(
     { total: baran?.total, green: baran?.green, red: baran?.red },
-    { total: 3, green: 1, red: 2 }
+    { total: 3, green: 2, red: 1 }
   );
-  assert.ok(Math.abs((baran?.greenRate ?? 0) - 1 / 3) < 1e-9);
+  assert.ok(Math.abs((baran?.greenRate ?? 0) - 2 / 3) < 1e-9);
   assert.ok(Math.abs((baran?.avgRatio ?? 0) - (0.5 + 1 + 1.5) / 3) < 1e-9);
   const ferhat = rows.find((r) => r.name === "Ferhat Kortak");
   assert.equal(ferhat?.total, 0);
@@ -134,6 +151,18 @@ test("aggregatePickerStats: günler toplanır, siparişsiz aktif 0 ile görünü
 
   const withInactive = aggregatePickerStats([day1], pickers, { includeInactive: true });
   assert.equal(withInactive.find((r) => r.name === "Eski Eleman")?.total, 1);
+});
+
+test("aggregatePickerStats: depo filtresi sadece o deponun toplayıcılarını listeler", () => {
+  const pickers = {
+    ...Object.fromEntries([picker("Baran Özgün")]),
+    [pickerKey("Özge Turhan")]: { name: "Özge Turhan", active: true, source: "auto" as const, firstSeenAt: OLD, warehouseId: BOS },
+  };
+  const bos = aggregatePickerStats([], pickers, { warehouseIds: new Set([BOS]) });
+  assert.deepEqual(bos.map((r) => [r.name, r.warehouseId]), [["Özge Turhan", BOS]]);
+  const all = aggregatePickerStats([], pickers);
+  assert.equal(all.length, 2);
+  assert.equal(all.find((r) => r.name === "Baran Özgün")?.warehouseId, SOG);
 });
 
 test("aggregatePickerStats: günlük SKU/problemli toplanır, yıldız aralıktan gelir", () => {
@@ -162,10 +191,10 @@ test("aggregatePickerStats: günlük SKU/problemli toplanır, yıldız aralıkta
 
 test("sortPickerStats: sipariş, yeşil, kırmızı, yüzde; iki yön", () => {
   const rows = [
-    { key: "a", name: "Ali", active: true, total: 10, green: 8, red: 2, greenRate: 0.8, avgRatio: 0.7, sku: 30, problematic: 3, rating: 4.6 },
-    { key: "b", name: "Can", active: true, total: 20, green: 6, red: 14, greenRate: 0.3, avgRatio: 1.2, sku: 25, problematic: 9, rating: 4.1 },
-    { key: "c", name: "Ece", active: true, total: 0, green: 0, red: 0, greenRate: null, avgRatio: null, sku: 0, problematic: 0, rating: null },
-    { key: "d", name: "Banu", active: true, total: 10, green: 5, red: 5, greenRate: 0.5, avgRatio: 1, sku: 40, problematic: 1, rating: 4.4 },
+    { key: "a", name: "Ali", active: true, warehouseId: SOG, total: 10, green: 8, red: 2, greenRate: 0.8, avgRatio: 0.7, sku: 30, problematic: 3, rating: 4.6 },
+    { key: "b", name: "Can", active: true, warehouseId: SOG, total: 20, green: 6, red: 14, greenRate: 0.3, avgRatio: 1.2, sku: 25, problematic: 9, rating: 4.1 },
+    { key: "c", name: "Ece", active: true, warehouseId: SOG, total: 0, green: 0, red: 0, greenRate: null, avgRatio: null, sku: 0, problematic: 0, rating: null },
+    { key: "d", name: "Banu", active: true, warehouseId: SOG, total: 10, green: 5, red: 5, greenRate: 0.5, avgRatio: 1, sku: 40, problematic: 1, rating: 4.4 },
   ];
   const names = (key: Parameters<typeof sortPickerStats>[1], dir: "asc" | "desc") =>
     sortPickerStats(rows, key, dir).map((r) => r.name);

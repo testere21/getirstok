@@ -2,6 +2,7 @@
  * Toplayıcı performansı: isim eşleştirme, renk kuralı ve rapor → gün dokümanı birleştirme.
  * Firestore'a ve Excel'e bağımlı değil (panel tarafı da kullanır).
  */
+import { SOGUKKUYU_WAREHOUSE_ID } from "./franchiseWarehouses";
 
 export type PickerColor = "green" | "red";
 
@@ -29,9 +30,12 @@ export function normalizePickerName(name: string): string {
   return name.replace(/\s+/g, " ").trim();
 }
 
-/** Tahmin uyum performansı 1'in altıysa yeşil; tam 1 ve üstü kırmızı. */
+/** Excel'den gelen 1'in kayan nokta sapması (1.0000000001) tam 1 sayılsın */
+const RATIO_EPSILON = 1e-9;
+
+/** Tahmin uyum performansı 1 ve altıysa yeşil; 1'in üstü kırmızı. */
 export function colorOf(ratio: number): PickerColor {
-  return ratio < 1 ? "green" : "red";
+  return ratio <= 1 + RATIO_EPSILON ? "green" : "red";
 }
 
 /** Soğukkuyu toplayıcıları; ilk senkronda listeye elle eklenmiş gibi yazılır */
@@ -49,6 +53,17 @@ export interface PickerEntry {
   active: boolean;
   source: PickerSource;
   firstSeenAt: string;
+  /** Çalıştığı depo; depocular depo değiştirmiyor. Eski kayıtlarda yok → Soğukkuyu */
+  warehouseId?: string;
+}
+
+export function pickerWarehouseId(entry: Pick<PickerEntry, "warehouseId">): string {
+  return entry.warehouseId ?? SOGUKKUYU_WAREHOUSE_ID;
+}
+
+/** pickerKey → depo (listedeki herkes, pasifler dahil) */
+export function pickerWarehouseMap(pickers: Readonly<Record<string, PickerEntry>>): Map<string, string> {
+  return new Map(Object.entries(pickers).map(([key, p]) => [key, pickerWarehouseId(p)]));
 }
 
 /** Gün dokümanındaki sipariş (alan adları doküman boyutu için kısa) */
@@ -98,32 +113,45 @@ export function toStoredOrder(
 }
 
 export interface ReportSelection<T extends PickerOrderInput> {
-  kept: T[];
-  /** Sadece Soğukkuyu raporunda görülen, listede olmayan toplayıcılar */
-  newPickers: { key: string; name: string }[];
+  /** depo → o deponun gün dokümanlarına yazılacak siparişler */
+  byWarehouse: Map<string, T[]>;
+  /** Tek depolu raporda görülen, listede olmayan toplayıcılar (raporun deposuyla) */
+  newPickers: { key: string; name: string; warehouseId: string }[];
+  /** Çok depolu raporda deposu bilinmeyen toplayıcıların siparişleri */
+  unassigned: T[];
 }
 
 /**
- * Sadece Soğukkuyu raporu: tüm satırlar alınır, yeni toplayıcılar listeye önerilir.
- * Çok depolu rapor: sadece listedeki (aktif ya da pasif) toplayıcıların satırları.
+ * "Depo İçi Süre" sayfasında depo sütunu yok; sipariş deposu şöyle bulunur:
+ * - Tek depolu rapor: hepsi raporun deposu; listede olmayanlar o depoyla önerilir.
+ * - Çok depolu rapor: toplayıcının listedeki deposu; bilinmeyenler `unassigned`.
  */
 export function selectReportOrders<T extends PickerOrderInput>(
   orders: T[],
-  options: { sogukkuyuOnly: boolean; knownPickerKeys: ReadonlySet<string> }
+  options: { reportWarehouseId: string | null; pickerWarehouses: ReadonlyMap<string, string> }
 ): ReportSelection<T> {
-  if (!options.sogukkuyuOnly) {
-    return { kept: orders.filter((o) => options.knownPickerKeys.has(o.pickerKey)), newPickers: [] };
-  }
-  const newPickers = new Map<string, string>();
-  for (const o of orders) {
-    if (!options.knownPickerKeys.has(o.pickerKey) && !newPickers.has(o.pickerKey)) {
-      newPickers.set(o.pickerKey, o.pickerName);
-    }
-  }
-  return {
-    kept: orders,
-    newPickers: [...newPickers].map(([key, name]) => ({ key, name })),
+  const byWarehouse = new Map<string, T[]>();
+  const add = (warehouseId: string, o: T) => {
+    const list = byWarehouse.get(warehouseId);
+    if (list) list.push(o);
+    else byWarehouse.set(warehouseId, [o]);
   };
+  const newPickers = new Map<string, { key: string; name: string; warehouseId: string }>();
+  const unassigned: T[] = [];
+
+  for (const o of orders) {
+    if (options.reportWarehouseId) {
+      add(options.reportWarehouseId, o);
+      if (!options.pickerWarehouses.has(o.pickerKey) && !newPickers.has(o.pickerKey)) {
+        newPickers.set(o.pickerKey, { key: o.pickerKey, name: o.pickerName, warehouseId: options.reportWarehouseId });
+      }
+      continue;
+    }
+    const warehouseId = options.pickerWarehouses.get(o.pickerKey);
+    if (warehouseId) add(warehouseId, o);
+    else unassigned.push(o);
+  }
+  return { byWarehouse, newPickers: [...newPickers.values()], unassigned };
 }
 
 export function groupByDay<T extends PickerOrderInput>(orders: T[]): Map<string, T[]> {
@@ -144,6 +172,7 @@ export interface PickerStatRow {
   key: string;
   name: string;
   active: boolean;
+  warehouseId: string;
   total: number;
   green: number;
   red: number;
@@ -177,18 +206,23 @@ export function aggregatePickerStats(
   pickers: Readonly<Record<string, PickerEntry>>,
   options: {
     includeInactive?: boolean;
+    /** Verilirse sadece bu depoların toplayıcıları */
+    warehouseIds?: ReadonlySet<string>;
     metricDays?: Iterable<Readonly<Record<string, Pick<PickerRangeMetrics, "sku" | "problematic">>>>;
     ratings?: Readonly<Record<string, number>>;
   } = {}
 ): PickerStatRow[] {
   const rows = new Map<string, PickerStatRow & { ratioSum: number }>();
-  const include = (p: PickerEntry) => p.active || options.includeInactive === true;
+  const include = (p: PickerEntry) =>
+    (p.active || options.includeInactive === true) &&
+    (!options.warehouseIds || options.warehouseIds.has(pickerWarehouseId(p)));
   for (const [key, p] of Object.entries(pickers)) {
     if (!include(p)) continue;
     rows.set(key, {
       key,
       name: p.name,
       active: p.active,
+      warehouseId: pickerWarehouseId(p),
       total: 0,
       green: 0,
       red: 0,

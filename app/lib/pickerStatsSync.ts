@@ -1,12 +1,12 @@
 /**
- * Okunmamış bir DPS raporunu indirip Soğukkuyu siparişlerini gün dokümanlarına yazar.
+ * Okunmamış bir DPS raporunu indirip siparişleri depo + gün dokümanlarına yazar.
  * Sadece sunucuda çalışır (exceljs + bayi token'ı).
  */
 import { parseDepoIciSure } from "./dpsReportParse";
+import { SOGUKKUYU_WAREHOUSE_ID } from "./franchiseWarehouses";
 import {
   DpsReportApiError,
   downloadDpsReport,
-  isSogukkuyuOnlyReport,
   listDpsReports,
   requireFranchiseToken,
   type DpsReportSummary,
@@ -15,13 +15,14 @@ import {
   INITIAL_PICKER_NAMES,
   groupByDay,
   pickerKey,
+  pickerWarehouseMap,
   planDayUpdates,
   selectReportOrders,
   toStoredOrder,
   type PickerEntry,
   type StoredPickerOrder,
 } from "./pickerStatsMerge";
-import { fetchPickerMetrics } from "./getirPickerMetricsService";
+import { fetchPickerMetrics, fetchPickerWarehouseAssignments } from "./getirPickerMetricsService";
 import {
   clampMetricsRange,
   needsMetricsFetch,
@@ -51,6 +52,8 @@ import {
 /** Bir çağrıda Getir'e en fazla bu kadar istek (Netlify süre sınırı) */
 const METRICS_TASKS_PER_CALL = 6;
 const METRICS_CONCURRENCY = 3;
+/** Rapor yazarken aynı anda okunup yazılan gün dokümanı (3 depo × 7 gün sıralı uzun sürer) */
+const DAY_WRITE_CONCURRENCY = 8;
 
 export interface PickerStatsSyncResult {
   /** Bu çağrıda işlenen rapor sayısı (0 veya 1) */
@@ -61,9 +64,11 @@ export interface PickerStatsSyncResult {
     id: string;
     startDate: string | null;
     endDate: string | null;
-    sogukkuyuOnly: boolean;
+    warehouseIds: string[];
     orders: number;
     kept: number;
+    /** Deposu bulunamadığı için yazılmayan sipariş */
+    unassigned: number;
     ordersWritten: number;
     daysWritten: number;
     noRecords: boolean;
@@ -76,7 +81,13 @@ export interface PickerStatsSyncResult {
 function initialPickers(now: string): Record<string, PickerEntry> {
   const pickers: Record<string, PickerEntry> = {};
   for (const name of INITIAL_PICKER_NAMES) {
-    pickers[pickerKey(name)] = { name, active: true, source: "manual", firstSeenAt: now };
+    pickers[pickerKey(name)] = {
+      name,
+      active: true,
+      source: "manual",
+      firstSeenAt: now,
+      warehouseId: SOGUKKUYU_WAREHOUSE_ID,
+    };
   }
   return pickers;
 }
@@ -144,11 +155,34 @@ export async function syncPickerMetrics(
   };
 }
 
+/** Rapor okunmalı mı: hiç okunmamış ya da eskiden sadece Soğukkuyu alınarak okunmuş çok depolu */
+function needsProcessing(report: DpsReportSummary, state: PickerStatsState): boolean {
+  const info = state.processedReports[report.id];
+  if (!info) return true;
+  return report.warehouseIds.length > 1 && !info.allWarehouses && !info.fileGone;
+}
+
 /** Eskiden yeniye: daha yeni rapor, aynı siparişte eskisinin üstüne yazsın */
 function pendingReports(reports: DpsReportSummary[], state: PickerStatsState): DpsReportSummary[] {
   return reports
-    .filter((r) => !state.processedReports[r.id])
+    .filter((r) => needsProcessing(r, state))
     .sort((a, b) => (a.createdAt ?? "").localeCompare(b.createdAt ?? ""));
+}
+
+async function runLimited<T>(items: T[], limit: number, worker: (item: T) => Promise<void>): Promise<void> {
+  for (let i = 0; i < items.length; i += limit) {
+    await Promise.all(items.slice(i, i + limit).map(worker));
+  }
+}
+
+function orderDateRange(orders: { orderDate: string }[]): { from: string; to: string } {
+  let from = orders[0].orderDate;
+  let to = from;
+  for (const o of orders) {
+    if (o.orderDate < from) from = o.orderDate;
+    if (o.orderDate > to) to = o.orderDate;
+  }
+  return { from, to };
 }
 
 /**
@@ -176,7 +210,15 @@ export async function syncNextDpsReport(): Promise<PickerStatsSyncResult> {
     return { processed: 0, remaining: 0, report: null, newPickers: [] };
   }
 
-  const sogukkuyuOnly = isSogukkuyuOnlyReport(report);
+  const singleWarehouseId = report.warehouseIds.length === 1 ? report.warehouseIds[0] : null;
+  const reportInfoBase = {
+    at: now,
+    startDate: report.startDate,
+    endDate: report.endDate,
+    sogukkuyuOnly: singleWarehouseId === SOGUKKUYU_WAREHOUSE_ID,
+    warehouseIds: report.warehouseIds,
+    allWarehouses: true,
+  };
 
   let file: ArrayBuffer;
   try {
@@ -185,17 +227,7 @@ export async function syncNextDpsReport(): Promise<PickerStatsSyncResult> {
     if (!(error instanceof DpsReportApiError) || error.code !== "FILE_GONE") throw error;
     // Getir dosyayı silmiş (8 gün): bir daha denenmesin, sıradaki rapora geçilsin
     await patchPickerStatsState({
-      processedReports: {
-        [report.id]: {
-          at: now,
-          startDate: report.startDate,
-          endDate: report.endDate,
-          sogukkuyuOnly,
-          orders: 0,
-          kept: 0,
-          fileGone: true,
-        },
-      },
+      processedReports: { [report.id]: { ...reportInfoBase, orders: 0, kept: 0, fileGone: true } },
       lastSyncAt: now,
     });
     return {
@@ -205,9 +237,10 @@ export async function syncNextDpsReport(): Promise<PickerStatsSyncResult> {
         id: report.id,
         startDate: report.startDate,
         endDate: report.endDate,
-        sogukkuyuOnly,
+        warehouseIds: report.warehouseIds,
         orders: 0,
         kept: 0,
+        unassigned: 0,
         ordersWritten: 0,
         daysWritten: 0,
         noRecords: false,
@@ -218,47 +251,61 @@ export async function syncNextDpsReport(): Promise<PickerStatsSyncResult> {
   }
 
   const parsed = await parseDepoIciSure(file);
-  const { kept, newPickers } = selectReportOrders(parsed.orders, {
-    sogukkuyuOnly,
-    knownPickerKeys: new Set(Object.keys(state.pickers)),
-  });
-
-  const reportCreatedAt = report.createdAt ?? now;
-  let ordersWritten = 0;
-  let daysWritten = 0;
-  let latestDay = state.latestDay;
-  for (const [ymd, dayOrders] of groupByDay(kept)) {
-    if (!latestDay || ymd > latestDay) latestDay = ymd;
-    const incoming: Record<string, StoredPickerOrder> = {};
-    for (const o of dayOrders) incoming[o.orderId] = toStoredOrder(o, report.id, reportCreatedAt);
-    const existing = await readPickerStatsDay(ymd);
-    const updates = planDayUpdates(existing.orders, incoming);
-    const count = Object.keys(updates).length;
-    if (count === 0) continue;
-    await writePickerStatsDayOrders(ymd, updates);
-    ordersWritten += count;
-    daysWritten++;
-  }
+  let pickerWarehouses = pickerWarehouseMap(state.pickers);
+  let selection = selectReportOrders(parsed.orders, { reportWarehouseId: singleWarehouseId, pickerWarehouses });
 
   const addedPickers: Record<string, PickerEntry> = {};
-  for (const p of newPickers) {
-    addedPickers[p.key] = { name: p.name, active: true, source: "auto", firstSeenAt: now };
+  for (const p of selection.newPickers) {
+    addedPickers[p.key] = { name: p.name, active: true, source: "auto", firstSeenAt: now, warehouseId: p.warehouseId };
+  }
+  // Çok depolu raporda deposu bilinmeyen toplayıcılar: Getir'e depo depo sorulur
+  if (selection.unassigned.length > 0) {
+    const { from, to } = orderDateRange(selection.unassigned);
+    const assignments = await fetchPickerWarehouseAssignments(from, to, token);
+    const unknownKeys = new Set(selection.unassigned.map((o) => o.pickerKey));
+    for (const key of unknownKeys) {
+      const found = assignments.get(key);
+      if (!found) continue;
+      const name = selection.unassigned.find((o) => o.pickerKey === key)?.pickerName ?? found.name;
+      addedPickers[key] = { name, active: true, source: "auto", firstSeenAt: now, warehouseId: found.warehouseId };
+    }
+    pickerWarehouses = new Map([
+      ...pickerWarehouses,
+      ...Object.entries(addedPickers).map(([key, p]) => [key, p.warehouseId!] as const),
+    ]);
+    selection = selectReportOrders(parsed.orders, { reportWarehouseId: singleWarehouseId, pickerWarehouses });
   }
 
+  const reportCreatedAt = report.createdAt ?? now;
+  let latestDay = state.latestDay;
+  const dayJobs: { warehouseId: string; ymd: string; orders: typeof parsed.orders }[] = [];
+  for (const [warehouseId, orders] of selection.byWarehouse) {
+    for (const [ymd, dayOrders] of groupByDay(orders)) {
+      if (!latestDay || ymd > latestDay) latestDay = ymd;
+      dayJobs.push({ warehouseId, ymd, orders: dayOrders });
+    }
+  }
+  let ordersWritten = 0;
+  let daysWritten = 0;
+  await runLimited(dayJobs, DAY_WRITE_CONCURRENCY, async ({ warehouseId, ymd, orders }) => {
+    const incoming: Record<string, StoredPickerOrder> = {};
+    for (const o of orders) incoming[o.orderId] = toStoredOrder(o, report.id, reportCreatedAt);
+    const existing = await readPickerStatsDay(warehouseId, ymd);
+    const updates = planDayUpdates(existing.orders, incoming);
+    const count = Object.keys(updates).length;
+    if (count === 0) return;
+    await writePickerStatsDayOrders(warehouseId, ymd, updates);
+    ordersWritten += count;
+    daysWritten++;
+  });
+
+  const kept = parsed.orders.length - selection.unassigned.length;
   // Rapor en son işaretlenir: arada hata olursa sonraki çağrı aynı raporu baştan dener
   await patchPickerStatsState({
     processedReports: {
-      [report.id]: {
-        at: now,
-        startDate: report.startDate,
-        endDate: report.endDate,
-        sogukkuyuOnly,
-        orders: parsed.orders.length,
-        kept: kept.length,
-        noRecords: parsed.noRecords,
-      },
+      [report.id]: { ...reportInfoBase, orders: parsed.orders.length, kept, noRecords: parsed.noRecords },
     },
-    ...(newPickers.length > 0 ? { pickers: addedPickers } : {}),
+    ...(Object.keys(addedPickers).length > 0 ? { pickers: addedPickers } : {}),
     ...(latestDay ? { latestDay } : {}),
     lastSyncAt: now,
   });
@@ -270,14 +317,15 @@ export async function syncNextDpsReport(): Promise<PickerStatsSyncResult> {
       id: report.id,
       startDate: report.startDate,
       endDate: report.endDate,
-      sogukkuyuOnly,
+      warehouseIds: report.warehouseIds,
       orders: parsed.orders.length,
-      kept: kept.length,
+      kept,
+      unassigned: selection.unassigned.length,
       ordersWritten,
       daysWritten,
       noRecords: parsed.noRecords,
       fileGone: false,
     },
-    newPickers: newPickers.map((p) => p.name),
+    newPickers: Object.values(addedPickers).map((p) => p.name),
   };
 }

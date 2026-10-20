@@ -1,16 +1,24 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { AlertTriangle, CalendarDays, Gauge, Loader2, Trophy } from "lucide-react";
 import { DPS_SECTION_LABELS, type DpsSection, type DpsSectionKey } from "@/app/lib/dpsParse";
 import { dpsDateLimits } from "@/app/lib/dpsRange";
 import { getDpsScore, type StoredDpsScore } from "@/app/lib/dpsStore";
 import { daysInRange, formatYmdShort, isYmd, istanbulTodayYmd, type YmdRange } from "@/app/lib/pickerStatsPeriod";
+import { DpsTrendChart, type TrendSeries } from "./DpsTrendChart";
 
 const RANGE_STORAGE_KEY = "getirstok.dps.range";
 /** Tarih kutusuna elle yazarken her tuşta Getir'e gidilmesin, ara aralıklar kaydedilmesin */
 const FETCH_DEBOUNCE_MS = 800;
 const SECTIONS: DpsSectionKey[] = ["bayi", "kurye", "depocu"];
+/** Günlük puanlar Getir'den aynı anda en fazla bu kadar gün çekilir (her biri 3–6 sn) */
+const DAILY_CONCURRENCY = 3;
+const SERIES_COLORS = ["#0d9488", "#f59e0b", "#6366f1", "#ef4444", "#0ea5e9", "#84cc16"];
+const BAYI_COLOR = "#7c3aed";
+
+/** Gün → o günün puanları; "empty": Getir o günü hesaplamamış */
+type DailyEntry = StoredDpsScore | "empty";
 
 /**
  * Bayi kartında zaten görünen, kurye/depocuya ait olmayan kriterler bu kartlarda gösterilmez.
@@ -86,10 +94,22 @@ function readStoredRange(fallback: YmdRange, limits: { min: string; max: string 
   return fallback;
 }
 
-function SectionCard({ sectionKey, section }: { sectionKey: DpsSectionKey; section: DpsSection }) {
+function visibleCriteria(sectionKey: DpsSectionKey, section: DpsSection) {
+  return section.criteria.filter((c) => !HIDDEN_CRITERIA[sectionKey].has(c.key));
+}
+
+function SectionCard({
+  sectionKey,
+  section,
+  chart,
+}: {
+  sectionKey: DpsSectionKey;
+  section: DpsSection;
+  chart?: ReactNode;
+}) {
   const title = DPS_SECTION_LABELS[sectionKey];
   const auditSum = section.audits.reduce((s, a) => s + (a.point ?? 0), 0);
-  const criteria = section.criteria.filter((c) => !HIDDEN_CRITERIA[sectionKey].has(c.key));
+  const criteria = visibleCriteria(sectionKey, section);
   return (
     <section className="flex flex-col rounded-xl border border-zinc-200 bg-white dark:border-zinc-700 dark:bg-zinc-900">
       <header className="flex items-center justify-between gap-3 border-b border-zinc-100 px-4 py-3 dark:border-zinc-800">
@@ -146,6 +166,12 @@ function SectionCard({ sectionKey, section }: { sectionKey: DpsSectionKey; secti
             </div>
           ))}
         </footer>
+      )}
+      {chart && (
+        <div className="border-t border-zinc-100 px-4 py-3 dark:border-zinc-800">
+          <h4 className="mb-2 text-xs font-medium text-zinc-500 dark:text-zinc-400">Günlük gidişat</h4>
+          {chart}
+        </div>
       )}
     </section>
   );
@@ -216,8 +242,113 @@ export function DpsPanel() {
     };
   }, [range.from, range.to, rangeError]);
 
+  // ── Günlük grafik: aralıktaki her gün ayrı kayıt (yoksa Getir'den çekilip kaydedilir) ──
+  const [daily, setDaily] = useState<Map<string, DailyEntry>>(() => new Map());
+  const [dailyError, setDailyError] = useState<{ key: string; message: string } | null>(null);
+  const dailyRef = useRef(daily);
+  useEffect(() => {
+    dailyRef.current = daily;
+  }, [daily]);
+  const chartDays = useMemo(() => (rangeError ? [] : daysInRange(range)), [range, rangeError]);
+  const showChart = chartDays.length >= 2;
+
+  useEffect(() => {
+    if (!showChart) return;
+    const key = `${range.from}_${range.to}`;
+    let cancelled = false;
+    const timer = window.setTimeout(async () => {
+      setDailyError(null);
+      const missing = chartDays.filter((d) => !dailyRef.current.has(d));
+      for (let i = 0; i < missing.length && !cancelled; i += DAILY_CONCURRENCY) {
+        try {
+          const results = await Promise.all(
+            missing.slice(i, i + DAILY_CONCURRENCY).map(async (d) => {
+              const r = await getDpsScore(d, d);
+              return [d, r.empty || !r.score ? "empty" : r.score] as const;
+            })
+          );
+          setDaily((prev) => {
+            const next = new Map(prev);
+            for (const [d, entry] of results) next.set(d, entry);
+            return next;
+          });
+        } catch (error) {
+          if (!cancelled) {
+            setDailyError({ key, message: error instanceof Error ? error.message : "Günlük puanlar alınamadı." });
+          }
+          return;
+        }
+      }
+    }, FETCH_DEBOUNCE_MS);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [range.from, range.to, chartDays, showChart]);
+
+  const dailyLoaded = chartDays.filter((d) => daily.has(d)).length;
+  const dailyReady = showChart && dailyLoaded === chartDays.length;
+  const dailyErrorMessage = dailyError?.key === `${range.from}_${range.to}` ? dailyError.message : null;
+
+  const rangeScore = state.kind === "ready" ? state.score : null;
+  const chartSeries = ((): Record<DpsSectionKey, TrendSeries[]> | null => {
+    if (!dailyReady) return null;
+    const entries = chartDays.map((d) => {
+      const e = daily.get(d);
+      return e && e !== "empty" ? e : null;
+    });
+    if (!entries.some((e) => e != null)) return null;
+    /** Kriter listesi: kartın sırası + bazı günlerde olup kartta olmayanlar (günden güne değişebiliyor) */
+    const criteriaSeries = (key: DpsSectionKey): TrendSeries[] => {
+      const labels = new Map<string, string>();
+      for (const s of [rangeScore, ...entries]) {
+        if (!s) continue;
+        for (const c of visibleCriteria(key, s[key])) if (!labels.has(c.key)) labels.set(c.key, c.label);
+      }
+      return [...labels].map(([criterionKey, label], i) => ({
+        key: criterionKey,
+        label,
+        color: SERIES_COLORS[i % SERIES_COLORS.length],
+        values: entries.map((e) => e?.[key].criteria.find((x) => x.key === criterionKey)?.point ?? null),
+      }));
+    };
+    return {
+      bayi: [
+        { key: "point", label: "Bayi DPS", color: BAYI_COLOR, values: entries.map((e) => e?.bayi.point ?? null) },
+      ],
+      kurye: criteriaSeries("kurye"),
+      depocu: criteriaSeries("depocu"),
+    };
+  })();
+
   const year = today.slice(0, 4);
   const dayCount = rangeError ? 0 : daysInRange(range).length;
+
+  const chartFor = (key: DpsSectionKey): ReactNode => {
+    if (!showChart) return null;
+    if (dailyErrorMessage) {
+      return <p className="text-xs text-red-600 dark:text-red-400">Günlük puanlar alınamadı: {dailyErrorMessage}</p>;
+    }
+    if (!dailyReady) {
+      return (
+        <p className="flex items-center gap-1.5 py-6 text-xs text-zinc-500 dark:text-zinc-400">
+          <Loader2 className="size-3.5 animate-spin" aria-hidden />
+          Günlük puanlar yükleniyor ({dailyLoaded}/{chartDays.length})…
+        </p>
+      );
+    }
+    if (!chartSeries) {
+      return <p className="text-xs text-zinc-500">Bu günler için Getir puan hesaplamamış.</p>;
+    }
+    return (
+      <DpsTrendChart
+        days={chartDays}
+        series={chartSeries[key]}
+        year={year}
+        storageKey={`getirstok.dps.chartHidden.${key}`}
+      />
+    );
+  };
   const rangeText =
     range.from === range.to
       ? formatYmdShort(range.from, year)
@@ -309,7 +440,7 @@ export function DpsPanel() {
           )}
           <div className="grid gap-3 lg:grid-cols-3">
             {SECTIONS.map((key) => (
-              <SectionCard key={key} sectionKey={key} section={state.score[key]} />
+              <SectionCard key={key} sectionKey={key} section={state.score[key]} chart={chartFor(key)} />
             ))}
           </div>
           <p className="flex items-center gap-1.5 text-[11px] text-zinc-500 dark:text-zinc-400">

@@ -53,10 +53,13 @@ test("pickerKey: Türkçe karakter, büyük harf ve fazla boşluk aynı anahtara
   assert.notEqual(pickerKey("Baran Özgün"), pickerKey("Baran Özgen"));
 });
 
-test("colorOf: 1'in altı yeşil, tam 1 ve üstü kırmızı", () => {
+test("colorOf: 1 ve altı yeşil, 1'in üstü kırmızı", () => {
   assert.equal(colorOf(0.857142857), "green");
   assert.equal(colorOf(0.999999), "green");
-  assert.equal(colorOf(1), "red");
+  assert.equal(colorOf(1), "green");
+  // Excel'in kayan nokta sapması tam 1 sayılır
+  assert.equal(colorOf(1.0000000001), "green");
+  assert.equal(colorOf(1.000001), "red");
   assert.equal(colorOf(2.18), "red");
 });
 
@@ -88,7 +91,7 @@ test("ordersFromRows: tarih İstanbul günü olarak alınır, gerçek an 3 saat 
   assert.equal(b.orderedAt, "2026-10-14T20:59:58.000Z");
 });
 
-test("ordersFromRows: oran kolonu boşsa iki süreden hesaplanır; tam 1 kırmızı", () => {
+test("ordersFromRows: oran kolonu boşsa iki süreden hesaplanır; tam 1 yeşil", () => {
   const result = ordersFromRows(HEADER, [
     row(ID_A, wall("2026-10-15T10:00:00"), "Ferhat Kortak", 262, 120, null),
     row(ID_B, wall("2026-10-15T11:00:00"), "Ferhat Kortak", 40, 40),
@@ -96,7 +99,7 @@ test("ordersFromRows: oran kolonu boşsa iki süreden hesaplanır; tam 1 kırmı
   assert.ok(Math.abs(result.orders[0].ratio - 262 / 120) < 1e-9);
   assert.equal(result.orders[0].color, "red");
   assert.equal(result.orders[1].ratio, 1);
-  assert.equal(result.orders[1].color, "red");
+  assert.equal(result.orders[1].color, "green");
 });
 
 test("ordersFromRows: bozuk satırlar atlanır ve sayılır", () => {
