@@ -50,7 +50,7 @@ function RankBadge({ score }: { score: StoredDpsScore }) {
         aria-expanded={open}
         aria-haspopup="dialog"
         title="Dünün DPS sıralaması — etraftaki depoları görmek için tıklayın"
-        className="inline-flex items-center gap-1 rounded-md bg-amber-50 px-2 py-1 text-sm font-semibold tabular-nums text-amber-800 ring-1 ring-amber-200 transition hover:bg-amber-100 dark:bg-amber-950/40 dark:text-amber-300 dark:ring-amber-800"
+        className="inline-flex items-center gap-1 rounded-lg bg-amber-50 px-2 py-1 text-sm font-bold tabular-nums text-amber-800 shadow-sm ring-1 ring-amber-200 transition hover:bg-amber-100 dark:bg-amber-950/40 dark:text-amber-300 dark:ring-amber-800"
       >
         <Trophy className="size-3.5" aria-hidden />
         {score.rank}. sıra
@@ -146,22 +146,31 @@ export function DpsHeaderSummary() {
 
   const { score } = current;
   return (
-    <div className="flex flex-wrap items-center gap-x-3 gap-y-2" aria-label={`${dayLabel} DPS puanları`}>
-      <span className="text-xs font-medium text-zinc-500 dark:text-zinc-400">{dayLabel}</span>
-      {SECTIONS.map((key) => (
-        <span
-          key={key}
-          className="inline-flex items-center gap-1.5 text-sm"
-          title={`${DPS_SECTION_LABELS[key]}: ${formatDpsNumber(score[key].point)}`}
-        >
-          <span className="text-zinc-500 dark:text-zinc-400">{SHORT_LABEL[key]}</span>
-          <span className="font-semibold tabular-nums text-zinc-900 dark:text-zinc-100">
-            {formatDpsNumber(score[key].point, 1)}
+    // Mobilde: üstte gün + sıra, altta üç puan eşit sütunlarda; geniş ekranda hepsi tek satır
+    <div className="flex flex-wrap items-center gap-1.5 sm:gap-2" aria-label={`${dayLabel} DPS puanları`}>
+      <span className="text-[11px] font-semibold uppercase tracking-wide text-zinc-500 sm:pr-1 dark:text-zinc-400">
+        {dayLabel}
+      </span>
+      <div className="order-last grid w-full grid-cols-3 gap-1.5 sm:order-none sm:contents">
+        {SECTIONS.map((key) => (
+          <span
+            key={key}
+            className="flex min-w-0 flex-col items-start gap-0.5 rounded-lg bg-white/90 px-2 py-1.5 text-sm shadow-sm ring-1 ring-zinc-200/80 sm:inline-flex sm:flex-row sm:items-center sm:gap-1.5 sm:py-1 dark:bg-zinc-900/80 dark:ring-zinc-700"
+            title={`${DPS_SECTION_LABELS[key]}: ${formatDpsNumber(score[key].point)}`}
+          >
+            <span className="text-[11px] text-zinc-500 sm:text-xs dark:text-zinc-400">{SHORT_LABEL[key]}</span>
+            <span className="inline-flex items-center gap-1">
+              <span className="font-bold tabular-nums text-zinc-900 dark:text-zinc-100">
+                {formatDpsNumber(score[key].point, 1)}
+              </span>
+              <GradeBadge grade={score[key].letterGrade} size="sm" />
+            </span>
           </span>
-          <GradeBadge grade={score[key].letterGrade} size="sm" />
-        </span>
-      ))}
-      <RankBadge score={score} />
+        ))}
+      </div>
+      <div className="ml-auto sm:ml-0">
+        <RankBadge score={score} />
+      </div>
     </div>
   );
 }

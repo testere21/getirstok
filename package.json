@@ -22,6 +22,8 @@
     "update-from-panel": "node scripts/update-products-from-getir-panel.mjs",
     "update-from-api": "node scripts/update-products-from-getir-api.mjs",
     "sync-barcodes": "node scripts/sync-product-barcodes-from-getir-api.mjs",
+    "build-extension-catalog": "node scripts/build-extension-catalog.mjs",
+    "sync-images": "node --env-file=.env.local scripts/sync-product-images-from-getir-api.mjs && node scripts/build-extension-catalog.mjs",
     "fill-added-details": "node scripts/fill-added-products-details-from-getir-api.mjs",
     "fill-added-details-by-id": "node scripts/fill-added-products-details-by-productid.mjs",
     "fill-missing-details-warehouse": "node scripts/fill-missing-details-from-warehouse-products.mjs",

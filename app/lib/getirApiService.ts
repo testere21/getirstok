@@ -31,7 +31,8 @@ function stockItemProductId(item: unknown): string | null {
   return null;
 }
 
-async function resolveProductIdsForBarcodes(
+/** Barkod → Getir ürün kimliği: önce kayıtlı eşleştirme, sonra katalog */
+export async function resolveProductIdsForBarcodes(
   barcodes: string[]
 ): Promise<Map<string, string>> {
   const result = new Map<string, string>();

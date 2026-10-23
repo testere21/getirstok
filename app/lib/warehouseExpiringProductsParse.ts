@@ -116,6 +116,41 @@ export function parseWarehouseExpiringProductsPayload(
   return out;
 }
 
+export interface ExpiryLot {
+  expiryDate: string | null;
+  removeFromSaleDate: string | null;
+  count: number;
+}
+
+export interface ProductExpiryStock {
+  productId: string;
+  /** SKT kayıtlarındaki adetlerin toplamı */
+  total: number;
+  /** Son kullanma tarihine göre, en yakın önce */
+  lots: ExpiryLot[];
+}
+
+/** SKT satırlarını ürün başına toplar (adedi olmayan satır sayılmaz). */
+export function groupExpiryRowsByProduct(
+  rows: readonly WarehouseExpiryCalendarRow[]
+): Map<string, ProductExpiryStock> {
+  const byProduct = new Map<string, ProductExpiryStock>();
+  for (const row of rows) {
+    if (row.count == null || row.count <= 0) continue;
+    let entry = byProduct.get(row.id);
+    if (!entry) {
+      entry = { productId: row.id, total: 0, lots: [] };
+      byProduct.set(row.id, entry);
+    }
+    entry.total += row.count;
+    entry.lots.push({ expiryDate: row.expiryDate, removeFromSaleDate: row.removeFromSaleDate, count: row.count });
+  }
+  for (const entry of byProduct.values()) {
+    entry.lots.sort((a, b) => (a.expiryDate ?? "").localeCompare(b.expiryDate ?? ""));
+  }
+  return byProduct;
+}
+
 export function warehouseExpiryCalendarHasProductId(
   rows: readonly WarehouseExpiryCalendarRow[],
   productId: string

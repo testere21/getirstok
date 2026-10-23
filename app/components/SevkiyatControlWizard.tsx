@@ -911,17 +911,21 @@ export function SevkiyatControlWizard({
 
 export function SevkiyatControlOpenButton({
   onClick,
+  label = "Sevkiyat kontrol",
+  className = "inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-zinc-300 bg-zinc-900 px-4 py-2.5 text-sm font-semibold text-white shadow-sm sm:w-auto dark:border-zinc-600 dark:bg-zinc-100 dark:text-zinc-900",
 }: {
   onClick: () => void;
+  label?: string;
+  className?: string;
 }) {
   return (
     <button
       type="button"
       onClick={onClick}
-      className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-zinc-300 bg-zinc-900 px-4 py-2.5 text-sm font-semibold text-white shadow-sm sm:w-auto dark:border-zinc-600 dark:bg-zinc-100 dark:text-zinc-900"
+      className={className}
     >
       <Truck className="size-4 shrink-0" aria-hidden />
-      Sevkiyat kontrol
+      {label}
     </button>
   );
 }

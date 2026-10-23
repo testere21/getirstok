@@ -4,6 +4,9 @@
  * bile görünmesin diye.
  */
 html:not([data-getirstok-ready]) .ant-tabs[aria-label="Main navigation tabs"] .ant-tabs-nav-list,
-html:not([data-getirstok-ready]) [class*="orderHeader--"] > .ant-typography {
+html:not([data-getirstok-ready]) [class*="orderHeader--"] > .ant-typography,
+html:not([data-getirstok-ready]) .ant-drawer-content-wrapper,
+html:not([data-getirstok-ready]) .ant-card .layout__filter,
+html:not([data-getirstok-ready]) .ant-card .ant-table-wrapper {
   visibility: hidden !important;
 }

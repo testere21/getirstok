@@ -46,16 +46,18 @@ async function focusOrOpenPanelAndSearch(query) {
           func: (value) => {
             try {
               const v = String(value || "");
+              // Panel sayfası bu mesajı dinleyip aramayı kendi durumuna yazar (en sağlam yol)
+              window.postMessage({ source: "getirstok-extension", type: "SEARCH", query: v }, "*");
               const input =
                 document.querySelector('input[aria-label="Ürün ismi veya barkod ile ara"]') ||
                 document.querySelector('input[placeholder*="ara"]') ||
                 document.querySelector('input[type="text"]');
               if (!input) return { ok: false, reason: "input_not_found" };
               input.focus();
-              input.value = v;
-              // React kontrolü için input event
+              // Doğrudan `input.value = v` React'te görünmez; yerel setter ile yazılır
+              const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set;
+              setter.call(input, v);
               input.dispatchEvent(new Event("input", { bubbles: true }));
-              input.dispatchEvent(new Event("change", { bubbles: true }));
               try { input.select(); } catch {}
               return { ok: true };
             } catch (e) {
@@ -936,6 +938,75 @@ chrome.runtime.onInstalled.addListener(() => {
 });
 ensureRefreshAlarm();
 ensureBarcodeOverridesAlarm();
+
+// -----------------------------
+// Sayım penceresi: SKT kayıtlarından ürün stoğu (Getir sayımdaki ürünün stoğunu gizliyor)
+// -----------------------------
+
+chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+  if (!msg || msg.type !== "GETIRSTOK_EXPIRY_STOCK") return;
+  (async () => {
+    const barcodes = Array.isArray(msg.barcodes) ? msg.barcodes.filter((b) => typeof b === "string") : [];
+    const bases = [API_BASE];
+    if (!USE_LOCAL_API) bases.push("http://localhost:3000");
+    let lastError = "Sunucuya ulaşılamadı";
+    for (const base of bases) {
+      try {
+        const res = await fetch(`${base}/api/warehouse-expiry-stock`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ barcodes }),
+        });
+        const data = await res.json().catch(() => null);
+        if (res.ok && data?.success) {
+          sendResponse({ ok: true, barcodeToProductId: data.barcodeToProductId || {}, stocks: data.stocks || {} });
+          return;
+        }
+        lastError = data?.error || `HTTP ${res.status}`;
+        // Getir tarafı hatası (token vb.) her uçta aynı olur
+        if (res.status !== 404) break;
+      } catch (e) {
+        lastError = String((e && e.message) || e);
+      }
+    }
+    sendResponse({ ok: false, error: lastError });
+  })();
+  return true;
+});
+
+// -----------------------------
+// Toplama modu: sipariş detayındaki ürünleri paneldeki geçici toplama listesine ekle
+// -----------------------------
+
+chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+  if (!msg || msg.type !== "GETIRSTOK_PICKING_ADD") return;
+  (async () => {
+    const bases = [API_BASE];
+    if (!USE_LOCAL_API) bases.push("http://localhost:3000");
+    let lastError = "Sunucuya ulaşılamadı";
+    for (const base of bases) {
+      try {
+        const res = await fetch(`${base}/api/picking-orders`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(msg.order || {}),
+        });
+        const data = await res.json().catch(() => null);
+        if (res.ok && data?.success) {
+          sendResponse({ ok: true, items: data.items });
+          return;
+        }
+        lastError = data?.error || `HTTP ${res.status}`;
+        // Uç henüz yayında değilse (404) yerel sunucuyu dene; diğer hatalar her yerde aynı
+        if (res.status !== 404) break;
+      } catch (e) {
+        lastError = String((e && e.message) || e);
+      }
+    }
+    sendResponse({ ok: false, error: lastError });
+  })();
+  return true;
+});
 
 // Eklenti yüklendiğinde console'a bilgi ver
 console.log("[Getir Token Yakalayıcı] Background service worker başlatıldı");

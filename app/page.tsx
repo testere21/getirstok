@@ -21,6 +21,8 @@ import {
   X,
   RefreshCw,
   Plus,
+  ShoppingBasket,
+  Warehouse,
 } from "lucide-react";
 import { AddProductModal } from "./components/AddProductModal";
 import { ManualAddProductModal } from "./components/ManualAddProductModal";
@@ -51,6 +53,9 @@ import { BarkodOlusturucuModal } from "./components/BarkodOlusturucuModal";
 import { SayimTabContent } from "./components/SayimTabContent";
 import { KasaPaletSayimTabContent } from "./components/KasaPaletSayimTabContent";
 import { IstatistiklerTabContent } from "./components/IstatistiklerTabContent";
+import { PickingOrdersModal } from "./components/PickingOrdersTabContent";
+import { subscribePickingOrders } from "@/app/lib/pickingOrderStore";
+import type { PickingOrder } from "@/app/lib/pickingOrders";
 import { DpsHeaderSummary } from "./components/DpsHeaderSummary";
 import type { SayimPair } from "@/app/lib/sayimMatch";
 import type { StockItemWithId, ExpiringProductWithId } from "@/app/lib/types";
@@ -885,6 +890,11 @@ export default function Home() {
     []
   );
 
+  // Toplama modu: depo panelinden gönderilen geçici sipariş listeleri (buton rozeti için burada)
+  const [pickingOrders, setPickingOrders] = useState<PickingOrder[]>([]);
+  const [pickingOpen, setPickingOpen] = useState(false);
+  useEffect(() => subscribePickingOrders(setPickingOrders), []);
+
   useEffect(() => {
     if (activeTab !== "bakery") {
       setBakeryRafSort("default");
@@ -1535,15 +1545,64 @@ export default function Home() {
 
   return (
     <div className="flex w-full flex-col gap-6">
-      <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2">
-        <h1 className="text-xl font-semibold text-zinc-900 dark:text-zinc-50 sm:text-2xl">
-          Stok Takip Paneli
-        </h1>
-        <DpsHeaderSummary />
-      </div>
-      <div className="-mt-2">
-        <SevkiyatControlOpenButton onClick={() => setSevkiyatWizardOpen(true)} />
-      </div>
+      <header className="relative overflow-hidden rounded-2xl border border-violet-100 bg-gradient-to-br from-white via-violet-50/60 to-indigo-50/70 p-4 shadow-sm sm:p-5 dark:border-violet-900/40 dark:from-zinc-900 dark:via-violet-950/30 dark:to-indigo-950/30">
+        {/* Köşede yumuşak renk lekesi */}
+        <div
+          className="pointer-events-none absolute -right-16 -top-20 size-56 rounded-full bg-violet-300/25 blur-3xl dark:bg-violet-600/15"
+          aria-hidden
+        />
+        <div className="relative flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex items-center gap-3">
+            <span className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-violet-600 to-indigo-600 text-white shadow-md shadow-violet-500/30 sm:size-12">
+              <Warehouse className="size-6" aria-hidden />
+            </span>
+            <h1 className="min-w-0 text-lg font-bold tracking-tight text-zinc-900 sm:text-2xl dark:text-zinc-50">
+              Stok Takip Paneli
+            </h1>
+          </div>
+          <DpsHeaderSummary />
+        </div>
+        <div className="relative mt-4 grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
+          <SevkiyatControlOpenButton
+            onClick={() => setSevkiyatWizardOpen(true)}
+            label="Sevkiyat"
+            className="inline-flex min-h-11 items-center justify-center gap-2 whitespace-nowrap rounded-xl bg-zinc-900 px-3 text-[13px] sm:px-4 sm:text-sm font-semibold text-white shadow-sm transition hover:-translate-y-0.5 hover:bg-zinc-800 hover:shadow-md active:translate-y-0 motion-reduce:transform-none dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-white"
+          />
+          <button
+            type="button"
+            onClick={() => setPickingOpen(true)}
+            className="relative inline-flex min-h-11 items-center justify-center gap-2 whitespace-nowrap rounded-xl bg-gradient-to-r from-violet-600 to-indigo-600 px-3 text-[13px] font-semibold text-white shadow-sm shadow-violet-500/30 transition hover:-translate-y-0.5 hover:shadow-md hover:shadow-violet-500/40 active:translate-y-0 motion-reduce:transform-none sm:px-4 sm:text-sm"
+            aria-label={pickingOrders.length > 0 ? `Toplama, ${pickingOrders.length} sipariş bekliyor` : "Toplama"}
+          >
+            <ShoppingBasket className="size-4 shrink-0" aria-hidden />
+            Toplama
+            {pickingOrders.length > 0 && (
+              <span
+                className="flex h-5 min-w-5 items-center justify-center rounded-full bg-white px-1.5 text-[11px] font-black leading-none text-violet-700"
+                aria-hidden
+              >
+                {pickingOrders.length}
+              </span>
+            )}
+          </button>
+          <button
+            type="button"
+            onClick={() => setBarkodOlusturucuOpen(true)}
+            className="col-span-2 inline-flex min-h-11 items-center justify-center gap-2 whitespace-nowrap rounded-xl border border-violet-200 bg-white/90 px-3 text-[13px] sm:px-4 sm:text-sm font-semibold text-violet-700 shadow-sm transition hover:-translate-y-0.5 hover:border-violet-300 hover:bg-white hover:shadow-md active:translate-y-0 motion-reduce:transform-none dark:border-violet-800 dark:bg-zinc-900/80 dark:text-violet-300 dark:hover:bg-zinc-900"
+            aria-label="Barkod oluşturucuyu aç"
+          >
+            <Barcode className="size-4 shrink-0" aria-hidden />
+            Barkod Oluşturucu
+          </button>
+        </div>
+      </header>
+
+      <PickingOrdersModal
+        isOpen={pickingOpen}
+        onClose={() => setPickingOpen(false)}
+        orders={pickingOrders}
+        onError={(message) => setToast({ message, type: "error", autoClose: 12000 })}
+      />
 
       {/* Firestore hata mesajı */}
       {firestoreError && (
@@ -1585,19 +1644,7 @@ export default function Home() {
         </div>
       )}
 
-      {/* Sıra: 1) Barkod Oluşturucu butonu (Faz 1.1–1.3), 2) Sticky arama, 3) Altında içerik */}
-      <section aria-label="Ekleme ve arama" className="flex flex-col gap-4">
-        <div>
-          <button
-            type="button"
-            onClick={() => setBarkodOlusturucuOpen(true)}
-            className="flex min-h-[44px] w-full items-center justify-center gap-2 rounded-xl border-2 border-zinc-300 bg-white px-5 py-4 text-base font-medium text-zinc-800 shadow-sm transition duration-200 hover:-translate-y-0.5 hover:border-zinc-400 hover:bg-zinc-50 hover:shadow-lg hover:shadow-zinc-400/25 active:translate-y-0 active:shadow-sm dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-100 dark:hover:border-zinc-400 dark:hover:bg-zinc-700 dark:hover:shadow-black/50 motion-reduce:transform-none motion-reduce:transition-none sm:py-5 sm:text-lg"
-            aria-label="Barkod oluşturucuyu aç"
-          >
-            <Barcode className="size-6 shrink-0" aria-hidden />
-            Barkod Oluşturucu
-          </button>
-        </div>
+      <section aria-label="Arama" className="-mt-2 flex flex-col gap-4">
         {/* Sticky arama: scroll'da üstte sabit kalır */}
         <div 
           className="sticky top-0 z-10 -mx-4 px-4 py-4 shadow-md backdrop-blur-sm sm:-mx-6 sm:px-6 sm:py-3 lg:-mx-8 lg:px-8" 

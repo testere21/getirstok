@@ -173,6 +173,47 @@ function ensureStyleOnce() {
       color: #ffffff;
       box-shadow: 0 2px 5px rgba(92, 62, 188, 0.35);
     }
+    /* Toplama modu: pencerenin sağ alt köşesinde küçük "TM" */
+    .ant-modal-content:has(> #getirstok-picking-btn) {
+      padding-bottom: 50px !important;
+    }
+    #getirstok-picking-btn {
+      position: absolute;
+      right: 14px;
+      bottom: 12px;
+      z-index: 2;
+      height: 30px;
+      min-width: 38px;
+      padding: 0 10px;
+      border-radius: 9px;
+      border: 1px solid #5c3ebc;
+      background: #ffffff;
+      color: #5c3ebc;
+      font: 800 12px/1 system-ui, sans-serif;
+      letter-spacing: 0.04em;
+      cursor: pointer;
+      box-shadow: 0 2px 6px -2px rgba(93, 62, 188, 0.35);
+      transition: background 0.15s ease, color 0.15s ease, transform 0.15s ease;
+    }
+    #getirstok-picking-btn:hover {
+      background: #5c3ebc;
+      color: #ffffff;
+      transform: translateY(-1px);
+    }
+    #getirstok-picking-btn[data-state="sending"] {
+      opacity: 0.6;
+      cursor: progress;
+    }
+    #getirstok-picking-btn[data-state="done"] {
+      border-color: #16a34a;
+      background: #dcfce7;
+      color: #15803d;
+    }
+    #getirstok-picking-btn[data-state="error"] {
+      border-color: #dc2626;
+      background: #fee2e2;
+      color: #b91c1c;
+    }
 
     .getirstok-barcode-wrap {
       display: none;
@@ -349,6 +390,45 @@ function ensureStyleOnce() {
       background: #f3f4f6;
       font: 500 11px/1.4 system-ui, sans-serif;
       color: #9ca3af;
+    }
+    .getirstok-size {
+      margin-left: 4px;
+      white-space: nowrap;
+    }
+    .getirstok-bc-choice {
+      border: none;
+      cursor: pointer;
+    }
+    .getirstok-bc-choice:hover {
+      background: #ddd3fa;
+    }
+    .getirstok-bc-pick {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 5px;
+      padding: 6px 8px;
+      border: 1px dashed #f0c36d;
+      border-radius: 10px;
+      background: #fffbeb;
+    }
+    .getirstok-bc-pick-label {
+      font: 700 11px/1.4 system-ui, sans-serif;
+      color: #92400e;
+    }
+    .getirstok-bc-pick-chip {
+      padding: 2px 9px;
+      border: 1px solid #e4def4;
+      border-radius: 999px;
+      background: #ffffff;
+      font: 600 11.5px/1.5 system-ui, sans-serif;
+      color: #5d3ebc;
+      cursor: pointer;
+    }
+    .getirstok-bc-pick-chip:hover {
+      background: #5d3ebc;
+      border-color: #5d3ebc;
+      color: #ffffff;
     }
 
     /* ── Sipariş detayı penceresi (yalnızca decorateOrderModal ile işaretlenen modal) ──
@@ -727,7 +807,7 @@ function getCleanProductNameFromCell(cell) {
   }
   const clone = cell.cloneNode(true);
   clone
-    .querySelectorAll(".getirstok-search-btn, .getirstok-barcode-wrap, button")
+    .querySelectorAll(".getirstok-search-btn, .getirstok-barcode-wrap, .getirstok-size, button")
     .forEach((el) => el.remove());
   const name = normalizeText(clone.innerText || "");
   if (looksLikeProductName(name)) {
@@ -736,50 +816,97 @@ function getCleanProductNameFromCell(cell) {
   return name;
 }
 
-/** @returns { barcode, manual } — elle düzeltme varsa o, yoksa otomatik bulunan */
-function resolveBarcodeInfo(name) {
-  const override = barcodeOverrides[barcodeNameKey(name)];
-  if (override?.barcode) return { barcode: override.barcode, manual: true };
-  return { barcode: resolveBarcode(name), manual: false };
+/**
+ * Ürün görselinin katalogdaki anahtarı. Yeni CDN: görsel kimliği (tiresiz ilk 12 hane);
+ * eski CDN adresi ürün kimliğini içerir ("/product/{productId}_tr_...").
+ * product-barcodes.js'i üreten scripts/build-extension-catalog.mjs ile aynı kural.
+ */
+function productImageKey(url) {
+  const u = String(url || "");
+  const img = u.match(/\/([0-9a-f]{8})-([0-9a-f]{4})-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.[a-z]+/i);
+  if (img) return { kind: "image", key: `${img[1]}${img[2]}`.toLowerCase() };
+  const pid = u.match(/\/product\/([0-9a-f]{24})_/i);
+  if (pid) return { kind: "productId", key: pid[1].toLowerCase() };
+  return null;
 }
 
-function resolveBarcode(name) {
-  if (!name) return null;
+/** Katalog değeri "barkod" ya da "barkod|gramaj" */
+function parseCatalogValue(value) {
+  if (!value) return null;
+  const [barcode, size = ""] = String(value).split("|");
+  return { barcode, size };
+}
+
+/** @returns { barcode, size } | null */
+function catalogFromImage(imageUrl) {
+  const ref = productImageKey(imageUrl);
+  if (!ref) return null;
+  const map =
+    ref.kind === "image" ? window.__GETIRSTOK_CATALOG_IMAGES || {} : window.__GETIRSTOK_CATALOG_PRODUCT_IDS || {};
+  return parseCatalogValue(map[ref.key]);
+}
+
+/** Elle düzeltmenin kaydedildiği ad: görsel biliniyorsa ürüne özel (aynı adlı başka gramaj etkilenmez) */
+function barcodeOverrideName(name, imageUrl) {
+  const ref = productImageKey(imageUrl);
+  return ref ? `${normalizeText(name)} #${ref.key}` : normalizeText(name);
+}
+
+/**
+ * @returns { barcode, size, manual, overrideName, candidates? } — sıra: bu ürüne özel elle düzeltme,
+ * siparişin görseli, ada göre elle düzeltme, katalogda ad. Ad birden çok gramaja gidiyorsa
+ * tahmin edilmez; `candidates` ile seçenekler döner. `size`: adın sonuna eklenecek gramaj.
+ */
+function resolveBarcodeInfo(name, imageUrl) {
+  const overrideName = barcodeOverrideName(name, imageUrl);
+  const fromImage = catalogFromImage(imageUrl);
+  const scoped = barcodeOverrides[barcodeNameKey(overrideName)];
+  if (scoped?.barcode) return { barcode: scoped.barcode, size: fromImage?.size || "", manual: true, overrideName };
+  if (fromImage) return { barcode: fromImage.barcode, size: fromImage.size, manual: false, overrideName };
+  const byName = barcodeOverrides[barcodeNameKey(name)];
+  if (byName?.barcode) return { barcode: byName.barcode, size: "", manual: true, overrideName };
+  const { barcode, size = "", candidates } = resolveBarcodeByName(name);
+  return { barcode, size, manual: false, overrideName, candidates };
+}
+
+function resolveBarcodeByName(name) {
   const raw = normalizeText(name);
-  if (!raw) return null;
+  if (!raw) return { barcode: null };
 
-  // 1. Canlı Getir API yanıtından yakalanan barkodlar
-  if (liveOrderBarcodes[raw]) return liveOrderBarcodes[raw];
+  // Canlı Getir API yanıtından yakalanan barkodlar
   const lower = raw.toLowerCase();
-  if (liveOrderBarcodes[lower]) return liveOrderBarcodes[lower];
+  const live = liveOrderBarcodes[raw] || liveOrderBarcodes[lower];
+  if (live) return { barcode: live };
 
-  // 2. Paket içi katalog barkod haritası
+  // Paket içi katalog (tam ad; gramajsız ad yalnız tek ürüne gidiyorsa listede)
   const catalog = window.__GETIRSTOK_CATALOG_BARCODES || {};
-  if (catalog[lower]) return catalog[lower];
-  if (catalog[raw]) return catalog[raw];
-
-  // 3. Parantez içi gramaj/hacim temizleme (örn: "Sprite Limon (1 L)" -> "Sprite Limon")
-  const base = raw.replace(/\s*\([^)]*\)\s*$/g, "").trim().toLowerCase();
-  if (catalog[base]) return catalog[base];
-  const noParens = raw.replace(/\s*\([^)]*\)/g, "").trim().toLowerCase();
-  if (catalog[noParens]) return catalog[noParens];
-
-  // 4. Türkçe küçük harf kontrolü
   const trLower = raw.toLocaleLowerCase("tr-TR");
-  if (catalog[trLower]) return catalog[trLower];
   const trBase = trLower.replace(/\s*\([^)]*\)\s*$/g, "").trim();
-  if (catalog[trBase]) return catalog[trBase];
-
-  // 5. Ön ek eşleşmesi
-  if (base.length >= 4) {
-    for (const [key, bc] of Object.entries(catalog)) {
-      if (key.startsWith(base) || base.startsWith(key)) {
-        return bc;
-      }
-    }
+  for (const key of [trLower, lower, trBase]) {
+    const found = parseCatalogValue(catalog[key]);
+    if (found) return found;
   }
+  const ambiguous = (window.__GETIRSTOK_CATALOG_AMBIGUOUS || {})[trBase];
+  if (ambiguous) return { barcode: null, candidates: ambiguous };
+  return { barcode: null };
+}
 
-  return null;
+/** Ad hücresinde, Getir'in yazdığı adın hemen ardında "(200 ml)" — ad zaten gramajlıysa eklenmez */
+function setProductSizeLabel(wrap, name, size) {
+  const cell = wrap.parentElement;
+  if (!cell) return;
+  let label = cell.querySelector(":scope > .getirstok-size");
+  const text = size && !/\)\s*$/.test(normalizeText(name)) ? `(${size})` : "";
+  if (!text) {
+    label?.remove();
+    return;
+  }
+  if (!label) {
+    label = document.createElement("span");
+    label.className = "getirstok-size";
+    cell.insertBefore(label, wrap);
+  }
+  if (label.textContent !== text) label.textContent = text;
 }
 
 const SEARCH_ARROW_SVG =
@@ -946,7 +1073,7 @@ const CHECK_ICON_SVG =
 const PENCIL_ICON_SVG =
   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>';
 
-function injectBarcodeIntoCell(cell, name) {
+function injectBarcodeIntoCell(cell, name, imageUrl) {
   if (!cell) return;
 
   let wrap = cell.querySelector('.getirstok-barcode-wrap');
@@ -956,9 +1083,29 @@ function injectBarcodeIntoCell(cell, name) {
     cell.appendChild(wrap);
   }
   wrap.style.display = showBarcodes ? 'flex' : 'none';
+  const image = imageUrl || '';
+  // Satır başka ürünle yeniden kullanılırsa önceki gramaj seçimi taşınmasın
+  if (wrap.dataset.name !== name || (wrap.dataset.image || '') !== image) delete wrap.dataset.choice;
+  wrap.dataset.image = image;
   // Düzenleme açıkken yazılan barkod silinmesin
   if (wrap.dataset.editing === '1' && wrap.dataset.name === name) return;
   renderBarcodeWrap(wrap, name);
+}
+
+/** Ürün adı sütununun görseli: ad hücresinde ya da hemen solundaki (#) hücrelerde */
+function findProductImageForName(tds, nameIdx, nameColIndices) {
+  const prevName = Math.max(-1, ...nameColIndices.filter((i) => i < nameIdx));
+  for (let i = nameIdx; i > prevName; i--) {
+    const img = tds[i]?.querySelector('img');
+    if (img?.src) return img.currentSrc || img.src;
+  }
+  return '';
+}
+
+/** "Sütaş Ayran (200 ml)" → "200 ml" (seçenek düğmesinde gösterilir) */
+function variantLabel(fullName) {
+  const m = normalizeText(fullName).match(/\(([^()]+)\)\s*$/);
+  return m ? m[1] : normalizeText(fullName);
 }
 
 function smallIconButton(className, title, svg, onClick) {
@@ -1015,7 +1162,8 @@ function openBarcodeEditor(wrap, name, current) {
     save.disabled = true;
     status.textContent = 'Kaydediliyor…';
     try {
-      chrome.runtime.sendMessage({ type: 'GETIRSTOK_BARCODE_OVERRIDE_SAVE', name, barcode }, (res) => {
+      const overrideName = current.overrideName || name;
+      chrome.runtime.sendMessage({ type: 'GETIRSTOK_BARCODE_OVERRIDE_SAVE', name: overrideName, barcode }, (res) => {
         if (chrome.runtime.lastError || !res?.ok) {
           save.disabled = false;
           status.textContent = res?.error || 'Kaydedilemedi, tekrar deneyin.';
@@ -1075,11 +1223,17 @@ function openBarcodeEditor(wrap, name, current) {
 }
 
 function renderBarcodeWrap(wrap, name, { force = false } = {}) {
-  const info = resolveBarcodeInfo(name);
-  const barcode = info.barcode;
+  const info = resolveBarcodeInfo(name, wrap.dataset.image || '');
+  // Ad birden çok gramaja gidiyorsa: bu satır için seçilen gramaj (kalıcı değil)
+  const chosen =
+    !info.barcode && info.candidates && wrap.dataset.choice
+      ? info.candidates.find(([, b]) => b === wrap.dataset.choice) || null
+      : null;
+  const barcode = info.barcode || chosen?.[1] || null;
+  setProductSizeLabel(wrap, name, info.size || (chosen ? variantLabel(chosen[0]) : ""));
 
   // Her DOM değişiminde yeniden çizme; aynı barkod zaten çizildiyse dokunma
-  const key = `${name}|${barcode || ''}|${info.manual ? 'm' : 'a'}`;
+  const key = `${name}|${wrap.dataset.image || ''}|${barcode || ''}|${info.manual ? 'm' : 'a'}|${info.candidates ? info.candidates.length : 0}`;
   if (!force && wrap.dataset.barcode === key && wrap.childElementCount > 0) return;
   wrap.dataset.barcode = key;
   wrap.dataset.name = name;
@@ -1089,8 +1243,34 @@ function renderBarcodeWrap(wrap, name, { force = false } = {}) {
     'getirstok-bc-edit-btn',
     barcode ? 'Barkodu düzelt' : 'Barkod ekle',
     PENCIL_ICON_SVG,
-    () => openBarcodeEditor(wrap, name, info)
+    () => openBarcodeEditor(wrap, name, { ...info, barcode })
   );
+
+  if (!barcode && info.candidates) {
+    // Tahmin yok: yanlış gramajın barkodu okutulmasın, kullanıcı seçsin
+    const pick = document.createElement('div');
+    pick.className = 'getirstok-bc-pick';
+    const label = document.createElement('span');
+    label.className = 'getirstok-bc-pick-label';
+    label.textContent = 'Hangi gramaj?';
+    pick.appendChild(label);
+    for (const [fullName, candidate] of info.candidates) {
+      const chip = document.createElement('button');
+      chip.type = 'button';
+      chip.className = 'getirstok-bc-pick-chip';
+      chip.textContent = variantLabel(fullName);
+      chip.title = `${fullName} · ${candidate}`;
+      chip.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        wrap.dataset.choice = candidate;
+        renderBarcodeWrap(wrap, name, { force: true });
+      });
+      pick.appendChild(chip);
+    }
+    wrap.appendChild(pick);
+    return;
+  }
 
   if (!barcode) {
     const missing = document.createElement('span');
@@ -1127,6 +1307,21 @@ function renderBarcodeWrap(wrap, name, { force = false } = {}) {
     manualTag.textContent = 'elle';
     manualTag.title = 'Bu barkod elle girildi';
     num.appendChild(manualTag);
+  }
+  if (chosen) {
+    // Seçilen gramaj: tıklayınca seçeneklere döner
+    const choiceTag = document.createElement('button');
+    choiceTag.type = 'button';
+    choiceTag.className = 'getirstok-bc-manual getirstok-bc-choice';
+    choiceTag.textContent = `${variantLabel(chosen[0])} ✕`;
+    choiceTag.title = 'Gramajı değiştir';
+    choiceTag.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      delete wrap.dataset.choice;
+      renderBarcodeWrap(wrap, name, { force: true });
+    });
+    num.appendChild(choiceTag);
   }
   main.appendChild(num);
   card.appendChild(main);
@@ -1254,6 +1449,122 @@ function tryInjectBarcodeToggleButton() {
   orderTable.parentElement.insertBefore(container, orderTable);
 }
 
+// ── Toplama modu: siparişin ürünlerini bizim paneldeki geçici toplama listesine gönder ──
+const PICKING_LABEL = "TM";
+const PICKING_TITLE = "Toplama modu: ürünleri paneldeki toplama listesine gönder";
+
+/** Sipariş penceresinden toplama listesi: kimlik, raf lokasyonları, ürünler (müşteri bilgisi yok) */
+function collectOrderForPicking(modal) {
+  const orderId = collectOrderIdOnly(modal);
+
+  // Birden çok lokasyon ayrı etiketlerde ama metinde boşluksuz ("BNK.017BNK.088"): kod kod okunur
+  const locationText = normalizeText(
+    modal.querySelector('[data-getirstok-field="location"] .ant-descriptions-item-content')?.textContent
+  );
+  const locations = [...new Set(locationText.match(/[a-zçğıöşü]+\.\d+/gi) || [])];
+
+  const items = [];
+  for (const table of modal.querySelectorAll("table")) {
+    const ths = Array.from(table.querySelector("thead")?.querySelectorAll("th") ?? []);
+    const heads = ths.map((th) => normalizeText(th.textContent).toLocaleLowerCase("tr-TR"));
+    const nameCols = heads.flatMap((h, i) => (h.includes("ürün adı") ? [i] : []));
+    if (nameCols.length === 0 || !heads.includes("adet")) continue;
+    for (const tr of table.querySelectorAll("tbody tr")) {
+      const tds = Array.from(tr.querySelectorAll("td"));
+      for (const nameIdx of nameCols) {
+        const nameCell = tds[nameIdx];
+        const name = nameCell ? getCleanProductNameFromCell(nameCell) : "";
+        if (!looksLikeProductName(name)) continue;
+        let qtyIdx = heads.findIndex((h, i) => i > nameIdx && h === "adet");
+        const nextName = nameCols.find((i) => i > nameIdx);
+        if (nextName !== undefined && qtyIdx > nextName) qtyIdx = -1;
+        const qtyCell = qtyIdx >= 0 ? tds[qtyIdx] : null;
+        const quantity =
+          normalizeText(qtyCell?.textContent).match(/\d+(?:[.,]\d+)?(?:\s*(?:kg|g|lt|l|adet))?/i)?.[0] || "1";
+        const imageUrl = findProductImageForName(tds, nameIdx, nameCols);
+        const info = resolveBarcodeInfo(name, imageUrl);
+        // Birden çok gramajlı adda bu pencerede seçilen gramaj
+        const choice = nameCell.querySelector(".getirstok-barcode-wrap")?.dataset.choice;
+        const chosen = !info.barcode && choice ? info.candidates?.find(([, b]) => b === choice) : null;
+        const size = info.size || (chosen ? variantLabel(chosen[0]) : "");
+        items.push({
+          name: size && !/\)\s*$/.test(name) ? `${name} (${size})` : name,
+          quantity,
+          imageUrl: /^https:/i.test(imageUrl) ? imageUrl : null,
+          barcode: info.barcode || chosen?.[1] || null,
+        });
+      }
+    }
+  }
+  return { orderId, locations, items };
+}
+
+function setPickingButtonState(btn, state, label, title = "") {
+  btn.dataset.state = state;
+  btn.textContent = label;
+  btn.title = title;
+}
+
+function tryInjectPickingButton() {
+  if (!isWarehousePanel) return;
+  const toggle = document.getElementById("getirstok-toggle-barcodes-btn");
+  const modal = toggle?.closest(".ant-modal-content");
+  if (!toggle || !modal) return;
+  const orderId = collectOrderIdOnly(modal);
+  let btn = document.getElementById("getirstok-picking-btn");
+  if (btn && btn.parentElement !== modal) {
+    btn.remove();
+    btn = null;
+  }
+  if (!btn) {
+    btn = document.createElement("button");
+    btn.id = "getirstok-picking-btn";
+    btn.type = "button";
+    setPickingButtonState(btn, "idle", PICKING_LABEL, PICKING_TITLE);
+    btn.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (btn.dataset.state === "sending") return;
+      const order = collectOrderForPicking(btn.closest(".ant-modal-content"));
+      if (!order.orderId || order.items.length === 0) {
+        setPickingButtonState(btn, "error", `! ${PICKING_LABEL}`, "Sipariş kimliği ya da ürünler bulunamadı");
+        return;
+      }
+      setPickingButtonState(btn, "sending", "…", "Gönderiliyor");
+      try {
+        chrome.runtime.sendMessage({ type: "GETIRSTOK_PICKING_ADD", order }, (res) => {
+          if (chrome.runtime.lastError || !res?.ok) {
+            setPickingButtonState(btn, "error", `! ${PICKING_LABEL}`, `Gönderilemedi: ${res?.error || "sunucuya ulaşılamadı"}`);
+            return;
+          }
+          setPickingButtonState(
+            btn,
+            "done",
+            `✓ ${PICKING_LABEL}`,
+            `Toplama listesinde (${order.items.length} ürün). Tekrar basınca liste güncellenir`
+          );
+        });
+      } catch {
+        setPickingButtonState(btn, "error", `! ${PICKING_LABEL}`, "Eklenti yenilenmiş; sayfayı yenileyin");
+      }
+    });
+    modal.appendChild(btn);
+  }
+  // Aynı pencere başka siparişle açılırsa durum sıfırlansın
+  if ((btn.dataset.orderId || "") !== (orderId || "")) {
+    btn.dataset.orderId = orderId || "";
+    setPickingButtonState(btn, "idle", PICKING_LABEL, PICKING_TITLE);
+  }
+}
+
+/** Pencere başlığındaki sipariş kimliği (24 haneli etiket) */
+function collectOrderIdOnly(modal) {
+  const el = Array.from(modal.querySelectorAll(".ant-tag, span, div")).find(
+    (x) => x.childElementCount === 0 && /^[a-f0-9]{24}$/i.test(normalizeText(x.textContent))
+  );
+  return el ? normalizeText(el.textContent) : null;
+}
+
 const ORDER_FIELD_BY_LABEL = {
   "müşteri adı": "customer",
   "teslimat adresi": "address",
@@ -1305,6 +1616,7 @@ function tryInjectButtons() {
   }
   ensureStyleOnce();
   tryInjectBarcodeToggleButton();
+  tryInjectPickingButton();
 
   // 1) Eğer gerçek <table> varsa: ÜRÜN ADI sütunlarına buton ve barkod ekle
   const tables = Array.from(document.querySelectorAll("table"));
@@ -1356,8 +1668,12 @@ function tryInjectButtons() {
 
         const qtyIdx = qtyColByName.get(nameColIdx);
         const qtyCell = qtyIdx !== undefined ? tds[qtyIdx] ?? null : null;
-        injectButtonIntoCell(qtyCell || nameCell, name);
-        injectBarcodeIntoCell(nameCell, name);
+        const image = findProductImageForName(tds, nameColIdx, nameColIndices);
+        // Panelde arama gramajlı adla daha isabetli
+        const { size } = resolveBarcodeInfo(name, image);
+        const query = size && !/\)\s*$/.test(name) ? `${name} (${size})` : name;
+        injectButtonIntoCell(qtyCell || nameCell, query);
+        injectBarcodeIntoCell(nameCell, name, image);
       }
     }
   }
@@ -2447,6 +2763,382 @@ function navigateInPanel(url) {
   }, 900);
 }
 
+// ── Seçilen ürün adını Ürün Listesi / Raf Etiketi sayfasında bul ──
+// Seçimin altında iki buton çıkar; tıklanınca sayfaya geçilir, ürün filtresine ad yazılıp
+// eşleşen öneri seçilir ve Uygula'ya basılır. Geçiş sayfa yenilese de iş sessionStorage'da bekler.
+const PRODUCT_FIND_STORAGE_KEY = "getirstok.productFind";
+const PRODUCT_FIND_MAX_AGE_MS = 30 * 1000;
+const PRODUCT_FIND_TARGETS = {
+  products: {
+    label: "Ürün listesinde bul",
+    title: "ürün listesi",
+    // Yan menü kapalıyken bağlantı DOM'da olmayabilir; adres düzeni diğer ürün sayfalarıyla aynı
+    url: (wid) =>
+      menuLinkHref("ürün listesi") || `/r/${wid}/stock/stock-management/product/list`,
+  },
+  shelf: {
+    label: "Raf etiketinde bul",
+    title: "raf etiketi",
+    url: (wid) => `/r/${wid}/stock/stock-management/shelf-label/list`,
+  },
+};
+
+function menuLinkHref(text) {
+  for (const a of document.querySelectorAll("a[href]")) {
+    if (normalizeText(a.textContent).toLocaleLowerCase("tr-TR") === text) return a.getAttribute("href");
+  }
+  return null;
+}
+
+let productFindPopup = null;
+let productFindRunning = false;
+/** Bekleyen arama var mı (her DOM değişikliğinde sessionStorage okunmasın) */
+let productFindPending = false;
+try {
+  productFindPending = !!sessionStorage.getItem(PRODUCT_FIND_STORAGE_KEY);
+} catch {
+  /* depolama kapalı */
+}
+
+function ensureProductFindStyleOnce() {
+  if (document.getElementById("getirstok-find-style")) return;
+  const style = document.createElement("style");
+  style.id = "getirstok-find-style";
+  style.textContent = `
+    .getirstok-find-pop {
+      position: fixed;
+      z-index: 2147483000;
+      display: flex;
+      gap: 6px;
+      padding: 6px;
+      border-radius: 12px;
+      background: #ffffff;
+      border: 1px solid #e4def4;
+      box-shadow: 0 12px 32px -10px rgba(31, 27, 46, 0.35);
+      font-family: inherit;
+      animation: getirstok-find-in 0.12s ease-out;
+    }
+    @keyframes getirstok-find-in {
+      from { opacity: 0; transform: translateY(-3px); }
+      to { opacity: 1; transform: none; }
+    }
+    .getirstok-find-pop button {
+      height: 30px;
+      padding: 0 12px;
+      border: 1px solid #e4def4;
+      border-radius: 9px;
+      background: #faf8ff;
+      color: #5d3ebc;
+      font-size: 12.5px;
+      font-weight: 600;
+      white-space: nowrap;
+      cursor: pointer;
+    }
+    .getirstok-find-pop button:hover {
+      background: #5d3ebc;
+      border-color: #5d3ebc;
+      color: #ffffff;
+    }
+    .getirstok-find-toast {
+      position: fixed;
+      z-index: 2147483000;
+      left: 50%;
+      top: 18px;
+      transform: translateX(-50%);
+      padding: 9px 16px;
+      border-radius: 12px;
+      background: #1f1b2e;
+      color: #ffffff;
+      font-size: 13px;
+      font-weight: 600;
+      box-shadow: 0 12px 32px -10px rgba(31, 27, 46, 0.5);
+    }
+  `;
+  document.head.appendChild(style);
+}
+
+function showProductFindToast(text) {
+  ensureProductFindStyleOnce();
+  const toast = document.createElement("div");
+  toast.className = "getirstok-find-toast";
+  toast.textContent = text;
+  document.body.appendChild(toast);
+  setTimeout(() => toast.remove(), 3500);
+}
+
+function hideProductFindPopup() {
+  productFindPopup?.remove();
+  productFindPopup = null;
+}
+
+/** Seçilen metin ürün adı olabilir mi: sipariş detayı penceresinde, kısa, tek satır, giriş kutusu dışında */
+function productFindSelectionText() {
+  const sel = window.getSelection();
+  if (!sel || sel.isCollapsed || sel.rangeCount === 0) return null;
+  const anchor = sel.anchorNode?.nodeType === 1 ? sel.anchorNode : sel.anchorNode?.parentElement;
+  if (!anchor?.closest?.(".ant-modal-content.getirstok-order-modal")) return null;
+  if (anchor.closest("input, textarea, [contenteditable='true'], .getirstok-find-pop")) return null;
+  const raw = sel.toString();
+  if (/\n.*\S/.test(raw.trim())) return null;
+  const text = normalizeText(raw);
+  if (text.length < 3 || text.length > 150 || /^\d+$/.test(text)) return null;
+  return { text, rect: sel.getRangeAt(0).getBoundingClientRect() };
+}
+
+function showProductFindPopup() {
+  const found = productFindSelectionText();
+  if (!found) {
+    hideProductFindPopup();
+    return;
+  }
+  ensureProductFindStyleOnce();
+  hideProductFindPopup();
+  const pop = document.createElement("div");
+  pop.className = "getirstok-find-pop";
+  // Butona basınca seçim kaybolmasın
+  pop.addEventListener("mousedown", (e) => e.preventDefault());
+  for (const [target, def] of Object.entries(PRODUCT_FIND_TARGETS)) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.textContent = def.label;
+    btn.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      hideProductFindPopup();
+      window.getSelection()?.removeAllRanges();
+      startProductFind(target, found.text);
+    });
+    pop.appendChild(btn);
+  }
+  document.body.appendChild(pop);
+  const width = pop.offsetWidth;
+  const left = Math.max(8, Math.min(found.rect.left, window.innerWidth - width - 8));
+  const below = found.rect.bottom + 6;
+  const top = below + pop.offsetHeight > window.innerHeight - 8 ? found.rect.top - pop.offsetHeight - 6 : below;
+  pop.style.left = `${left}px`;
+  pop.style.top = `${Math.max(8, top)}px`;
+  productFindPopup = pop;
+}
+
+function startProductFind(target, name, productId = null) {
+  const url = PRODUCT_FIND_TARGETS[target].url(currentWarehouseId());
+  const path = new URL(url, window.location.origin).pathname;
+  const job = { target, name, productId, path, at: Date.now() };
+  try {
+    sessionStorage.setItem(PRODUCT_FIND_STORAGE_KEY, JSON.stringify(job));
+    productFindPending = true;
+  } catch {
+    /* depolama kapalı */
+  }
+  if (window.location.pathname === path) {
+    void runPendingProductFind();
+    return;
+  }
+  window.history.pushState(window.history.state, "", url);
+  window.dispatchEvent(new PopStateEvent("popstate", { state: window.history.state }));
+  // Yönlendirici tepki vermezse (sayfa başlığı gelmezse) normal sayfa yüklemesine düş;
+  // bu arada başka sayfaya geçildiyse (ör. Ürün Listesi → Raf Etiketi) dokunma
+  const title = PRODUCT_FIND_TARGETS[target].title;
+  setTimeout(() => {
+    if (window.location.pathname === path && !findCardByTitle(title)) window.location.assign(url);
+  }, 2500);
+}
+
+function findCardByTitle(title) {
+  for (const head of document.querySelectorAll(".ant-card-head-title")) {
+    if (normalizeText(head.textContent).toLocaleLowerCase("tr-TR") === title) return head.closest(".ant-card");
+  }
+  return null;
+}
+
+function readPendingProductFind() {
+  try {
+    const job = JSON.parse(sessionStorage.getItem(PRODUCT_FIND_STORAGE_KEY) || "null");
+    if (!job || Date.now() - job.at > PRODUCT_FIND_MAX_AGE_MS) return null;
+    return job;
+  } catch {
+    return null;
+  }
+}
+
+/** React'in kontrol ettiği arama kutusuna yazı (değer doğrudan atanırsa React görmez) */
+function typeIntoInput(input, value) {
+  const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set;
+  setter.call(input, value);
+  input.dispatchEvent(new Event("input", { bubbles: true }));
+}
+
+/** Ürün filtresi: arama yapılabilen, kilitli olmayan ilk seçim kutusu */
+function findProductFilterSelect(card) {
+  const selects = Array.from(
+    card.querySelectorAll(".layout__filter .ant-select.ant-select-show-search:not(.ant-select-disabled)")
+  ).filter((s) => !s.closest('[aria-label="saved-queries-dropdown"]'));
+  return (
+    selects.find((s) =>
+      normalizeText(s.querySelector(".ant-select-selection-placeholder")?.textContent)
+        .toLocaleLowerCase("tr-TR")
+        .includes("ürün")
+    ) || selects[0] || null
+  );
+}
+
+async function runPendingProductFind() {
+  if (productFindRunning) return;
+  const job = readPendingProductFind();
+  if (!job) {
+    productFindPending = false;
+    return;
+  }
+  if (window.location.pathname !== job.path) return;
+  const card = findCardByTitle(PRODUCT_FIND_TARGETS[job.target]?.title || "");
+  const select = card && findProductFilterSelect(card);
+  if (!select) return;
+  productFindRunning = true;
+  productFindPending = false;
+  sessionStorage.removeItem(PRODUCT_FIND_STORAGE_KEY);
+  try {
+    const picked = await findProductInFilter(card, select, job);
+    if (picked && job.target === "products") await continueToShelfWithProductId(card, picked);
+  } catch (error) {
+    console.warn("[GetirStok] Ürün bulma:", error);
+    showProductFindToast("Ürün otomatik seçilemedi; filtreden elle seçebilirsin.");
+  } finally {
+    productFindRunning = false;
+  }
+}
+
+const openOptionText = (o) => normalizeText(o.textContent).toLocaleLowerCase("tr-TR");
+
+/** Arama kutusuna yazıp açılan önerileri bekler; `accept` uymayan (eski) öneriler sayılmaz */
+async function searchSelectOptions(select, input, keyword, accept) {
+  simulateClick(select.querySelector(".ant-select-selector") || select);
+  input.focus();
+  typeIntoInput(input, "");
+  typeIntoInput(input, keyword);
+  return waitForElement(() => {
+    const list = Array.from(
+      document.querySelectorAll(".ant-select-dropdown:not(.ant-select-dropdown-hidden) .ant-select-item-option")
+    ).filter(accept);
+    return list.length > 0 ? list : null;
+  }, 8000);
+}
+
+/**
+ * Ürün filtresinde ürünü bulup seçer ve Uygula'ya basar.
+ * `job.productId` varsa önce kimlikle (öneri adı kimliği içermez; aynı adlı öneri seçilir),
+ * sonuç yoksa adla aranır. @returns seçilen önerinin adı; seçilemediyse null
+ */
+async function findProductInFilter(card, select, job) {
+  const want = normalizeText(job.name).toLocaleLowerCase("tr-TR");
+  // Getir araması parantezli gramajla bulamayabilir; yazarken gramaj atılır, seçerken kullanılır
+  const keyword = normalizeText(job.name.replace(/\s*\([^)]*\)\s*$/, ""));
+  const keywordLower = keyword.toLocaleLowerCase("tr-TR");
+
+  // Önceki filtre (seçili ürünler) kalmasın
+  const clear = card.querySelector(".onboarding-clear-filter");
+  if (clear && select.querySelector(".ant-select-selection-item")) {
+    simulateClick(clear);
+    await sleep(400);
+  }
+  const input = select.querySelector("input.ant-select-selection-search-input");
+  if (!input) throw new Error("arama kutusu yok");
+
+  let pick = null;
+  let options = null;
+  if (job.productId) {
+    // Arama sonucu gelmeden görünen varsayılan liste seçilmesin: yalnız aynı ad kabul
+    options = await searchSelectOptions(select, input, job.productId, (o) => openOptionText(o) === want);
+    if (options) pick = options[0];
+  }
+  if (!pick) {
+    options = await searchSelectOptions(select, input, keyword, (o) => openOptionText(o).includes(keywordLower));
+    if (!options) {
+      showProductFindToast(`"${keyword}" için ürün bulunamadı.`);
+      return null;
+    }
+    const exact = options.find((o) => openOptionText(o) === want);
+    const prefixed = options.filter((o) => openOptionText(o).startsWith(keywordLower));
+    pick = exact || (prefixed.length === 1 ? prefixed[0] : options.length === 1 ? options[0] : null);
+  }
+  if (!pick) {
+    showProductFindToast("Birden çok ürün var; listeden doğru olanı seç.");
+    return null;
+  }
+  const pickedName = normalizeText(pick.textContent);
+  simulateClick(pick);
+  await sleep(250);
+  // Çoklu seçimde liste açık kalır; kapat
+  input.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", code: "Escape", keyCode: 27, bubbles: true }));
+  const apply = card.querySelector(".onboarding-apply-filter");
+  if (apply) simulateClick(apply);
+  return pickedName;
+}
+
+/** Ürün Listesi sonucundan ürün kimliğini okur (tablo filtreyle yenilenene kadar bekler) */
+async function readProductIdFromList(card, name) {
+  const want = normalizeText(name).toLocaleLowerCase("tr-TR");
+  return waitForElement(() => {
+    const table = card.querySelector(".ant-table-wrapper table");
+    if (!table) return null;
+    const headers = Array.from(table.querySelectorAll(":scope > thead > tr > th"), (th) =>
+      normalizeText(th.textContent).toLocaleLowerCase("tr-TR")
+    );
+    const idCol = headers.findIndex((h) => h === "ürün ıd" || h === "ürün id");
+    const nameCol = headers.indexOf("ürün adı");
+    if (idCol < 0 || nameCol < 0) return null;
+    const rows = Array.from(table.querySelectorAll(":scope > tbody > tr.ant-table-row"));
+    // Filtre uygulanmadan önceki liste de bu ürünü içerebilir; yalnız tek satır kalınca okunur
+    if (rows.length !== 1) return null;
+    const cells = rows[0].children;
+    if (normalizeText(cells[nameCol]?.textContent).toLocaleLowerCase("tr-TR") !== want) return null;
+    return normalizeText(cells[idCol]?.textContent).match(/[a-f0-9]{24}/i)?.[0] || null;
+  }, 10000);
+}
+
+async function copyText(text) {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch {
+    // Sayfa odakta değilse ya da izin yoksa eski yöntem
+    const area = document.createElement("textarea");
+    area.value = text;
+    area.style.cssText = "position:fixed;opacity:0;top:0;left:0";
+    document.body.appendChild(area);
+    area.select();
+    const ok = document.execCommand("copy");
+    area.remove();
+    return ok;
+  }
+}
+
+async function continueToShelfWithProductId(card, name) {
+  const productId = await readProductIdFromList(card, name);
+  if (!productId) {
+    showProductFindToast("Ürün ID okunamadı; raf etiketine geçilmedi.");
+    return;
+  }
+  const copied = await copyText(productId);
+  showProductFindToast(`${copied ? "Ürün ID kopyalandı" : "Ürün ID"}: ${productId} — raf etiketine geçiliyor`);
+  await sleep(700);
+  startProductFind("shelf", name, productId);
+}
+
+if (isWarehousePanel) {
+  document.addEventListener("mouseup", (e) => {
+    if (e.button !== 0 || e.target.closest?.(".getirstok-find-pop")) return;
+    setTimeout(showProductFindPopup, 0);
+  });
+  document.addEventListener("keyup", (e) => {
+    if (e.key === "Escape") hideProductFindPopup();
+    else if (e.shiftKey) setTimeout(showProductFindPopup, 0);
+  });
+  document.addEventListener("mousedown", (e) => {
+    if (!e.target.closest?.(".getirstok-find-pop")) hideProductFindPopup();
+  });
+  window.addEventListener("scroll", hideProductFindPopup, true);
+}
+
 function createDashboardLinkTab(tab) {
   const wrap = document.createElement("div");
   wrap.className = "ant-tabs-tab getirstok-link-tab";
@@ -2521,6 +3213,9 @@ function decorateWarehouseFast() {
   // Tablo sayfaları: gizlenen sütun/filtreler bir an bile görünmesin (sayfa dışında hemen döner)
   decorateRemovalPage();
   decorateExpirationPage();
+  decorateInventoryListPage();
+  decorateInventoryTaskTables();
+  if (productFindPending && !productFindRunning) void runPendingProductFind();
 }
 
 function decorateWarehouseLayout() {
@@ -3567,6 +4262,1321 @@ function decorateRemovalPage() {
       }
     }
   }
+}
+
+// -----------------------------
+// Depo: Sayım Listesi sayfası — sade tablo + az filtre
+// Sayfa adresi yerine tablo başlıklarından tanınır. Kart/filtre görünümü Satıştan Kaldırma
+// sayfasıyla aynı (Getir'in ortak liste bileşeni); hücre metni yerine data-* ile CSS'ten çizilir.
+// -----------------------------
+
+const INVENTORY_LIST_COLUMN_BY_HEADER = {
+  // tr-TR küçük harfte "ID" → "ıd" olur
+  ıd: "id",
+  id: "id",
+  depo: "warehouse",
+  durum: "status",
+  "tamamlanma yüzdesi": "progress",
+  iş: "job",
+  "otomatik sayım": "auto",
+  "dış kaynak sayımı (3pl)": "thirdParty",
+  "oluşturulma tarihi": "created",
+  oluşturan: "creator",
+};
+/** Boşken görünen yazıya göre gizlenen filtreler (seçim yapılınca yazı kaybolur; ad yedek) */
+const INVENTORY_LIST_HIDDEN_FILTER_TEXTS = new Set(["kapsam", "durum", "depo", "iş", "sebep"]);
+const INVENTORY_LIST_HIDDEN_FILTER_ARIA_RE = /warehouse|scope|status|reason|job/i;
+
+function inventoryListStatusTone(text) {
+  const t = text.toLocaleLowerCase("tr-TR");
+  if (t.includes("tamam")) return "green";
+  if (t.includes("iptal") || t.includes("red")) return "red";
+  if (t.includes("devam") || t.includes("sayılıyor") || t.includes("başla")) return "amber";
+  if (t.includes("hazır")) return "purple";
+  return "gray";
+}
+
+function ensureInventoryListStyleOnce() {
+  if (document.getElementById("getirstok-icl-style")) return;
+  const style = document.createElement("style");
+  style.id = "getirstok-icl-style";
+  style.textContent = `
+    [data-getirstok-icl-hidden],
+    [data-getirstok-icl-card] [aria-label="saved-queries-dropdown"],
+    [data-getirstok-icl-card] .onboarding-save-filter,
+    [data-getirstok-icl-col="id"],
+    [data-getirstok-icl-col="warehouse"],
+    [data-getirstok-icl-col="job"],
+    [data-getirstok-icl-col="thirdParty"],
+    [data-getirstok-icl-col="creator"] {
+      display: none !important;
+    }
+    [data-getirstok-icl-table] table {
+      table-layout: auto !important;
+      width: 100% !important;
+      min-width: 0 !important;
+    }
+    [data-getirstok-icl-table] col {
+      width: auto !important;
+      min-width: 0 !important;
+    }
+    [data-getirstok-icl-table] .ant-table {
+      background: transparent !important;
+    }
+    [data-getirstok-icl-table] .ant-table-container {
+      border: 1px solid #eeebf6 !important;
+      border-radius: 14px !important;
+      overflow: hidden;
+    }
+    [data-getirstok-icl-table] .ant-table-thead > tr > th {
+      padding: 11px 16px !important;
+      background: #faf9fd !important;
+      border-bottom: 1px solid #eeebf6 !important;
+      font-size: 11px !important;
+      font-weight: 700 !important;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      white-space: nowrap;
+      color: #8a849d !important;
+    }
+    [data-getirstok-icl-table] .ant-table-thead > tr > th::before {
+      display: none !important;
+    }
+    [data-getirstok-icl-table] .ant-table-tbody > tr.ant-table-row {
+      cursor: pointer;
+    }
+    [data-getirstok-icl-table] .ant-table-tbody > tr.ant-table-row > td {
+      padding: 14px 16px !important;
+      vertical-align: middle !important;
+      background: #ffffff !important;
+      border-bottom: 1px solid #f4f2f9 !important;
+      transition: background 0.15s ease;
+    }
+    [data-getirstok-icl-table] .ant-table-tbody > tr.ant-table-row:last-child > td {
+      border-bottom: none !important;
+    }
+    [data-getirstok-icl-table] .ant-table-tbody > tr.ant-table-row:hover > td {
+      background: #faf8ff !important;
+    }
+    /* Duruma göre solda renkli şerit (ilk sütun: onay kutusu) */
+    [data-getirstok-icl-table] tr[data-getirstok-icl-tone] > td:first-child {
+      box-shadow: inset 4px 0 0 var(--getirstok-icl-accent, #d4d0e0);
+    }
+    [data-getirstok-icl-table] th[data-getirstok-icl-col="select"],
+    [data-getirstok-icl-table] td[data-getirstok-icl-col="select"] {
+      width: 52px !important;
+      padding-left: 20px !important;
+      padding-right: 4px !important;
+      cursor: default;
+    }
+    [data-getirstok-icl-table] .ant-checkbox-checked .ant-checkbox-inner {
+      background: #5d3ebc !important;
+      border-color: #5d3ebc !important;
+    }
+    [data-getirstok-icl-table] .ant-table-tbody > tr.ant-table-row.ant-table-row-selected > td {
+      background: #f3effc !important;
+    }
+    [data-getirstok-icl-table] tr[data-getirstok-icl-tone="green"] { --getirstok-icl-accent: #22c55e; }
+    [data-getirstok-icl-table] tr[data-getirstok-icl-tone="amber"] { --getirstok-icl-accent: #f59e0b; }
+    [data-getirstok-icl-table] tr[data-getirstok-icl-tone="purple"] { --getirstok-icl-accent: #7c5cdb; }
+    [data-getirstok-icl-table] tr[data-getirstok-icl-tone="red"] { --getirstok-icl-accent: #ef4444; }
+
+    /* Durum etiketi */
+    [data-getirstok-icl-table] td[data-getirstok-icl-col="status"][data-getirstok-icl-status] {
+      font-size: 0 !important;
+      white-space: nowrap;
+    }
+    [data-getirstok-icl-table] td[data-getirstok-icl-col="status"][data-getirstok-icl-status]::before {
+      content: attr(data-getirstok-icl-status);
+      display: inline-flex;
+      align-items: center;
+      padding: 4px 12px 4px 24px;
+      border-radius: 999px;
+      font-size: 12.5px;
+      font-weight: 700;
+      line-height: 16px;
+      background: #f3f2f7 radial-gradient(circle at 12px 50%, #9ca3af 3.5px, transparent 4px);
+      color: #5b5570;
+    }
+    [data-getirstok-icl-table] tr[data-getirstok-icl-tone="green"] td[data-getirstok-icl-col="status"]::before {
+      background: #dcfce7 radial-gradient(circle at 12px 50%, #16a34a 3.5px, transparent 4px) !important;
+      color: #166534 !important;
+    }
+    [data-getirstok-icl-table] tr[data-getirstok-icl-tone="amber"] td[data-getirstok-icl-col="status"]::before {
+      background: #fef3c7 radial-gradient(circle at 12px 50%, #d97706 3.5px, transparent 4px) !important;
+      color: #92400e !important;
+    }
+    [data-getirstok-icl-table] tr[data-getirstok-icl-tone="purple"] td[data-getirstok-icl-col="status"]::before {
+      background: #ede7fc radial-gradient(circle at 12px 50%, #7c5cdb 3.5px, transparent 4px) !important;
+      color: #5d3ebc !important;
+    }
+    [data-getirstok-icl-table] tr[data-getirstok-icl-tone="red"] td[data-getirstok-icl-col="status"]::before {
+      background: #fee2e2 radial-gradient(circle at 12px 50%, #dc2626 3.5px, transparent 4px) !important;
+      color: #991b1b !important;
+    }
+
+    /* İlerleme: "25 / 25 ürün" + çubuk */
+    [data-getirstok-icl-table] td[data-getirstok-icl-col="progress"][data-getirstok-icl-progress] {
+      font-size: 0 !important;
+      min-width: 180px;
+    }
+    [data-getirstok-icl-table] td[data-getirstok-icl-col="progress"][data-getirstok-icl-progress]::before {
+      content: attr(data-getirstok-icl-progress);
+      display: block;
+      margin-bottom: 6px;
+      font-size: 13px;
+      font-weight: 700;
+      font-variant-numeric: tabular-nums;
+      color: #1f1b2e;
+    }
+    [data-getirstok-icl-table] td[data-getirstok-icl-col="progress"][data-getirstok-icl-progress]::after {
+      content: "";
+      display: block;
+      height: 8px;
+      border-radius: 999px;
+      background: linear-gradient(
+        90deg,
+        var(--getirstok-icl-bar, #7c5cdb) 0 var(--getirstok-icl-p, 0%),
+        #efecf7 var(--getirstok-icl-p, 0%) 100%
+      );
+    }
+    [data-getirstok-icl-table] td[data-getirstok-icl-complete] {
+      --getirstok-icl-bar: #22c55e;
+    }
+
+    /* Tür */
+    [data-getirstok-icl-table] td[data-getirstok-icl-col="auto"][data-getirstok-icl-auto] {
+      font-size: 0 !important;
+      white-space: nowrap;
+    }
+    [data-getirstok-icl-table] td[data-getirstok-icl-col="auto"][data-getirstok-icl-auto]::before {
+      content: attr(data-getirstok-icl-auto);
+      display: inline-flex;
+      padding: 3px 10px;
+      border-radius: 8px;
+      font-size: 12px;
+      font-weight: 600;
+      background: #f3f2f7;
+      color: #6b6580;
+    }
+    [data-getirstok-icl-table] td[data-getirstok-icl-auto="Otomatik"]::before {
+      background: #e0f2fe !important;
+      color: #0369a1 !important;
+    }
+
+    /* Tarih */
+    [data-getirstok-icl-table] td[data-getirstok-icl-col="created"] {
+      white-space: nowrap;
+      font-size: 13px !important;
+      font-variant-numeric: tabular-nums;
+      color: #6b6580 !important;
+    }
+
+    /* Satır sonu: sayımı aç */
+    [data-getirstok-icl-table] td[data-getirstok-icl-col="action"] .ant-btn {
+      width: 34px !important;
+      height: 34px !important;
+      border-radius: 10px !important;
+      border-color: #e4def4 !important;
+      color: #5d3ebc !important;
+      background: #ffffff !important;
+      transition: transform 0.15s ease, background 0.15s ease;
+    }
+    [data-getirstok-icl-table] tr.ant-table-row:hover td[data-getirstok-icl-col="action"] .ant-btn {
+      background: #5d3ebc !important;
+      border-color: #5d3ebc !important;
+      color: #ffffff !important;
+      transform: scale(1.06);
+    }
+
+    /* Sayfalama */
+    [data-getirstok-icl-table] .ant-pagination {
+      margin: 14px 0 0 !important;
+    }
+    [data-getirstok-icl-table] .ant-pagination-item {
+      border-radius: 8px !important;
+    }
+    [data-getirstok-icl-table] .ant-pagination-item-active {
+      border-color: #5d3ebc !important;
+      background: #5d3ebc !important;
+    }
+    [data-getirstok-icl-table] .ant-pagination-item-active a {
+      color: #ffffff !important;
+    }
+  `;
+  document.head.appendChild(style);
+}
+
+function decorateInventoryListTable(table) {
+  const headerCells = Array.from(table.querySelectorAll(":scope > thead > tr > th"));
+  const columns = headerCells.map((th) => {
+    if (th.classList.contains("ant-table-selection-column")) return "select";
+    const key = normalizeText(th.textContent).toLocaleLowerCase("tr-TR");
+    if (!key && th.classList.contains("ant-table-cell-fix-right")) return "action";
+    return INVENTORY_LIST_COLUMN_BY_HEADER[key] || null;
+  });
+  if (!columns.includes("progress") || !columns.includes("auto")) return false;
+  // Son sütun (satırı açan buton) başlıksız; sabit sağ sütun değilse de sondaki boş başlık
+  const last = columns.length - 1;
+  if (columns[last] == null && !normalizeText(headerCells[last]?.textContent)) columns[last] = "action";
+
+  headerCells.forEach((th, i) => setDataAttr(th, "data-getirstok-icl-col", columns[i]));
+  table
+    .querySelectorAll(":scope > tbody > tr.ant-table-measure-row > *")
+    .forEach((cell, i) => setDataAttr(cell, "data-getirstok-icl-col", columns[i] ?? null));
+
+  for (const tr of table.querySelectorAll(":scope > tbody > tr.ant-table-row")) {
+    const cells = Array.from(tr.children);
+    cells.forEach((td, i) => setDataAttr(td, "data-getirstok-icl-col", columns[i] ?? null));
+    const cellOf = (col) => {
+      const i = columns.indexOf(col);
+      return i >= 0 ? cells[i] ?? null : null;
+    };
+
+    const statusCell = cellOf("status");
+    const status = normalizeText(statusCell?.textContent);
+    if (statusCell) setDataAttr(statusCell, "data-getirstok-icl-status", status || null);
+    setDataAttr(tr, "data-getirstok-icl-tone", status ? inventoryListStatusTone(status) : null);
+
+    // "(25/25) - %100"
+    const progressCell = cellOf("progress");
+    if (progressCell) {
+      const m = normalizeText(progressCell.textContent).match(/\((\d+)\s*\/\s*(\d+)\)\s*-?\s*%\s*(\d+)/);
+      if (m) {
+        const done = Number(m[1]);
+        const total = Number(m[2]);
+        const pct = Math.max(0, Math.min(100, Number(m[3])));
+        setDataAttr(progressCell, "data-getirstok-icl-progress", `${done} / ${total} ürün · %${pct}`);
+        setDataAttr(progressCell, "data-getirstok-icl-complete", total > 0 && done >= total ? "1" : null);
+        if (progressCell.style.getPropertyValue("--getirstok-icl-p") !== `${pct}%`) {
+          progressCell.style.setProperty("--getirstok-icl-p", `${pct}%`);
+        }
+      } else {
+        setDataAttr(progressCell, "data-getirstok-icl-progress", null);
+      }
+    }
+
+    const autoCell = cellOf("auto");
+    if (autoCell) {
+      const v = normalizeText(autoCell.textContent).toLocaleLowerCase("tr-TR");
+      setDataAttr(autoCell, "data-getirstok-icl-auto", v === "evet" ? "Otomatik" : v === "hayır" ? "Manuel" : null);
+    }
+  }
+  return true;
+}
+
+function inventoryListFilterText(item) {
+  const placeholder =
+    item.querySelector(".ant-select-selection-placeholder")?.textContent ||
+    (item.matches("input[placeholder]") ? item.getAttribute("placeholder") : "") ||
+    item.querySelector("input[placeholder]")?.getAttribute("placeholder") ||
+    "";
+  return normalizeText(placeholder).toLocaleLowerCase("tr-TR");
+}
+
+function hideInventoryListFilters(card) {
+  for (const item of card.querySelectorAll(".layout__filter > *")) {
+    if (item.closest(".ant-drawer")) continue;
+    if (item.hasAttribute("data-getirstok-icl-hidden")) continue;
+    const aria = item.getAttribute("aria-label") || "";
+    const hide =
+      INVENTORY_LIST_HIDDEN_FILTER_ARIA_RE.test(aria) ||
+      INVENTORY_LIST_HIDDEN_FILTER_TEXTS.has(inventoryListFilterText(item)) ||
+      // Depo filtresi seçili ve kilitli geliyor
+      (item.matches(".ant-select-disabled") && !item.querySelector(".ant-select-selection-placeholder"));
+    if (hide) item.setAttribute("data-getirstok-icl-hidden", "1");
+  }
+}
+
+function decorateInventoryListPage() {
+  for (const table of document.querySelectorAll(".ant-table-wrapper table")) {
+    if (table.closest(".ant-drawer")) continue;
+    if (!decorateInventoryListTable(table)) continue;
+    ensureInventoryListStyleOnce();
+    ensureRemovalStyleOnce();
+    const wrapper = table.closest(".ant-table-wrapper");
+    if (wrapper) setDataAttr(wrapper, "data-getirstok-icl-table", "1");
+    const card = table.closest(".ant-card");
+    if (card) {
+      setDataAttr(card, "data-getirstok-rfs-card", "1");
+      setDataAttr(card, "data-getirstok-icl-card", "1");
+      hideInventoryListFilters(card);
+    }
+  }
+}
+
+/** Satırın boş bir yerine tıklamak sayımı açar (sondaki butona tıklanmış gibi) */
+function onInventoryListRowClick(e) {
+  const row = e.target.closest?.("[data-getirstok-icl-table] tr.ant-table-row");
+  if (!row) return;
+  if (
+    e.target.closest(
+      "button, a, input, label, .ant-checkbox-wrapper, .ant-table-selection-column, .ant-tag, .ant-typography-copy, [role='button']"
+    )
+  ) {
+    return;
+  }
+  row.querySelector('td[data-getirstok-icl-col="action"] .ant-btn')?.click();
+}
+
+// -----------------------------
+// Depo: Sayım detayı penceresi (Görevler tablosu) — sade görünüm + SKT kaydından stok
+// Getir sayımdaki ürünün stoğunu her yerde gizliyor; SKT kaydı ("Ürün Son Kullanma
+// Tarihleri") gizlenmiyor. Stok sunucumuzdan (barkod → ürün → SKT) toplu istenir.
+// -----------------------------
+
+const INVENTORY_TASK_COLUMN_BY_HEADER = {
+  // tr-TR küçük harfte "ID" → "ıd" olur
+  ıd: "taskId",
+  id: "taskId",
+  "ürün görseli": "image",
+  "ürün ıd": "productId",
+  "ürün id": "productId",
+  "ürün adı": "name",
+  "ürün barkodları": "barcodes",
+  durum: "status",
+  "oluşturulma tarihi": "created",
+};
+const INVENTORY_TASK_PAGE_SIZE = "100";
+/** Aynı ürünün stoğu bu süre içinde tekrar istenmez */
+const EXPIRY_STOCK_TTL_MS = 5 * 60 * 1000;
+const EXPIRY_STOCK_ERROR_RETRY_MS = 30 * 1000;
+/** Stok cevabı geldikçe artar; satır bu sürümle işlendiyse tekrar işlenmez */
+let expiryStockVersion = 0;
+
+/** barkod → { state: "loading" | "done" | "none" | "error", total?, lots?, at } */
+const expiryStockByBarcode = new Map();
+const expiryStockQueue = new Set();
+let expiryStockTimer = null;
+/**
+ * Sayfa boyutu pencere başına bir kez ayarlanır (kullanıcı sonra değiştirirse karışılmaz).
+ * "running" sürerken tekrar denenmez; sayfalama henüz çizilmediyse kayıt silinip sonra denenir.
+ */
+const inventoryPageSizeState = new WeakMap();
+const inventoryPageSizeTries = new WeakMap();
+
+function formatTrDate(iso) {
+  const m = String(iso || "").match(/^(\d{4})-(\d{2})-(\d{2})/);
+  return m ? `${m[3]}.${m[2]}.${m[1]}` : "";
+}
+
+function expiryStockNeedsFetch(barcode) {
+  const entry = expiryStockByBarcode.get(barcode);
+  if (!entry) return true;
+  if (entry.state === "loading") return false;
+  const age = Date.now() - entry.at;
+  return entry.state === "error" ? age > EXPIRY_STOCK_ERROR_RETRY_MS : age > EXPIRY_STOCK_TTL_MS;
+}
+
+function flushExpiryStockQueue() {
+  expiryStockTimer = null;
+  const barcodes = [...expiryStockQueue];
+  expiryStockQueue.clear();
+  if (barcodes.length === 0) return;
+  const at = Date.now();
+  for (const b of barcodes) expiryStockByBarcode.set(b, { state: "loading", at });
+  try {
+    chrome.runtime.sendMessage({ type: "GETIRSTOK_EXPIRY_STOCK", barcodes }, (res) => {
+      const done = Date.now();
+      const failed = chrome.runtime.lastError || !res?.ok;
+      for (const b of barcodes) {
+        if (failed) {
+          expiryStockByBarcode.set(b, { state: "error", at: done, error: res?.error });
+          continue;
+        }
+        const pid = res.barcodeToProductId?.[b];
+        const stock = pid ? res.stocks?.[pid] : null;
+        expiryStockByBarcode.set(
+          b,
+          stock ? { state: "done", total: stock.total, lots: stock.lots || [], at: done } : { state: "none", at: done }
+        );
+      }
+      if (failed) scheduleExpiryStockRetry();
+      expiryStockVersion++;
+      decorateInventoryTaskTables();
+    });
+  } catch {
+    for (const b of barcodes) expiryStockByBarcode.set(b, { state: "error", at: Date.now() });
+    scheduleExpiryStockRetry();
+  }
+}
+
+/** Satırlar sürüm değişmeden işlenmediği için hatalı stoklar süre dolunca elle yeniden denenir */
+function scheduleExpiryStockRetry() {
+  setTimeout(() => {
+    expiryStockVersion++;
+    decorateInventoryTaskTables();
+  }, EXPIRY_STOCK_ERROR_RETRY_MS + 200);
+}
+
+function requestExpiryStock(barcodes) {
+  let added = false;
+  for (const b of barcodes) {
+    if (!expiryStockNeedsFetch(b) || expiryStockQueue.has(b)) continue;
+    expiryStockQueue.add(b);
+    added = true;
+  }
+  if (added && !expiryStockTimer) expiryStockTimer = setTimeout(flushExpiryStockQueue, 150);
+}
+
+/** Satırın barkodlarından SKT kaydı olanı seçer */
+function expiryStockForBarcodes(barcodes) {
+  const entries = barcodes.map((b) => expiryStockByBarcode.get(b)).filter(Boolean);
+  const found = entries.find((e) => e.state === "done");
+  if (found) return found;
+  if (entries.some((e) => e.state === "loading") || entries.length < barcodes.length) return { state: "loading" };
+  if (entries.some((e) => e.state === "error")) return { state: "error" };
+  return { state: "none" };
+}
+
+function openSelectOptions(changer, timeoutMs) {
+  return waitForElement(() => {
+    const list = Array.from(
+      document.querySelectorAll(".ant-select-dropdown:not(.ant-select-dropdown-hidden) .ant-select-item-option")
+    );
+    return list.length > 0 ? list : null;
+  }, timeoutMs);
+}
+
+/** @returns "done" (ayarlandı ya da zaten öyle) | "absent" (sayfalama yok, sonra denenmeli) | "failed" */
+async function setTablePageSize(container, size) {
+  const changer = container.querySelector(".ant-pagination-options-size-changer");
+  if (!changer) return "absent";
+  const current = normalizeText(changer.querySelector(".ant-select-selection-item")?.textContent);
+  if (current.startsWith(`${size} `)) return "done";
+  simulateClick(changer.querySelector(".ant-select-selector") || changer);
+  let options = await openSelectOptions(changer, 1000);
+  if (!options) {
+    // İlk tıklama açmadıysa: arama kutusuna odaklanıp aşağı ok (Ant Design klavyeyle de açar)
+    const input = changer.querySelector("input");
+    if (input) {
+      input.focus();
+      simulateClick(input);
+      input.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", code: "ArrowDown", keyCode: 40, bubbles: true }));
+    }
+    options = await openSelectOptions(changer, 1500);
+  }
+  if (!options) return "failed";
+  const exact = options.find((o) => normalizeText(o.textContent).startsWith(`${size} `));
+  // İstenen boyut yoksa en büyüğü
+  const best =
+    exact ||
+    options.reduce((a, b) => (parseInt(normalizeText(b.textContent), 10) > parseInt(normalizeText(a.textContent), 10) ? b : a));
+  simulateClick(best);
+  return "done";
+}
+
+function ensureInventoryTaskStyleOnce() {
+  if (document.getElementById("getirstok-ic-style")) return;
+  const style = document.createElement("style");
+  style.id = "getirstok-ic-style";
+  style.textContent = `
+    [data-getirstok-ic-col="taskId"],
+    [data-getirstok-ic-col="productId"],
+    [data-getirstok-ic-col="barcodes"],
+    [data-getirstok-ic-col="status"],
+    [data-getirstok-ic-col="created"] {
+      display: none !important;
+    }
+    [data-getirstok-ic-table] table {
+      table-layout: auto !important;
+      width: 100% !important;
+      min-width: 0 !important;
+    }
+    [data-getirstok-ic-table] col {
+      width: auto !important;
+      min-width: 0 !important;
+    }
+    [data-getirstok-ic-table] .ant-table {
+      background: transparent !important;
+    }
+    [data-getirstok-ic-table] .ant-table-container {
+      border: 1px solid #eeebf6 !important;
+      border-radius: 14px !important;
+      overflow: hidden;
+    }
+    [data-getirstok-ic-table] .ant-table-thead > tr > th {
+      padding: 9px 12px !important;
+      background: #faf9fd !important;
+      border-bottom: 1px solid #eeebf6 !important;
+      font-size: 11px !important;
+      font-weight: 700 !important;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: #8a849d !important;
+      white-space: nowrap;
+    }
+    [data-getirstok-ic-table] .ant-table-thead > tr > th::before {
+      display: none !important;
+    }
+    [data-getirstok-ic-table] .ant-table-thead > tr > th[data-getirstok-ic-col="image"] {
+      font-size: 0 !important;
+      width: 64px;
+    }
+    /* Ürün ID sütunu Ad'dan önce geliyor; stok Ad hücresinin sağ ucunda çizilir */
+    [data-getirstok-ic-table] .ant-table-thead > tr > th[data-getirstok-ic-col="name"] {
+      position: relative;
+      padding-right: 124px !important;
+    }
+    [data-getirstok-ic-table] .ant-table-thead > tr > th[data-getirstok-ic-col="name"]::after {
+      content: "Stok";
+      position: absolute;
+      right: 12px;
+      top: 50%;
+      transform: translateY(-50%);
+      min-width: 76px;
+      text-align: center;
+    }
+    [data-getirstok-ic-table] .ant-table-tbody > tr.ant-table-row > td {
+      padding: 8px 12px !important;
+      vertical-align: middle !important;
+      background: #ffffff !important;
+      border-bottom: 1px solid #f4f2f9 !important;
+      transition: background 0.15s ease;
+    }
+    [data-getirstok-ic-table] .ant-table-tbody > tr.ant-table-row:last-child > td {
+      border-bottom: none !important;
+    }
+    [data-getirstok-ic-table] .ant-table-tbody > tr.ant-table-row:hover > td {
+      background: #faf8ff !important;
+    }
+
+    /* Görsel */
+    [data-getirstok-ic-table] td[data-getirstok-ic-col="image"] {
+      width: 64px;
+      padding-right: 0 !important;
+    }
+    [data-getirstok-ic-table] td[data-getirstok-ic-col="image"] .ant-image,
+    [data-getirstok-ic-table] td[data-getirstok-ic-col="image"] img {
+      width: 44px !important;
+      height: 44px !important;
+    }
+    [data-getirstok-ic-table] td[data-getirstok-ic-col="image"] .ant-image {
+      box-sizing: border-box;
+      border-radius: 12px;
+      border: 1px solid #eeebf6;
+      background: #ffffff;
+      overflow: hidden;
+    }
+    [data-getirstok-ic-table] td[data-getirstok-ic-col="image"] img {
+      box-sizing: border-box;
+      padding: 3px;
+      object-fit: contain;
+      background: transparent !important;
+    }
+
+    /* Ad */
+    [data-getirstok-ic-table] td[data-getirstok-ic-col="name"] .ant-tag {
+      margin: 0 !important;
+      padding: 0 !important;
+      border: none !important;
+      background: transparent !important;
+      white-space: normal !important;
+      font-size: 14px !important;
+      font-weight: 700 !important;
+      line-height: 1.35 !important;
+      color: #1f1b2e !important;
+    }
+
+    /* Stok: SKT kaydındaki toplam, Ad hücresinin sağında */
+    [data-getirstok-ic-table] td[data-getirstok-ic-col="name"][data-getirstok-ic-stock] {
+      position: relative;
+      padding-right: 124px !important;
+    }
+    [data-getirstok-ic-table] td[data-getirstok-ic-col="name"][data-getirstok-ic-stock]::after {
+      content: attr(data-getirstok-ic-stock);
+      position: absolute;
+      right: 12px;
+      top: 50%;
+      transform: translateY(-50%);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      white-space: nowrap;
+      min-width: 76px;
+      padding: 4px 12px;
+      border-radius: 999px;
+      font-size: 13px;
+      font-weight: 800;
+      font-variant-numeric: tabular-nums;
+      background: #f3f1f8;
+      color: #8a849d;
+    }
+    [data-getirstok-ic-table] td[data-getirstok-ic-state="done"]::after {
+      background: #ede7fc !important;
+      color: #5d3ebc !important;
+      font-size: 15px !important;
+    }
+    [data-getirstok-ic-table] td[data-getirstok-ic-state="none"]::after {
+      font-size: 11.5px !important;
+      font-weight: 600 !important;
+    }
+    /* Sayılan adet sistemden farklı: tek uyarı durumu */
+    [data-getirstok-ic-table] td[data-getirstok-ic-col="name"][data-getirstok-ic-stock][data-getirstok-ic-warn]::after {
+      content: "! " attr(data-getirstok-ic-stock);
+      background: #fee2e2 !important;
+      color: #b91c1c !important;
+    }
+
+    /* ── Pencere: sağdan açılan çekmece yerine ortada pop-up ── */
+    .ant-drawer[data-getirstok-ic-drawer] .ant-drawer-mask {
+      background: rgba(24, 18, 43, 0.6) !important;
+    }
+    .ant-drawer[data-getirstok-ic-drawer] .ant-drawer-content-wrapper {
+      top: 50% !important;
+      left: 50% !important;
+      right: auto !important;
+      bottom: auto !important;
+      transform: translate(-50%, -50%) !important;
+      width: min(720px, calc(100vw - 24px)) !important;
+      height: auto !important;
+      max-height: min(88vh, 900px) !important;
+      border-radius: 20px !important;
+      overflow: hidden !important;
+      box-shadow: 0 24px 64px -16px rgba(31, 27, 46, 0.45) !important;
+    }
+    .ant-drawer[data-getirstok-ic-drawer] .ant-drawer-content {
+      border-radius: 20px !important;
+      max-height: min(88vh, 900px);
+    }
+    .ant-drawer[data-getirstok-ic-drawer] .ant-drawer-wrapper-body {
+      display: flex !important;
+      flex-direction: column !important;
+      max-height: min(88vh, 900px);
+    }
+    .ant-drawer[data-getirstok-ic-drawer] .ant-drawer-header {
+      padding: 14px 18px !important;
+      border-bottom: 1px solid #f0edf7 !important;
+    }
+    .ant-drawer[data-getirstok-ic-drawer] .ant-drawer-header-title {
+      flex-direction: row-reverse !important;
+      justify-content: space-between !important;
+    }
+    .ant-drawer[data-getirstok-ic-drawer] .ant-drawer-title {
+      font-size: 0 !important;
+    }
+    .ant-drawer[data-getirstok-ic-drawer] .ant-drawer-title::after {
+      content: attr(data-getirstok-ic-title);
+      font-size: 17px;
+      font-weight: 700;
+      color: #1f1b2e;
+    }
+    .ant-drawer[data-getirstok-ic-drawer] .ant-drawer-close {
+      margin: 0 !important;
+      width: 34px;
+      height: 34px;
+      display: inline-flex !important;
+      align-items: center;
+      justify-content: center;
+      border-radius: 10px !important;
+      background: #f3f1f8 !important;
+      color: #5b5570 !important;
+    }
+    .ant-drawer[data-getirstok-ic-drawer] .ant-drawer-close:hover {
+      background: #e9e4f6 !important;
+      color: #1f1b2e !important;
+    }
+    .ant-drawer[data-getirstok-ic-drawer] .ant-drawer-extra {
+      display: none !important;
+    }
+    .ant-drawer[data-getirstok-ic-drawer] .ant-drawer-body {
+      flex: 1 1 auto !important;
+      min-height: 0 !important;
+      overflow-y: auto !important;
+      padding: 14px 18px 18px !important;
+    }
+    /* "Sayım Detayı" bölümü gizli: sadece ürün listesi */
+    [data-getirstok-ic-hidden] {
+      display: none !important;
+    }
+    .ant-drawer[data-getirstok-ic-drawer] .ant-card {
+      border: none !important;
+      box-shadow: none !important;
+      background: transparent !important;
+    }
+    .ant-drawer[data-getirstok-ic-drawer] .ant-card-head {
+      display: none !important;
+    }
+    .ant-drawer[data-getirstok-ic-drawer] .ant-card-body {
+      padding: 0 !important;
+    }
+
+    /* Satır sonu butonu */
+    [data-getirstok-ic-table] td.ant-table-cell-fix-right .ant-btn,
+    [data-getirstok-ic-table] td:last-child .ant-btn {
+      width: 32px !important;
+      height: 32px !important;
+      border-radius: 10px !important;
+      border-color: #e4def4 !important;
+      color: #5d3ebc !important;
+      background: #ffffff !important;
+    }
+    [data-getirstok-ic-table] td:last-child .ant-btn .anticon {
+      display: inline-flex;
+      transition: transform 0.2s ease;
+    }
+
+    /* ── "+" ile açılan Getir görev detayı penceresi gizli; detay satırın altında ── */
+    html[data-getirstok-ic-open] .ant-drawer.ant-drawer-open:not([data-getirstok-ic-drawer]):not([data-getirstok-itd-show]),
+    .ant-drawer[data-getirstok-itd-drawer]:not([data-getirstok-itd-show]) {
+      visibility: hidden !important;
+      pointer-events: none !important;
+    }
+    [data-getirstok-ic-table] tr[data-getirstok-itd-open] > td {
+      background: #faf8ff !important;
+      border-bottom: none !important;
+    }
+    [data-getirstok-ic-table] tr[data-getirstok-itd-open] td:last-child .ant-btn {
+      background: #5d3ebc !important;
+      border-color: #5d3ebc !important;
+      color: #ffffff !important;
+    }
+    [data-getirstok-ic-table] tr[data-getirstok-itd-open] td:last-child .ant-btn .anticon {
+      transform: rotate(45deg);
+    }
+    [data-getirstok-ic-table] tr.getirstok-itd-tr > td {
+      padding: 0 12px 12px !important;
+      background: #faf8ff !important;
+      border-bottom: 1px solid #f4f2f9 !important;
+    }
+    .getirstok-itd {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      padding: 12px;
+      border: 1px solid #ece7f8;
+      border-radius: 14px;
+      background: #ffffff;
+      animation: getirstok-itd-in 0.18s ease-out;
+      font-size: 13px;
+      color: #1f1b2e;
+    }
+    @keyframes getirstok-itd-in {
+      from { opacity: 0; transform: translateY(-4px); }
+      to { opacity: 1; transform: none; }
+    }
+    .getirstok-itd-head {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 6px 8px;
+    }
+    .getirstok-itd-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 3px 10px;
+      border-radius: 999px;
+      background: #f3f1f8;
+      color: #5b5570;
+      font-size: 12px;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+    .getirstok-itd-chip[data-tone="done"] { background: #dcfce7; color: #15803d; }
+    .getirstok-itd-chip[data-tone="progress"] { background: #fef3c7; color: #b45309; }
+    .getirstok-itd-chip[data-tone="ready"] { background: #ede7fc; color: #5d3ebc; }
+    .getirstok-itd-chip[data-tone="cancel"] { background: #fee2e2; color: #b91c1c; }
+    .getirstok-itd-muted {
+      color: #8a849d;
+      font-size: 12px;
+    }
+    .getirstok-itd-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 8px;
+    }
+    .getirstok-itd-box {
+      padding: 10px 12px;
+      border-radius: 12px;
+      background: #faf9fd;
+      border: 1px solid #f0edf7;
+    }
+    .getirstok-itd-box-title {
+      margin-bottom: 6px;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: #8a849d;
+    }
+    .getirstok-itd-lot {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 8px;
+      padding: 2px 0;
+    }
+    .getirstok-itd-qty {
+      font-size: 15px;
+      font-weight: 800;
+      font-variant-numeric: tabular-nums;
+      color: #5d3ebc;
+    }
+    .getirstok-itd-foot {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+    .getirstok-itd-diff {
+      padding: 4px 12px;
+      border-radius: 999px;
+      font-size: 12.5px;
+      font-weight: 700;
+    }
+    .getirstok-itd-diff[data-tone="ok"] { background: #dcfce7; color: #15803d; }
+    .getirstok-itd-diff[data-tone="bad"] { background: #fee2e2; color: #b91c1c; }
+    .getirstok-itd-loading {
+      padding: 14px;
+      text-align: center;
+      color: #8a849d;
+    }
+    .getirstok-itd-error { color: #b91c1c; }
+  `;
+  document.head.appendChild(style);
+}
+
+const STOCK_TEXT_BY_STATE = { loading: "…", none: "SKT yok", error: "—" };
+
+/** Her barkod ayrı etikette; birleşik metinden okunursa yan yana iki barkod tek sayı olur */
+function inventoryCellBarcodes(cell) {
+  if (!cell) return [];
+  const tagTexts = Array.from(cell.querySelectorAll(".ant-tag"), (t) => normalizeText(t.textContent));
+  return [
+    ...new Set(
+      (tagTexts.length > 0 ? tagTexts : normalizeText(cell.textContent).split(" ")).filter((t) => /^\d{6,14}$/.test(t))
+    ),
+  ];
+}
+
+function decorateInventoryTaskTable(table) {
+  const headerCells = Array.from(table.querySelectorAll(":scope > thead > tr > th"));
+  const columns = headerCells.map(
+    (th) => INVENTORY_TASK_COLUMN_BY_HEADER[normalizeText(th.textContent).toLocaleLowerCase("tr-TR")] || null
+  );
+  if (
+    !columns.includes("productId") ||
+    !columns.includes("name") ||
+    !columns.includes("barcodes") ||
+    !columns.includes("status")
+  ) {
+    return false;
+  }
+
+  headerCells.forEach((th, i) => setDataAttr(th, "data-getirstok-ic-col", columns[i]));
+  table
+    .querySelectorAll(":scope > tbody > tr.ant-table-measure-row > *")
+    .forEach((cell, i) => setDataAttr(cell, "data-getirstok-ic-col", columns[i] ?? null));
+
+  const rows = Array.from(table.querySelectorAll(":scope > tbody > tr.ant-table-row"));
+  const wanted = [];
+  for (const tr of rows) {
+    // Aynı satır (Getir içeriği değişmediyse) aynı stok sürümüyle tekrar işlenmez
+    const stamp = `${expiryStockVersion}|${tr.children.length}|${tr.getAttribute("data-row-key") || ""}`;
+    if (tr.getAttribute("data-getirstok-ic-v") === stamp) continue;
+    tr.setAttribute("data-getirstok-ic-v", stamp);
+    const cells = Array.from(tr.children);
+    cells.forEach((td, i) => setDataAttr(td, "data-getirstok-ic-col", columns[i] ?? null));
+    const barcodeCell = cells[columns.indexOf("barcodes")];
+    const stockCell = cells[columns.indexOf("name")];
+    if (!barcodeCell || !stockCell) continue;
+    const barcodes = inventoryCellBarcodes(barcodeCell);
+    if (barcodes.length === 0) {
+      setDataAttr(stockCell, "data-getirstok-ic-state", "none");
+      setDataAttr(stockCell, "data-getirstok-ic-stock", STOCK_TEXT_BY_STATE.none);
+      continue;
+    }
+    wanted.push(...barcodes);
+    const stock = expiryStockForBarcodes(barcodes);
+    setDataAttr(stockCell, "data-getirstok-ic-state", stock.state);
+    setDataAttr(stockCell, "data-getirstok-ic-stock", stock.state === "done" ? `${stock.total} adet` : STOCK_TEXT_BY_STATE[stock.state]);
+    const title =
+      stock.state === "done"
+        ? stock.lots.map((l) => `${l.count} adet · SKT ${formatTrDate(l.expiryDate)}`).join("\n")
+        : stock.state === "none"
+          ? "Bu ürünün SKT kaydı yok (stok sayımda gizli)"
+          : stock.state === "error"
+            ? "SKT stoğu alınamadı; birazdan tekrar denenecek"
+            : "";
+    if (stockCell.title !== title) stockCell.title = title;
+  }
+  if (wanted.length > 0) requestExpiryStock(wanted);
+  return true;
+}
+
+/** Çekmecede ürün tablosunun dışındaki "Sayım Detayı" bölümünü (başlık + açıklama kartı) işaretler */
+function hideInventoryDetailSections(wrapper, body) {
+  let node = wrapper;
+  while (node && node !== body) {
+    const parent = node.parentElement;
+    if (!parent) break;
+    for (const sib of parent.children) {
+      // Açıklama kartı da içeride tablo kullanıyor; sadece ürün tablosunu içeren dal korunur
+      if (sib === node || sib.querySelector(".ant-table-wrapper")) continue;
+      const text = normalizeText(sib.textContent).toLocaleLowerCase("tr-TR");
+      const isDetail =
+        sib.matches(".ant-descriptions") || !!sib.querySelector(".ant-descriptions") || text === "sayım detayı";
+      setDataAttr(sib, "data-getirstok-ic-hidden", isDetail ? "1" : null);
+    }
+    node = parent;
+  }
+}
+
+/** Sayım çekmecesini ortada pop-up gibi gösterir */
+function decorateInventoryDrawer(wrapper, table) {
+  const drawer = wrapper.closest(".ant-drawer");
+  if (!drawer) return;
+  setDataAttr(drawer, "data-getirstok-ic-drawer", "1");
+  const count = table.querySelectorAll(":scope > tbody > tr.ant-table-row").length;
+  const title = drawer.querySelector(".ant-drawer-title");
+  if (title) setDataAttr(title, "data-getirstok-ic-title", count > 0 ? `Sayımdaki ürünler (${count})` : "Sayımdaki ürünler");
+  const body = drawer.querySelector(".ant-drawer-body");
+  if (body) hideInventoryDetailSections(wrapper, body);
+}
+
+// ── Satır "+" → görev detayı satırın altında ──
+// Getir "+" ile ikinci bir çekmece ("Sayım Görev Detayı") açıyor. Çekmece gizli tutulur,
+// verisi okunup satırın altına kart olarak çizilir, sonra çekmece kapatılır.
+const TASK_DETAIL_TIMEOUT_MS = 12000;
+/** görev ID → { state: "loading" | "done" | "error", data?, at } */
+const taskDetailById = new Map();
+const openTaskDetailIds = new Set();
+/** Gizli çekmecede beklenen son görev; yalnız bu eşleşince çekmece kapatılır */
+let pendingTaskDetailId = null;
+
+function inventoryRowTaskId(tr) {
+  const key = tr.getAttribute("data-row-key");
+  if (key) return key;
+  const cell = tr.querySelector('td[data-getirstok-ic-col="taskId"]');
+  return cell ? normalizeText(cell.textContent) || null : null;
+}
+
+function isDrawerOpen(drawer) {
+  return drawer.classList.contains("ant-drawer-open");
+}
+
+function cellSpaceItems(cell) {
+  if (!cell) return [];
+  const items = Array.from(cell.querySelectorAll(".ant-space-item"), (x) => normalizeText(x.textContent));
+  return (items.length > 0 ? items : [normalizeText(cell.textContent)]).filter((t) => t && t !== "-");
+}
+
+/** Getir'in görev detayı kartını okur; veri henüz yüklenmediyse null */
+function parseTaskDetail(card) {
+  if (card.querySelector(".ant-spin-spinning")) return null;
+  const desc = {};
+  for (const th of card.querySelectorAll(".ant-descriptions-item-label")) {
+    const td = th.nextElementSibling;
+    if (!td) continue;
+    const first = td.querySelector(".ant-space-item");
+    const value = normalizeText((first || td).textContent);
+    desc[normalizeText(th.textContent).toLocaleLowerCase("tr-TR")] = value === "-" ? "" : value;
+  }
+  const taskId = desc["ıd"] || desc["id"];
+  if (!taskId) return null;
+
+  let products = null;
+  for (const table of card.querySelectorAll(".ant-table-wrapper table")) {
+    const headers = Array.from(table.querySelectorAll(":scope > thead > tr > th"), (th) =>
+      normalizeText(th.textContent).toLocaleLowerCase("tr-TR")
+    );
+    const col = (name) => headers.indexOf(name);
+    if (col("sistem stokları") < 0) continue;
+    const rows = Array.from(table.querySelectorAll(":scope > tbody > tr.ant-table-row"));
+    if (rows.length === 0 && !table.querySelector(".ant-table-placeholder")) return null;
+    products = rows.map((tr) => {
+      const cells = Array.from(tr.children);
+      const at = (name) => cells[col(name)];
+      return {
+        name: normalizeText(at("ürün adı")?.textContent),
+        systemStocks: cellSpaceItems(at("sistem stokları")),
+        systemExpiry: cellSpaceItems(at("sistem son kullanma tarihi")),
+        physicalStocks: cellSpaceItems(at("fiziksel stoklar")),
+        physicalExpiry: cellSpaceItems(at("fiziksel son kullanma tarihi")),
+        unit: normalizeText(at("birim")?.textContent).toLocaleLowerCase("tr-TR") || "adet",
+      };
+    });
+    break;
+  }
+  if (!products) return null;
+  return {
+    taskId,
+    status: desc["durum"] || "",
+    assignedAt: desc["atanma zamanı"] || "",
+    completedAt: desc["tamamlanma tarihi"] || "",
+    assignee: desc["görevlendirilen"] || "",
+    products,
+  };
+}
+
+function decorateTaskDetailDrawers() {
+  for (const card of document.querySelectorAll(".ant-drawer .inventoryCheckDetail")) {
+    const drawer = card.closest(".ant-drawer");
+    if (!drawer || drawer.hasAttribute("data-getirstok-ic-drawer")) continue;
+    setDataAttr(drawer, "data-getirstok-itd-drawer", "1");
+    if (!isDrawerOpen(drawer)) {
+      setDataAttr(drawer, "data-getirstok-itd-show", null);
+      continue;
+    }
+    const data = parseTaskDetail(card);
+    if (!data || !openTaskDetailIds.has(data.taskId)) continue;
+    taskDetailById.set(data.taskId, { state: "done", data, at: Date.now() });
+    if (pendingTaskDetailId === data.taskId) {
+      pendingTaskDetailId = null;
+      drawer.querySelector(".ant-drawer-close")?.click();
+    }
+  }
+}
+
+function itdEl(tag, className, text) {
+  const el = document.createElement(tag);
+  if (className) el.className = className;
+  if (text != null) el.textContent = text;
+  return el;
+}
+
+function taskStatusTone(status) {
+  const s = status.toLocaleLowerCase("tr-TR");
+  if (s.includes("tamam")) return "done";
+  if (s.includes("devam")) return "progress";
+  if (s.includes("iptal") || s.includes("red")) return "cancel";
+  return "ready";
+}
+
+function sumQty(list) {
+  let total = 0;
+  for (const t of list) {
+    const n = Number(String(t).replace(",", "."));
+    if (!Number.isFinite(n)) return null;
+    total += n;
+  }
+  return total;
+}
+
+function itdLotBox(title, lots, emptyText) {
+  const box = itdEl("div", "getirstok-itd-box");
+  box.appendChild(itdEl("div", "getirstok-itd-box-title", title));
+  if (lots.length === 0) {
+    box.appendChild(itdEl("div", "getirstok-itd-muted", emptyText));
+    return box;
+  }
+  for (const lot of lots) {
+    const line = itdEl("div", "getirstok-itd-lot");
+    line.appendChild(itdEl("span", "getirstok-itd-qty", lot.qty));
+    line.appendChild(itdEl("span", "getirstok-itd-muted", lot.expiry ? `SKT ${lot.expiry}` : "SKT yok"));
+    box.appendChild(line);
+  }
+  return box;
+}
+
+function pairLots(stocks, expiries, unit) {
+  return stocks.map((qty, i) => ({ qty: `${qty} ${unit}`, expiry: expiries[i] || "" }));
+}
+
+function rowExpiryStock(row) {
+  return expiryStockForBarcodes(inventoryCellBarcodes(row.querySelector('td[data-getirstok-ic-col="barcodes"]')));
+}
+
+/**
+ * Sistem stoğu ile sayılan adet. Sayım açıkken Getir sistem stoğunu boş gösterebiliyor; o zaman
+ * SKT kaydı yedek. `diff` yalnız iki taraf da biliniyorsa sayı; SKT tarihleri karşılaştırılmaz.
+ */
+function compareTaskProduct(p, skt) {
+  let systemLots = pairLots(p.systemStocks, p.systemExpiry, p.unit);
+  let systemTotal = sumQty(p.systemStocks);
+  let systemTitle = "Sistem stoğu";
+  if (systemLots.length === 0 && skt.state === "done") {
+    systemLots = skt.lots.map((l) => ({ qty: `${l.count} ${p.unit}`, expiry: formatTrDate(l.expiryDate) }));
+    systemTotal = skt.total;
+    systemTitle = "Sistem stoğu (SKT kaydı)";
+  }
+  const physicalTotal = sumQty(p.physicalStocks);
+  const known = p.physicalStocks.length > 0 && physicalTotal != null && systemLots.length > 0 && systemTotal != null;
+  return { systemLots, systemTitle, diff: known ? physicalTotal - systemTotal : null };
+}
+
+/** Sayılan adet sistemden farklı mı (detay henüz okunmadıysa false) */
+function taskHasCountMismatch(entry, row) {
+  if (entry?.state !== "done") return false;
+  const skt = rowExpiryStock(row);
+  return entry.data.products.some((p) => {
+    const { diff } = compareTaskProduct(p, skt);
+    return diff != null && diff !== 0;
+  });
+}
+
+function buildTaskDetailContent(entry, row) {
+  const root = itdEl("div", "getirstok-itd");
+  // Büyük harf başlıklarda "i" → "İ" olsun
+  root.lang = "tr";
+  if (!entry || entry.state === "loading") {
+    root.appendChild(itdEl("div", "getirstok-itd-loading", "Detay yükleniyor…"));
+    return root;
+  }
+  if (entry.state === "error") {
+    root.appendChild(
+      itdEl("div", "getirstok-itd-loading getirstok-itd-error", "Detay alınamadı. Kapatıp tekrar açmayı dene.")
+    );
+    return root;
+  }
+  const d = entry.data;
+  const head = itdEl("div", "getirstok-itd-head");
+  if (d.status) {
+    const chip = itdEl("span", "getirstok-itd-chip", d.status);
+    chip.dataset.tone = taskStatusTone(d.status);
+    head.appendChild(chip);
+  }
+  if (d.assignee) head.appendChild(itdEl("span", "getirstok-itd-chip", `Sayan: ${d.assignee}`));
+  const times = [d.assignedAt && `Atandı ${d.assignedAt}`, d.completedAt && `Bitti ${d.completedAt}`].filter(Boolean);
+  if (times.length > 0) head.appendChild(itdEl("span", "getirstok-itd-muted", times.join(" · ")));
+  root.appendChild(head);
+
+  const skt = rowExpiryStock(row);
+  for (const p of d.products) {
+    const { systemLots, systemTitle, diff } = compareTaskProduct(p, skt);
+    const grid = itdEl("div", "getirstok-itd-grid");
+    grid.appendChild(itdLotBox(systemTitle, systemLots, "Sayımda gizli"));
+    grid.appendChild(
+      itdLotBox("Sayılan", pairLots(p.physicalStocks, p.physicalExpiry, p.unit), "Henüz sayılmadı")
+    );
+    root.appendChild(grid);
+
+    if (diff != null) {
+      const foot = itdEl("div", "getirstok-itd-foot");
+      const badge = itdEl(
+        "span",
+        "getirstok-itd-diff",
+        diff === 0 ? "Fark yok" : `Fark: ${diff > 0 ? "+" : "−"}${Math.abs(diff)} ${p.unit}`
+      );
+      badge.dataset.tone = diff === 0 ? "ok" : "bad";
+      foot.appendChild(badge);
+      root.appendChild(foot);
+    }
+  }
+  return root;
+}
+
+function taskDetailSignature(entry, row) {
+  if (!entry || entry.state !== "done") return entry?.state || "loading";
+  const skt = rowExpiryStock(row);
+  return JSON.stringify([entry.data, skt.state, skt.total]);
+}
+
+function renderTaskDetailRows() {
+  const popupOpen = !!document.querySelector(".ant-drawer-open[data-getirstok-ic-drawer]");
+  // Sayım penceresi açıkken üstüne açılan Getir çekmeceleri gizli (CSS bu işarete bakar)
+  setDataAttr(document.documentElement, "data-getirstok-ic-open", popupOpen ? "1" : null);
+  if (!popupOpen) {
+    openTaskDetailIds.clear();
+    pendingTaskDetailId = null;
+  }
+  for (const tbody of document.querySelectorAll("[data-getirstok-ic-table] table > tbody")) {
+    for (const extra of tbody.querySelectorAll(":scope > tr.getirstok-itd-tr")) {
+      const id = extra.getAttribute("data-getirstok-itd-row");
+      const prev = extra.previousElementSibling;
+      if (!openTaskDetailIds.has(id) || !prev || inventoryRowTaskId(prev) !== id) extra.remove();
+    }
+    for (const row of tbody.querySelectorAll(":scope > tr.ant-table-row")) {
+      const id = inventoryRowTaskId(row);
+      const open = !!id && openTaskDetailIds.has(id);
+      setDataAttr(row, "data-getirstok-itd-open", open ? "1" : null);
+      const nameCell = row.querySelector('td[data-getirstok-ic-col="name"]');
+      if (nameCell) {
+        const warn = !!id && taskHasCountMismatch(taskDetailById.get(id), row);
+        setDataAttr(nameCell, "data-getirstok-ic-warn", warn ? "1" : null);
+      }
+      if (!open) continue;
+      let extra = row.nextElementSibling;
+      if (!extra || !extra.classList.contains("getirstok-itd-tr") || extra.getAttribute("data-getirstok-itd-row") !== id) {
+        extra = itdEl("tr", "getirstok-itd-tr");
+        extra.setAttribute("data-getirstok-itd-row", id);
+        extra.appendChild(itdEl("td"));
+        row.after(extra);
+      }
+      const td = extra.firstElementChild;
+      const colspan = String(row.children.length);
+      if (td.getAttribute("colspan") !== colspan) td.setAttribute("colspan", colspan);
+      const entry = taskDetailById.get(id);
+      const sig = taskDetailSignature(entry, row);
+      if (extra.dataset.sig === sig) continue;
+      extra.dataset.sig = sig;
+      td.replaceChildren(buildTaskDetailContent(entry, row));
+    }
+  }
+}
+
+function onInventoryRowButtonClick(e) {
+  const btn = e.target.closest?.("[data-getirstok-ic-table] tr.ant-table-row > td:last-child .ant-btn");
+  if (!btn) return;
+  const id = inventoryRowTaskId(btn.closest("tr.ant-table-row"));
+  if (!id) return;
+  if (openTaskDetailIds.has(id)) {
+    // Kapatma: Getir'in çekmecesi hiç açılmasın
+    e.preventDefault();
+    e.stopPropagation();
+    openTaskDetailIds.delete(id);
+    if (pendingTaskDetailId === id) pendingTaskDetailId = null;
+    renderTaskDetailRows();
+    return;
+  }
+  openTaskDetailIds.add(id);
+  pendingTaskDetailId = id;
+  const at = Date.now();
+  taskDetailById.set(id, { state: "loading", at });
+  renderTaskDetailRows();
+  setTimeout(() => {
+    const entry = taskDetailById.get(id);
+    if (entry?.state !== "loading" || entry.at !== at) return;
+    taskDetailById.set(id, { state: "error", at: Date.now() });
+    if (pendingTaskDetailId === id) {
+      pendingTaskDetailId = null;
+      // Okunamadıysa Getir'in kendi penceresi görünür olsun
+      for (const d of document.querySelectorAll(".ant-drawer.ant-drawer-open:not([data-getirstok-ic-drawer])")) {
+        setDataAttr(d, "data-getirstok-itd-show", "1");
+      }
+    }
+    renderTaskDetailRows();
+  }, TASK_DETAIL_TIMEOUT_MS);
+}
+
+function decorateInventoryTaskTables() {
+  for (const table of document.querySelectorAll(".ant-table-wrapper table")) {
+    if (!decorateInventoryTaskTable(table)) continue;
+    ensureInventoryTaskStyleOnce();
+    const wrapper = table.closest(".ant-table-wrapper");
+    if (!wrapper) continue;
+    setDataAttr(wrapper, "data-getirstok-ic-table", "1");
+    decorateInventoryDrawer(wrapper, table);
+    if (!inventoryPageSizeState.has(wrapper)) {
+      inventoryPageSizeState.set(wrapper, "running");
+      setTablePageSize(wrapper, INVENTORY_TASK_PAGE_SIZE)
+        .catch(() => "failed")
+        .then((result) => {
+          // Sayfalama henüz çizilmemiş: sonraki değişiklikte tekrar denenir
+          if (result === "absent") {
+            inventoryPageSizeState.delete(wrapper);
+            return;
+          }
+          inventoryPageSizeState.set(wrapper, result);
+          const tries = (inventoryPageSizeTries.get(wrapper) ?? 0) + 1;
+          inventoryPageSizeTries.set(wrapper, tries);
+          // Menü açılamadıysa (Getir hâlâ yüklüyor olabilir) birkaç saniye sonra tekrar
+          if (result === "failed" && tries < 3) setTimeout(() => inventoryPageSizeState.delete(wrapper), 3000);
+        });
+    }
+  }
+  for (const d of document.querySelectorAll(".ant-drawer[data-getirstok-itd-show]:not(.ant-drawer-open)")) {
+    setDataAttr(d, "data-getirstok-itd-show", null);
+  }
+  decorateTaskDetailDrawers();
+  renderTaskDetailRows();
+}
+
+if (isWarehousePanel) {
+  document.addEventListener("click", onInventoryRowButtonClick, true);
+  document.addEventListener("click", onInventoryListRowClick);
 }
 
 if (isWarehousePanel) {

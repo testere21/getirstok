@@ -100,6 +100,17 @@ interface AddProductModalProps {
 
 const initialForm = { name: "", barcode: "", quantity: "", notes: "" };
 
+interface CountStock {
+  total: number;
+  lots: { expiryDate: string | null; count: number }[];
+}
+
+/** "2027-09-19T00:00:00.000Z" → "19.09.2027" */
+function formatSktDate(iso: string | null): string {
+  const m = String(iso ?? "").match(/^(\d{4})-(\d{2})-(\d{2})/);
+  return m ? `${m[3]}.${m[2]}.${m[1]}` : "—";
+}
+
 export function AddProductModal({
   isOpen,
   onClose,
@@ -133,6 +144,8 @@ export function AddProductModal({
   const [getirStockError, setGetirStockError] = useState<string | null>(null);
   /** Son getir-stok isteği tamamlandı mı (başlangıçta null mesajı göstermemek için) */
   const [getirStockFetchComplete, setGetirStockFetchComplete] = useState(false);
+  /** Getir stoğu gizliyse (sayımda): SKT kaydındaki toplam ve tarih dökümü */
+  const [countStock, setCountStock] = useState<CountStock | null>(null);
   const getirStockFetchAbortRef = useRef<AbortController | null>(null);
   /* Tedarikçi iade tarihi */
   const [supplierReturnDate, setSupplierReturnDate] = useState<number | null>(null);
@@ -329,6 +342,7 @@ export function AddProductModal({
       getirStockFetchAbortRef.current?.abort();
       getirStockFetchAbortRef.current = null;
       setGetirStock(null);
+      setCountStock(null);
       setGetirStockError(null);
       setGetirStockLoading(false);
       setGetirStockFetchComplete(false);
@@ -430,6 +444,7 @@ export function AddProductModal({
       }
 
       setGetirStock(null);
+      setCountStock(null);
       setGetirStockLoading(true);
       setGetirStockError(null);
       setGetirStockFetchComplete(false);
@@ -448,6 +463,23 @@ export function AddProductModal({
         } else {
           setGetirStock(data.stock);
           setGetirStockError(null);
+          // Getir sayımdaki ürünün stoğunu gizliyor; SKT kaydı gizlenmiyor
+          if (data.stock == null) {
+            const sktRes = await fetch("/api/warehouse-expiry-stock", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ barcodes: [trimmed] }),
+              signal,
+            }).catch(() => null);
+            const skt = (await sktRes?.json().catch(() => null)) as {
+              success?: boolean;
+              barcodeToProductId?: Record<string, string>;
+              stocks?: Record<string, CountStock>;
+            } | null;
+            if (signal?.aborted) return;
+            const pid = skt?.barcodeToProductId?.[trimmed];
+            setCountStock((pid && skt?.stocks?.[pid]) || null);
+          }
         }
         setGetirStockFetchComplete(true);
       } catch (error) {
@@ -835,11 +867,23 @@ export function AddProductModal({
               {getirStockFetchComplete &&
                 getirStock === null &&
                 !getirStockError &&
-                !getirStockLoading && (
+                !getirStockLoading &&
+                (countStock ? (
+                  <div className="rounded-lg border-2 border-red-400 bg-red-50 px-3 py-2 text-center dark:border-red-500/70 dark:bg-red-950/40">
+                    <p className="text-base font-extrabold tracking-wide text-red-700 dark:text-red-300">
+                      SAYIMDA !! (stok = {countStock.total})
+                    </p>
+                    <p className="mt-0.5 text-[11px] tabular-nums text-red-700/80 dark:text-red-300/80">
+                      {countStock.lots
+                        .map((l) => `${l.count} adet · SKT ${formatSktDate(l.expiryDate)}`)
+                        .join("  ·  ")}
+                    </p>
+                  </div>
+                ) : (
                   <div className="rounded-lg border border-dashed border-zinc-300/90 bg-zinc-50/80 px-3 py-2 text-center text-xs text-zinc-600 dark:border-zinc-600 dark:bg-zinc-800/40 dark:text-zinc-400">
                     Getir stoku şu an gösterilemiyor.
                   </div>
-                )}
+                ))}
 
               {getirStockError && (
                 <div className="rounded-lg border border-red-200/90 bg-red-50/95 px-3 py-2 dark:border-red-900/50 dark:bg-red-950/35">
