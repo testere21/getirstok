@@ -27,6 +27,7 @@
   function publishHeatingEstimations(url, json) {
     if (!/\/heating-estimations(\?|$)/.test(String(url || ""))) return;
     if (!json || !Array.isArray(json.data)) return;
+    lastHeatingAt = Date.now();
     try {
       sessionStorage.setItem("getirstok.heatingEstimations", JSON.stringify(json));
     } catch {
@@ -199,9 +200,105 @@
     }
   }
 
+  // ── Pişirme önerilerini sayfa açılmadan da çek ──
+  // Getir isteği depoyu başlıklarla seçiyor (adreste depo yok); bu yüzden panelin kendi
+  // gateway isteklerinin başlıkları kopyalanır. Token'ı panel yeniledikçe son başlıklar da yenilenir.
+  const GATEWAY_HOST = "warehouse-panel-api-gateway.getirapi.com";
+  const HEATING_URL = `https://${GATEWAY_HOST}/heating-estimations`;
+  const HEATING_HEADERS_KEY = "getirstok.heatingHeaders";
+  const HEATING_POLL_MS = 60 * 1000;
+  const SKIPPED_HEADERS = new Set(["content-type", "content-length"]);
+  let lastGatewayHeaders = null;
+  let lastHeatingAt = 0;
+  let heatingPollBusy = false;
+
+  function plainHeaders(headers) {
+    const out = {};
+    if (!headers) return out;
+    try {
+      if (typeof Headers !== "undefined" && headers instanceof Headers) {
+        headers.forEach((v, k) => (out[k.toLowerCase()] = v));
+      } else if (Array.isArray(headers)) {
+        for (const [k, v] of headers) out[String(k).toLowerCase()] = String(v);
+      } else if (typeof headers === "object") {
+        for (const [k, v] of Object.entries(headers)) {
+          if (v != null) out[k.toLowerCase()] = String(v);
+        }
+      }
+    } catch {
+      /* okunamayan başlık */
+    }
+    return out;
+  }
+
+  function rememberGatewayHeaders(url, headers) {
+    if (!String(url || "").includes(GATEWAY_HOST)) return;
+    if (!headers || !headers.authorization) return;
+    const clean = {};
+    for (const [k, v] of Object.entries(headers)) {
+      if (!SKIPPED_HEADERS.has(k)) clean[k] = v;
+    }
+    const first = !lastGatewayHeaders;
+    lastGatewayHeaders = clean;
+    if (/\/heating-estimations(\?|$)/.test(String(url))) {
+      const template = { ...clean };
+      delete template.authorization;
+      try {
+        localStorage.setItem(HEATING_HEADERS_KEY, JSON.stringify(template));
+      } catch {
+        /* depolama kapalı */
+      }
+    }
+    if (first) setTimeout(pollHeating, 2000);
+  }
+
+  function heatingHeaders() {
+    let template = {};
+    try {
+      template = JSON.parse(localStorage.getItem(HEATING_HEADERS_KEY) || "{}") || {};
+    } catch {
+      template = {};
+    }
+    return { ...template, ...lastGatewayHeaders };
+  }
+
+  async function pollHeating() {
+    if (heatingPollBusy || !lastGatewayHeaders) return;
+    // 00:00–08:00 arası pişirme dilimi yok
+    if (new Date().getHours() < 8) return;
+    // Getir az önce kendisi çektiyse (Pişirme Önerileri sayfası açık) tekrar sorma
+    if (Date.now() - lastHeatingAt < HEATING_POLL_MS / 2) return;
+    heatingPollBusy = true;
+    try {
+      const res = await origFetch(HEATING_URL, {
+        method: "GET",
+        headers: heatingHeaders(),
+        credentials: "include",
+      });
+      if (res.ok) publishHeatingEstimations(HEATING_URL, await res.json());
+    } catch {
+      /* ağ hatası: bir sonraki turda tekrar */
+    } finally {
+      heatingPollBusy = false;
+    }
+  }
+
+  setInterval(pollHeating, HEATING_POLL_MS);
+
   const origFetch = window.fetch;
   if (typeof origFetch === "function") {
     window.fetch = async function (...args) {
+      try {
+        const req = args[0];
+        const init = args[1] && typeof args[1] === "object" ? args[1] : {};
+        const headers = {
+          ...(req && typeof req === "object" ? plainHeaders(req.headers) : {}),
+          ...plainHeaders(init.headers),
+        };
+        rememberGatewayHeaders(resolveUrl(typeof req === "string" ? req : req?.url), headers);
+      } catch {
+        /* ignore */
+      }
       let capturedBody = null;
       try {
         const req = args[0];
@@ -252,12 +349,27 @@
   if (OrigXHR) {
     const origOpen = OrigXHR.prototype.open;
     const origSend = OrigXHR.prototype.send;
+    const origSetRequestHeader = OrigXHR.prototype.setRequestHeader;
     OrigXHR.prototype.open = function (method, url, ...rest) {
       this.__getirstokUrl = resolveUrl(url);
       this.__getirstokMethod = String(method || "GET").toUpperCase();
+      this.__getirstokHeaders = {};
       return origOpen.call(this, method, url, ...rest);
     };
+    OrigXHR.prototype.setRequestHeader = function (name, value) {
+      try {
+        if (this.__getirstokHeaders) this.__getirstokHeaders[String(name).toLowerCase()] = String(value);
+      } catch {
+        /* ignore */
+      }
+      return origSetRequestHeader.call(this, name, value);
+    };
     OrigXHR.prototype.send = function (...args) {
+      try {
+        rememberGatewayHeaders(this.__getirstokUrl, this.__getirstokHeaders);
+      } catch {
+        /* ignore */
+      }
       const rawBody = args[0];
       this.__getirstokRequestBody =
         typeof rawBody === "string"

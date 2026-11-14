@@ -13,6 +13,7 @@
     "test:warehouse-expiry-parse": "node scripts/run-warehouse-expiry-parse-tests.mjs",
     "test:picker-stats": "node scripts/run-picker-stats-tests.mjs",
     "test:dps": "node scripts/run-dps-tests.mjs",
+    "test:bakery-stats": "node scripts/run-bakery-stats-tests.mjs",
     "scrape-products": "node scripts/scrape-getir-products.mjs",
     "fill-prices": "node scripts/fill-product-prices-from-stocks-api.mjs",
     "fill-supplier-return-days": "node scripts/fill-supplier-return-days-from-warehouse.mjs",

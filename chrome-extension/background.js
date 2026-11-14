@@ -1008,6 +1008,47 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   return true;
 });
 
+// -----------------------------
+// Pişirme istatistikleri: depo başına ortak kayıt (her bilgisayar kendi dakikalarını gönderir)
+// -----------------------------
+
+async function bakeStatsRequest(path, init) {
+  const bases = [API_BASE];
+  if (!USE_LOCAL_API) bases.push("http://localhost:3000");
+  let lastError = "Sunucuya ulaşılamadı";
+  for (const base of bases) {
+    try {
+      const res = await fetch(`${base}${path}`, init);
+      const data = await res.json().catch(() => null);
+      if (res.ok && data?.success) return { ok: true, data };
+      lastError = data?.error || `HTTP ${res.status}`;
+      if (res.status !== 404) break;
+    } catch (e) {
+      lastError = String((e && e.message) || e);
+    }
+  }
+  return { ok: false, error: lastError };
+}
+
+chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+  if (!msg || msg.type !== "GETIRSTOK_BAKE_STATS_PUSH") return;
+  bakeStatsRequest("/api/bakery-stats", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ warehouseId: msg.warehouseId, days: msg.days || {} }),
+  }).then(sendResponse);
+  return true;
+});
+
+chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+  if (!msg || msg.type !== "GETIRSTOK_BAKE_STATS_GET") return;
+  const qs = new URLSearchParams({ warehouseId: msg.warehouseId || "", from: msg.from || "", to: msg.to || "" });
+  bakeStatsRequest(`/api/bakery-stats?${qs}`, { method: "GET" }).then((r) =>
+    sendResponse(r.ok ? { ok: true, days: r.data.days || {} } : r)
+  );
+  return true;
+});
+
 // Eklenti yüklendiğinde console'a bilgi ver
 console.log("[Getir Token Yakalayıcı] Background service worker başlatıldı");
 

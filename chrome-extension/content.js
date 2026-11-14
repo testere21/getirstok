@@ -1691,6 +1691,8 @@ const BAKE_BRAND_PREFIX_RE = /^La Lorraine\s+/i;
 
 /** Ürün adı (tam ad, küçük harf, tek boşluk) → anlık stok. Dilimler arası aynı; hangi dilimde varsa alınır */
 let heatingStocks = null;
+let lastHeatingJson = null;
+let lastHeatingDataAt = 0;
 
 function bakeNameKey(name) {
   return normalizeText(name).toLocaleLowerCase("tr-TR");
@@ -1740,7 +1742,143 @@ function bakeItemsFromHeating(json) {
 
 function applyHeatingJson(json) {
   heatingStocks = buildHeatingStocks(json);
+  lastHeatingJson = json;
+  lastHeatingDataAt = Date.now();
   publishBakeSuggestions(bakeItemsFromHeating(json));
+  bakeAlertItems = heatingAlertItems(json);
+  setBakeAlertTotal(bakeAlertItems.reduce((n, it) => n + it.qty, 0));
+}
+
+function currentBakeSlotKey(now = new Date()) {
+  const hour = now.getHours();
+  if (hour >= 8 && hour < 12) return "08-12";
+  if (hour >= 12 && hour < 16) return "12-16";
+  if (hour >= 16 && hour < 20) return "16-20";
+  if (hour >= 20) return "20-00";
+  return null;
+}
+
+/** Şu anki dilimde "Beni pişir" olan ürünler ve pişirme adetleri (sayfadaki kuralın aynısı) */
+function heatingAlertItems(json) {
+  const slotKey = currentBakeSlotKey();
+  if (!slotKey || !heatingStocks) return [];
+  const today = localYmd(new Date());
+  const slot = (Array.isArray(json?.data) ? json.data : []).find((s) => {
+    const start = String(s?.startDate || "");
+    return heatingSlotKey(start) === slotKey && (!/^\d{4}-\d{2}-\d{2}/.test(start) || start.slice(0, 10) === today);
+  });
+  const out = [];
+  for (const p of Array.isArray(slot?.products) ? slot.products : []) {
+    const qty = Number(p?.prediction);
+    if (!(qty > 0)) continue;
+    const name = normalizeText(p?.fullName || p?.name);
+    const stock = heatingStocks.get(bakeNameKey(name));
+    if (stock?.frozen === 0) continue;
+    if (stock?.available === 0) out.push({ name, qty });
+  }
+  return out;
+}
+
+// ── Kontrol Paneli: "Pişirme Önerileri" sekmesinde rozet + sesli uyarı ──
+const BAKE_TAB_LABEL = "pişirme önerileri";
+const BAKE_BEEP_INTERVAL_MS = 20 * 1000;
+// Birden çok depo sekmesi açıkken ses tek sekmeden gelsin
+const BAKE_BEEP_STORAGE_KEY = "getirstok.bakeBeepAt";
+let bakeAlertTotal = 0;
+let bakeAlertItems = [];
+let bakeBeepTimer = null;
+let bakeAudioCtx = null;
+
+function setBakeAlertTotal(total) {
+  if (total === bakeAlertTotal) return;
+  bakeAlertTotal = total;
+  decorateBakeTabBadge();
+  if (total > 0 && !bakeBeepTimer) {
+    playBakeBeep();
+    bakeBeepTimer = setInterval(playBakeBeep, BAKE_BEEP_INTERVAL_MS);
+  } else if (total === 0 && bakeBeepTimer) {
+    clearInterval(bakeBeepTimer);
+    bakeBeepTimer = null;
+  }
+}
+
+function decorateBakeTabBadge() {
+  const list = document.querySelector('.ant-tabs[aria-label="Main navigation tabs"] .ant-tabs-nav-list');
+  if (!list) return;
+  for (const btn of list.querySelectorAll(":scope > .ant-tabs-tab:not(.getirstok-link-tab) .ant-tabs-tab-btn")) {
+    const existing = btn.querySelector(":scope > .getirstok-bake-tab-badge");
+    const label = normalizeText(
+      Array.from(btn.childNodes, (n) => (n === existing ? "" : n.textContent)).join("")
+    );
+    if (label.toLocaleLowerCase("tr-TR") !== BAKE_TAB_LABEL) continue;
+    if (bakeAlertTotal <= 0) {
+      existing?.remove();
+      return;
+    }
+    const text = bakeAlertTotal > 99 ? "99+" : String(bakeAlertTotal);
+    const badge = existing ?? document.createElement("sup");
+    if (!existing) {
+      badge.className = "getirstok-bake-tab-badge";
+      btn.appendChild(badge);
+    }
+    if (badge.textContent !== text) badge.textContent = text;
+    badge.title = `${bakeAlertTotal} adet pişirilmeli`;
+    return;
+  }
+}
+
+function playBakeBeep() {
+  // Gece yarısı dilim biter; yeni veri gelmese de uyarı sussun
+  if (!currentBakeSlotKey()) {
+    bakeAlertItems = [];
+    setBakeAlertTotal(0);
+    return;
+  }
+  try {
+    const last = Number(localStorage.getItem(BAKE_BEEP_STORAGE_KEY) || 0);
+    if (Date.now() - last < BAKE_BEEP_INTERVAL_MS - 2000) return;
+    localStorage.setItem(BAKE_BEEP_STORAGE_KEY, String(Date.now()));
+  } catch {
+    /* depolama kapalıysa yine de çal */
+  }
+  try {
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return;
+    if (!bakeAudioCtx) bakeAudioCtx = new AC();
+    const ctx = bakeAudioCtx;
+    if (ctx.state === "suspended") void ctx.resume();
+    const beep = (freq, start) => {
+      const o = ctx.createOscillator();
+      const g = ctx.createGain();
+      o.type = "square";
+      o.frequency.value = freq;
+      g.gain.setValueAtTime(0.14, ctx.currentTime + start);
+      g.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + start + 0.2);
+      o.connect(g);
+      g.connect(ctx.destination);
+      o.start(ctx.currentTime + start);
+      o.stop(ctx.currentTime + start + 0.22);
+    };
+    beep(880, 0);
+    beep(1174, 0.24);
+  } catch {
+    /* ses yoksa sessiz */
+  }
+}
+
+// Tarayıcı, sayfaya bir kez dokunulmadan sesi açmaz: ilk tıklamada ses motorunu uyandır
+if (isWarehousePanel) {
+  const unlockBakeAudio = () => {
+    try {
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if (!bakeAudioCtx && AC) bakeAudioCtx = new AC();
+      if (bakeAudioCtx?.state === "suspended") void bakeAudioCtx.resume();
+    } catch {
+      /* ses yok */
+    }
+  };
+  document.addEventListener("pointerdown", unlockBakeAudio, true);
+  document.addEventListener("keydown", unlockBakeAudio, true);
 }
 
 function loadHeatingStocksFromSession() {
@@ -2061,6 +2199,7 @@ function decorateBakeItem(item, isCurrentSlot) {
 
 function decorateBakeryPage() {
   if (!BAKE_PAGE_PATH_RE.test(window.location.pathname)) return;
+  ensureBakeStatsButton();
   const cards = Array.from(document.querySelectorAll('[class*="heatingEstimationCard"]'));
   if (cards.length === 0) return;
   ensureBakeStyleOnce();
@@ -2075,6 +2214,753 @@ function decorateBakeryPage() {
       decorateBakeItem(item, idx === currentIdx);
     }
   });
+}
+
+// -----------------------------
+// Depo: Pişirme istatistikleri
+// "Beni pişir" uyarısının durumu depo paneli açıkken dakika dakika işaretlenir ve birkaç dakikada
+// bir sunucuya gönderilir; kayıt depo başına ortaktır (hangi bilgisayardan bakılırsa bakılsın aynı).
+// Gün başına bir kayıt (sunucuda app/lib/bakeryStats.ts ile aynı biçim):
+//   h[saat]      = { o: izlenen dakikalar, a: uyarılı dakikalar, q: en yüksek bekleyen adet }
+//   ih[ürün][saat] = o ürünün uyarılı dakikaları
+//   slots        = dilim → { p: öneri, c: pişirilen, s: satılan } (Getir'in verisinden)
+// Dakikalar 60 karakterlik 0/1 dizisi: birden çok bilgisayar aynı dakikayı gönderse de bir kez sayılır.
+// -----------------------------
+
+/** 1.8.7'de kayıtlar sadece bu bilgisayarda tutuluyordu; açılışta sunucuya taşınır */
+const BAKE_STATS_LEGACY_PREFIX = "bakeStats:";
+const BAKE_STATS_FRESH_MS = 3 * 60 * 1000;
+const BAKE_STATS_FLUSH_MS = 5 * 60 * 1000;
+const BAKE_STATS_HOURS = Array.from({ length: 16 }, (_, i) => i + 8);
+const BAKE_SLOT_END_HOUR = { "08-12": 12, "12-16": 16, "16-20": 20, "20-00": 24 };
+/** Henüz sunucuya gitmemiş dakikalar: depo → gün → kayıt */
+let bakeStatsPending = {};
+let bakeStatsFlushing = null;
+
+function bitSet(str, i) {
+  const s = typeof str === "string" && str.length === 60 ? str : "0".repeat(60);
+  return s[i] === "1" ? s : s.slice(0, i) + "1" + s.slice(i + 1);
+}
+
+function bitCount(str) {
+  let n = 0;
+  for (const ch of str || "") if (ch === "1") n++;
+  return n;
+}
+
+/** Getir verisinden gün → dilim → { p, c, s } */
+function heatingSlotTotals(json) {
+  const out = {};
+  for (const slot of Array.isArray(json?.data) ? json.data : []) {
+    const start = String(slot?.startDate || "");
+    const key = heatingSlotKey(start);
+    const day = start.slice(0, 10);
+    if (!key || !/^\d{4}-\d{2}-\d{2}$/.test(day)) continue;
+    let p = 0;
+    let c = 0;
+    let s = 0;
+    let cookedKnown = false;
+    for (const prod of Array.isArray(slot?.products) ? slot.products : []) {
+      if (typeof prod?.prediction === "number") p += prod.prediction;
+      if (typeof prod?.cookedQuantity === "number") {
+        c += prod.cookedQuantity;
+        cookedKnown = true;
+      }
+      if (typeof prod?.soldQuantity === "number") s += prod.soldQuantity;
+    }
+    (out[day] ??= {})[key] = { p, c: cookedKnown ? c : null, s };
+  }
+  return out;
+}
+
+function orBitStrings(a, b) {
+  const x = typeof a === "string" && a.length === 60 ? a : null;
+  const y = typeof b === "string" && b.length === 60 ? b : null;
+  if (!x) return y ?? "0".repeat(60);
+  if (!y) return x;
+  let out = "";
+  for (let i = 0; i < 60; i++) out += x[i] === "1" || y[i] === "1" ? "1" : "0";
+  return out;
+}
+
+function emptyBakeStatsDay() {
+  return { h: {}, ih: {}, slots: {} };
+}
+
+/** Sunucudaki birleştirmenin aynısı (gönderilemeyen dakikaları geri koymak / ekranda göstermek için) */
+function mergeBakeStatsDay(base, add) {
+  const out = { h: { ...base?.h }, ih: { ...base?.ih }, slots: { ...base?.slots } };
+  for (const [k, hv] of Object.entries(add?.h || {})) {
+    const prev = out.h[k];
+    out.h[k] = prev
+      ? { o: orBitStrings(prev.o, hv.o), a: orBitStrings(prev.a, hv.a), q: Math.max(prev.q || 0, hv.q || 0) }
+      : { ...hv };
+  }
+  for (const [name, hours] of Object.entries(add?.ih || {})) {
+    const prev = { ...out.ih[name] };
+    for (const [k, bits] of Object.entries(hours)) prev[k] = orBitStrings(prev[k], bits);
+    out.ih[name] = prev;
+  }
+  for (const [k, sv] of Object.entries(add?.slots || {})) {
+    const prev = out.slots[k];
+    out.slots[k] = prev
+      ? {
+          p: sv.p,
+          c: sv.c == null ? prev.c : prev.c == null ? sv.c : Math.max(prev.c, sv.c),
+          s: Math.max(prev.s || 0, sv.s || 0),
+        }
+      : { ...sv };
+  }
+  return out;
+}
+
+function extensionAlive() {
+  try {
+    return !!chrome?.runtime?.id;
+  } catch {
+    return false;
+  }
+}
+
+function sendRuntimeMessage(msg) {
+  return new Promise((resolve) => {
+    if (!extensionAlive()) return resolve({ ok: false, error: "Eklenti yeniden yüklendi; sayfayı yenileyin." });
+    try {
+      chrome.runtime.sendMessage(msg, (res) => {
+        if (chrome.runtime.lastError) resolve({ ok: false, error: chrome.runtime.lastError.message });
+        else resolve(res || { ok: false, error: "Yanıt yok" });
+      });
+    } catch (e) {
+      resolve({ ok: false, error: String((e && e.message) || e) });
+    }
+  });
+}
+
+function recordBakeStatsMinute() {
+  if (!lastHeatingJson) return;
+  if (Date.now() - lastHeatingDataAt > BAKE_STATS_FRESH_MS) return;
+  const now = new Date();
+  if (!currentBakeSlotKey(now)) return;
+  const day = localYmd(now);
+  const hour = String(now.getHours());
+  const minute = now.getMinutes();
+  const items = bakeAlertItems;
+  const total = items.reduce((n, it) => n + it.qty, 0);
+  const rec = ((bakeStatsPending[currentWarehouseId()] ??= {})[day] ??= emptyBakeStatsDay());
+  const h = (rec.h[hour] ??= { o: "0".repeat(60), a: "0".repeat(60), q: 0 });
+  h.o = bitSet(h.o, minute);
+  if (total > 0) {
+    h.a = bitSet(h.a, minute);
+    h.q = Math.max(h.q, total);
+  }
+  for (const it of items) {
+    const ih = (rec.ih[it.name] ??= {});
+    ih[hour] = bitSet(ih[hour], minute);
+  }
+  const slots = heatingSlotTotals(lastHeatingJson)[day];
+  if (slots) rec.slots = { ...rec.slots, ...slots };
+}
+
+function flushBakeStats() {
+  if (bakeStatsFlushing) return bakeStatsFlushing;
+  const batch = bakeStatsPending;
+  if (!Object.keys(batch).length || !extensionAlive()) return Promise.resolve();
+  bakeStatsPending = {};
+  bakeStatsFlushing = (async () => {
+    for (const [warehouseId, days] of Object.entries(batch)) {
+      const res = await sendRuntimeMessage({ type: "GETIRSTOK_BAKE_STATS_PUSH", warehouseId, days });
+      if (res?.ok) continue;
+      // Gönderilemedi: sonraki turda tekrar denensin
+      const pending = (bakeStatsPending[warehouseId] ??= {});
+      for (const [day, rec] of Object.entries(days)) pending[day] = mergeBakeStatsDay(rec, pending[day]);
+    }
+  })().finally(() => {
+    bakeStatsFlushing = null;
+  });
+  return bakeStatsFlushing;
+}
+
+function migrateLegacyBakeStats() {
+  if (!extensionAlive() || !chrome.storage?.local) return;
+  try {
+    chrome.storage.local.get(null, async (store) => {
+      if (chrome.runtime.lastError || !store) return;
+      const keys = Object.keys(store).filter((k) => k.startsWith(BAKE_STATS_LEGACY_PREFIX));
+      if (!keys.length) return;
+      const days = {};
+      for (const k of keys) {
+        const rec = store[k];
+        days[k.slice(BAKE_STATS_LEGACY_PREFIX.length)] = { h: rec?.h || {}, ih: {}, slots: rec?.slots || {} };
+      }
+      const res = await sendRuntimeMessage({ type: "GETIRSTOK_BAKE_STATS_PUSH", warehouseId: currentWarehouseId(), days });
+      if (res?.ok) chrome.storage.local.remove(keys);
+    });
+  } catch {
+    /* eklenti yeniden yüklendi */
+  }
+}
+
+if (isWarehousePanel) {
+  setInterval(recordBakeStatsMinute, 30 * 1000);
+  setInterval(flushBakeStats, BAKE_STATS_FLUSH_MS);
+  setTimeout(migrateLegacyBakeStats, 20 * 1000);
+  window.addEventListener("pagehide", () => void flushBakeStats());
+}
+
+/** Sunucudaki ortak kayıt + bu bilgisayarın henüz gönderilmemiş dakikaları → { days: { ymd: kayıt }, error } */
+async function loadBakeStats(days) {
+  await flushBakeStats();
+  const warehouseId = currentWarehouseId();
+  const res = await sendRuntimeMessage({
+    type: "GETIRSTOK_BAKE_STATS_GET",
+    warehouseId,
+    from: days[0],
+    to: days[days.length - 1],
+  });
+  const out = res?.ok ? { ...res.days } : {};
+  for (const [day, rec] of Object.entries(bakeStatsPending[warehouseId] || {})) {
+    if (days.includes(day)) out[day] = mergeBakeStatsDay(out[day], rec);
+  }
+  return { days: out, error: res?.ok ? null : res?.error || "Sunucuya ulaşılamadı" };
+}
+
+function bakeStatsDayRange(endDay, count) {
+  const [y, m, d] = endDay.split("-").map(Number);
+  const out = [];
+  for (let i = count - 1; i >= 0; i--) out.push(localYmd(new Date(y, m - 1, d - i)));
+  return out;
+}
+
+function bakeSlotEnded(day, slotKey) {
+  const today = localYmd(new Date());
+  if (day < today) return true;
+  if (day > today) return false;
+  return new Date().getHours() >= BAKE_SLOT_END_HOUR[slotKey];
+}
+
+function summarizeBakeStats(days, store) {
+  const hours = {};
+  for (const hr of BAKE_STATS_HOURS) hours[hr] = { a: 0, o: 0, q: 0 };
+  const perDay = [];
+  const items = {};
+  let alert = 0;
+  let observed = 0;
+  let daysWithData = 0;
+  let predicted = 0;
+  let cooked = 0;
+  for (const day of days) {
+    const rec = store[day];
+    let dayA = 0;
+    let dayO = 0;
+    for (const hr of BAKE_STATS_HOURS) {
+      const h = rec?.h?.[hr];
+      if (!h) continue;
+      const a = bitCount(h.a);
+      const o = bitCount(h.o);
+      hours[hr].a += a;
+      hours[hr].o += o;
+      hours[hr].q = Math.max(hours[hr].q, h.q || 0);
+      dayA += a;
+      dayO += o;
+    }
+    for (const [name, hours] of Object.entries(rec?.ih || {})) {
+      let n = 0;
+      for (const bits of Object.values(hours)) n += bitCount(bits);
+      if (n) items[name] = (items[name] || 0) + n;
+    }
+    // Pişirilen/öneri karşılaştırması sadece biten dilimler için anlamlı
+    for (const [slotKey, sl] of Object.entries(rec?.slots || {})) {
+      if (typeof sl?.c !== "number" || !bakeSlotEnded(day, slotKey)) continue;
+      predicted += sl.p || 0;
+      cooked += sl.c;
+    }
+    if (dayO > 0) daysWithData++;
+    alert += dayA;
+    observed += dayO;
+    perDay.push({ day, a: dayA, o: dayO, rec });
+  }
+  return { hours, perDay, items, alert, observed, daysWithData, predicted, cooked };
+}
+
+function fmtBakeMinutes(n) {
+  if (n < 60) return `${n} dk`;
+  const m = n % 60;
+  return m ? `${Math.floor(n / 60)} sa ${m} dk` : `${Math.floor(n / 60)} sa`;
+}
+
+/** Saatte kaç dakika pişirilmeden geçtiğine göre renk */
+function bakeHourColor(minutes) {
+  if (minutes < 10) return "#fbbf24";
+  if (minutes < 30) return "#f97316";
+  return "#ef4444";
+}
+
+function bakeDayColor(minutes) {
+  if (minutes < 30) return "#fbbf24";
+  if (minutes < 120) return "#f97316";
+  return "#ef4444";
+}
+
+function bsEl(tag, cls, text) {
+  const el = document.createElement(tag);
+  if (cls) el.className = cls;
+  if (text != null) el.textContent = text;
+  return el;
+}
+
+/** bars: [{ label, value, text, title, color, empty, onClick }] */
+function bakeBarChart(bars, max) {
+  const chart = bsEl("div", "gs-bs-chart");
+  const top = Math.max(max || 0, ...bars.map((b) => b.value), 1);
+  for (const b of bars) {
+    const col = bsEl("div", "gs-bs-col");
+    if (b.empty) col.classList.add("is-empty");
+    if (b.onClick) {
+      col.classList.add("is-click");
+      col.addEventListener("click", b.onClick);
+    }
+    col.title = b.title || "";
+    const track = bsEl("div", "gs-bs-track");
+    if (b.text) track.appendChild(bsEl("span", "gs-bs-val", b.text));
+    const bar = bsEl("div", "gs-bs-bar");
+    bar.style.height = b.value > 0 ? `max(3px, ${(b.value / top) * 100}%)` : "0";
+    if (b.color) bar.style.background = b.color;
+    track.appendChild(bar);
+    col.append(track, bsEl("div", "gs-bs-x", b.label));
+    chart.appendChild(col);
+  }
+  return chart;
+}
+
+function bakeStatCard(label, value, sub) {
+  const card = bsEl("div", "gs-bs-card");
+  card.append(bsEl("div", "gs-bs-card-label", label), bsEl("div", "gs-bs-card-value", value));
+  if (sub) card.appendChild(bsEl("div", "gs-bs-card-sub", sub));
+  return card;
+}
+
+function bakeSection(title, hint) {
+  const sec = bsEl("div", "gs-bs-section");
+  const head = bsEl("div", "gs-bs-section-head");
+  head.appendChild(bsEl("div", "gs-bs-section-title", title));
+  if (hint) head.appendChild(bsEl("div", "gs-bs-section-hint", hint));
+  sec.appendChild(head);
+  return sec;
+}
+
+function bakeTopItemsSection(items) {
+  const entries = Object.entries(items).sort((a, b) => b[1] - a[1]).slice(0, 8);
+  if (entries.length === 0) return null;
+  const sec = bakeSection("En çok bekleyen ürünler", "raf boşken pişirilmeden geçen süre");
+  const max = entries[0][1];
+  const list = bsEl("div", "gs-bs-items");
+  for (const [name, n] of entries) {
+    const row = bsEl("div", "gs-bs-item");
+    row.title = name;
+    const bar = bsEl("div", "gs-bs-item-bar");
+    bar.style.width = `${(n / max) * 100}%`;
+    row.append(bsEl("span", "gs-bs-item-name", name.replace(BAKE_BRAND_PREFIX_RE, "")), bar, bsEl("span", "gs-bs-item-val", fmtBakeMinutes(n)));
+    list.appendChild(row);
+  }
+  sec.appendChild(list);
+  return sec;
+}
+
+function bakeEmptyState(text) {
+  const box = bsEl("div", "gs-bs-empty");
+  box.append(
+    bsEl("div", "gs-bs-empty-title", text),
+    bsEl("div", "gs-bs-empty-sub", "İstatistik, depodaki herhangi bir bilgisayarda depo paneli açıkken dakika dakika toplanır; hiçbirinde açık değilken geçen süre kayda girmez.")
+  );
+  return box;
+}
+
+function fmtBakeDay(day, opts) {
+  const [y, m, d] = day.split("-").map(Number);
+  return new Date(y, m - 1, d).toLocaleDateString("tr-TR", opts);
+}
+
+function renderBakeDayView(body, day, store, onDay) {
+  const sum = summarizeBakeStats([day], store);
+  const rec = store[day];
+  const today = localYmd(new Date());
+
+  const nav = bsEl("div", "gs-bs-daynav");
+  const prev = bsEl("button", "gs-bs-navbtn", "‹");
+  prev.type = "button";
+  prev.title = "Önceki gün";
+  prev.addEventListener("click", () => onDay(bakeStatsDayRange(day, 2)[0]));
+  const next = bsEl("button", "gs-bs-navbtn", "›");
+  next.type = "button";
+  next.title = "Sonraki gün";
+  next.disabled = day >= today;
+  next.addEventListener("click", () => {
+    const [y, m, d] = day.split("-").map(Number);
+    onDay(localYmd(new Date(y, m - 1, d + 1)));
+  });
+  nav.append(prev, bsEl("div", "gs-bs-daylabel", fmtBakeDay(day, { day: "numeric", month: "long", year: "numeric", weekday: "long" })), next);
+  body.appendChild(nav);
+
+  if (!rec || sum.observed === 0) {
+    body.appendChild(bakeEmptyState("Bu gün için kayıt yok."));
+    return;
+  }
+
+  let worst = null;
+  for (const hr of BAKE_STATS_HOURS) {
+    if (sum.hours[hr].a > 0 && (!worst || sum.hours[hr].a > sum.hours[worst].a)) worst = hr;
+  }
+  const cards = bsEl("div", "gs-bs-cards");
+  cards.append(
+    bakeStatCard("Pişirilmeden geçen", fmtBakeMinutes(sum.alert), "raf boş + pişirme önerisi varken"),
+    bakeStatCard("En kötü saat", worst == null ? "—" : `${String(worst).padStart(2, "0")}:00`, worst == null ? "uyarı yok" : fmtBakeMinutes(sum.hours[worst].a)),
+    bakeStatCard("İzlenen süre", fmtBakeMinutes(sum.observed), "en az bir bilgisayarda panel açıkken"),
+    bakeStatCard(
+      "Pişirilen / öneri",
+      sum.predicted ? `${sum.cooked} / ${sum.predicted}` : "—",
+      sum.predicted ? `biten dilimlerde %${Math.round((sum.cooked / sum.predicted) * 100)}` : "biten dilim yok"
+    )
+  );
+  body.appendChild(cards);
+
+  const hourSec = bakeSection("Saat saat pişirilmeden geçen süre", "çubuk: o saatte kaç dakika uyarı açık kaldı (en fazla 60)");
+  hourSec.appendChild(
+    bakeBarChart(
+      BAKE_STATS_HOURS.map((hr) => {
+        const h = sum.hours[hr];
+        const label = String(hr).padStart(2, "0");
+        if (h.o === 0) return { label, value: 0, empty: true, title: `${label}:00 – kayıt yok (panel kapalı)` };
+        return {
+          label,
+          value: h.a,
+          text: h.a > 0 ? String(h.a) : "",
+          color: bakeHourColor(h.a),
+          title: `${label}:00–${String(hr + 1).padStart(2, "0")}:00 · ${h.a} dk pişirilmeden · ${h.o} dk izlendi${h.q ? ` · en fazla ${h.q} adet bekledi` : ""}`,
+        };
+      }),
+      60
+    )
+  );
+  body.appendChild(hourSec);
+
+  const slots = rec.slots || {};
+  if (Object.keys(slots).length) {
+    const sec = bakeSection("Dilimler", "Getir'in pişirme önerisi ile pişirilen adet");
+    const table = bsEl("table", "gs-bs-table");
+    const thead = bsEl("thead");
+    const hr = bsEl("tr");
+    for (const t of ["Dilim", "Öneri", "Pişirilen", "Satılan", "Eksik"]) hr.appendChild(bsEl("th", "", t));
+    thead.appendChild(hr);
+    const tbody = bsEl("tbody");
+    for (const key of BAKE_SLOT_KEYS) {
+      const sl = slots[key];
+      if (!sl) continue;
+      const ended = bakeSlotEnded(day, key);
+      const started = day < today || (day === today && new Date().getHours() >= BAKE_SLOT_END_HOUR[key] - 4);
+      const tr = bsEl("tr");
+      const missing = typeof sl.c === "number" ? Math.max(0, sl.p - sl.c) : null;
+      tr.append(
+        bsEl("td", "", `${key.replace("-", ":00 – ")}:00${ended ? "" : started ? " (sürüyor)" : " (başlamadı)"}`),
+        bsEl("td", "", String(sl.p)),
+        bsEl("td", "", typeof sl.c === "number" ? String(sl.c) : "—"),
+        bsEl("td", "", String(sl.s ?? "—")),
+        bsEl("td", missing && ended ? "is-bad" : "", missing == null || !ended ? "—" : String(missing))
+      );
+      tbody.appendChild(tr);
+    }
+    table.append(thead, tbody);
+    sec.appendChild(table);
+    body.appendChild(sec);
+  }
+
+  const top = bakeTopItemsSection(sum.items);
+  if (top) body.appendChild(top);
+}
+
+function renderBakeRangeView(body, days, store, onDay) {
+  const sum = summarizeBakeStats(days, store);
+  body.appendChild(
+    bsEl(
+      "div",
+      "gs-bs-rangelabel",
+      `${fmtBakeDay(days[0], { day: "numeric", month: "long" })} – ${fmtBakeDay(days[days.length - 1], { day: "numeric", month: "long", year: "numeric" })}`
+    )
+  );
+  if (sum.observed === 0) {
+    body.appendChild(bakeEmptyState("Bu aralık için kayıt yok."));
+    return;
+  }
+
+  // Saat başına ortalama: izlenen süreye oranla (panelin açık kalmadığı saatler ortalamayı düşürmesin)
+  const hourAvg = (hr) => {
+    const h = sum.hours[hr];
+    return h.o ? (h.a / h.o) * 60 : 0;
+  };
+  let worst = null;
+  for (const hr of BAKE_STATS_HOURS) {
+    if (sum.hours[hr].a > 0 && (worst == null || hourAvg(hr) > hourAvg(worst))) worst = hr;
+  }
+  const cards = bsEl("div", "gs-bs-cards");
+  cards.append(
+    bakeStatCard("Pişirilmeden geçen", fmtBakeMinutes(sum.alert), `${sum.daysWithData} günde toplam`),
+    bakeStatCard("Günlük ortalama", fmtBakeMinutes(Math.round(sum.alert / Math.max(1, sum.daysWithData))), "kayıt olan günlere göre"),
+    bakeStatCard(
+      "En kötü saat",
+      worst == null ? "—" : `${String(worst).padStart(2, "0")}:00`,
+      worst == null ? "uyarı yok" : `saatte ort. ${Math.round(hourAvg(worst))} dk`
+    ),
+    bakeStatCard(
+      "Pişirilen / öneri",
+      sum.predicted ? `%${Math.round((sum.cooked / sum.predicted) * 100)}` : "—",
+      sum.predicted ? `${sum.cooked} / ${sum.predicted} adet` : "biten dilim yok"
+    )
+  );
+  body.appendChild(cards);
+
+  const hourSec = bakeSection("Hangi saatlerde pişirilmiyor?", "saatte ortalama kaç dakika uyarı açık kaldı");
+  hourSec.appendChild(
+    bakeBarChart(
+      BAKE_STATS_HOURS.map((hr) => {
+        const h = sum.hours[hr];
+        const label = String(hr).padStart(2, "0");
+        if (h.o === 0) return { label, value: 0, empty: true, title: `${label}:00 – kayıt yok` };
+        const avg = hourAvg(hr);
+        return {
+          label,
+          value: avg,
+          text: h.a > 0 ? String(Math.round(avg)) : "",
+          color: bakeHourColor(avg),
+          title: `${label}:00–${String(hr + 1).padStart(2, "0")}:00 · saatte ort. ${Math.round(avg)} dk · toplam ${fmtBakeMinutes(h.a)} pişirilmeden · ${fmtBakeMinutes(h.o)} izlendi`,
+        };
+      }),
+      60
+    )
+  );
+  body.appendChild(hourSec);
+
+  const daySec = bakeSection("Gün gün", "güne tıklayınca o günün saatleri açılır");
+  daySec.appendChild(
+    bakeBarChart(
+      sum.perDay.map(({ day, a, o }) => {
+        const label =
+          days.length <= 7
+            ? fmtBakeDay(day, { weekday: "short" })
+            : String(Number(day.slice(8, 10)));
+        const dayText = fmtBakeDay(day, { day: "numeric", month: "long", weekday: "long" });
+        if (o === 0) return { label, value: 0, empty: true, title: `${dayText} – kayıt yok`, onClick: () => onDay(day) };
+        return {
+          label,
+          value: a,
+          text: a > 0 ? (a >= 60 ? `${Math.round(a / 60)}sa` : String(a)) : "",
+          color: bakeDayColor(a),
+          title: `${dayText} · ${fmtBakeMinutes(a)} pişirilmeden · ${fmtBakeMinutes(o)} izlendi`,
+          onClick: () => onDay(day),
+        };
+      })
+    )
+  );
+  body.appendChild(daySec);
+
+  const top = bakeTopItemsSection(sum.items);
+  if (top) body.appendChild(top);
+}
+
+function openBakeStatsModal() {
+  ensureBakeStatsStyleOnce();
+  document.querySelector(".gs-bs-overlay")?.remove();
+
+  const overlay = bsEl("div", "gs-bs-overlay");
+  const modal = bsEl("div", "gs-bs-modal");
+  const head = bsEl("div", "gs-bs-head");
+  const titles = bsEl("div", "gs-bs-titles");
+  titles.append(
+    bsEl("div", "gs-bs-title", "Pişirme istatistikleri"),
+    bsEl("div", "gs-bs-subtitle", "Raf boşken pişirme önerisi olan ürün varken (Beni pişir) geçen süre · depodaki tüm bilgisayarların ortak kaydı")
+  );
+  const close = bsEl("button", "gs-bs-close", "×");
+  close.type = "button";
+  close.title = "Kapat";
+  head.append(titles, close);
+
+  const tabs = bsEl("div", "gs-bs-tabs");
+  const body = bsEl("div", "gs-bs-body");
+  modal.append(head, tabs, body);
+  overlay.appendChild(modal);
+  document.body.appendChild(overlay);
+
+  const state = { view: "day", day: localYmd(new Date()) };
+  const views = [
+    ["day", "Günlük"],
+    ["week", "Haftalık"],
+    ["month", "Aylık"],
+  ];
+  const tabButtons = views.map(([id, label]) => {
+    const b = bsEl("button", "gs-bs-tab", label);
+    b.type = "button";
+    b.addEventListener("click", () => {
+      state.view = id;
+      if (id !== "day") state.day = localYmd(new Date());
+      render();
+    });
+    tabs.appendChild(b);
+    return [id, b];
+  });
+
+  let renderSeq = 0;
+  async function render() {
+    const seq = ++renderSeq;
+    for (const [id, b] of tabButtons) b.classList.toggle("is-active", id === state.view);
+    const days =
+      state.view === "day"
+        ? [state.day]
+        : bakeStatsDayRange(localYmd(new Date()), state.view === "week" ? 7 : 30);
+    body.classList.add("is-loading");
+    if (!body.firstChild) body.appendChild(bsEl("div", "gs-bs-loading", "Yükleniyor…"));
+    const { days: store, error } = await loadBakeStats(days);
+    if (seq !== renderSeq || !overlay.isConnected) return;
+    body.classList.remove("is-loading");
+    body.replaceChildren();
+    if (error) {
+      body.appendChild(
+        bsEl("div", "gs-bs-error", `Ortak kayıtlar okunamadı (${error}). Sadece bu bilgisayarın henüz gönderilmemiş dakikaları gösteriliyor.`)
+      );
+    }
+    const onDay = (day) => {
+      state.view = "day";
+      state.day = day;
+      render();
+    };
+    if (state.view === "day") renderBakeDayView(body, state.day, store, onDay);
+    else renderBakeRangeView(body, days, store, onDay);
+  }
+
+  const onKey = (e) => {
+    if (e.key === "Escape") closeModal();
+  };
+  function closeModal() {
+    overlay.remove();
+    document.removeEventListener("keydown", onKey, true);
+  }
+  close.addEventListener("click", closeModal);
+  overlay.addEventListener("click", (e) => {
+    if (e.target === overlay) closeModal();
+  });
+  document.addEventListener("keydown", onKey, true);
+  render();
+}
+
+function ensureBakeStatsButton() {
+  if (document.querySelector(".getirstok-bake-stats-btn")) return;
+  const instructions = Array.from(document.querySelectorAll("button")).find(
+    (b) => normalizeText(b.textContent).toLocaleLowerCase("tr-TR") === "pişirme talimatlarını görüntüle"
+  );
+  if (!instructions) return;
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = `${instructions.className} getirstok-bake-stats-btn`;
+  btn.innerHTML =
+    '<span role="img" class="anticon"><svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg></span><span>İstatistikleri göster</span>';
+  btn.addEventListener("click", (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    openBakeStatsModal();
+  });
+  instructions.insertAdjacentElement("afterend", btn);
+}
+
+function ensureBakeStatsStyleOnce() {
+  if (document.getElementById("getirstok-bake-stats-style")) return;
+  const style = document.createElement("style");
+  style.id = "getirstok-bake-stats-style";
+  style.textContent = `
+    .getirstok-bake-stats-btn { margin-left: 8px; }
+    .gs-bs-overlay {
+      position: fixed; inset: 0; z-index: 2100;
+      display: flex; align-items: center; justify-content: center;
+      padding: 16px; background: rgba(20, 16, 35, 0.45);
+    }
+    .gs-bs-modal {
+      width: min(940px, 100%); max-height: calc(100vh - 32px);
+      display: flex; flex-direction: column;
+      background: #fff; border-radius: 16px; overflow: hidden;
+      box-shadow: 0 24px 60px -20px rgba(31, 27, 46, 0.45);
+      color: #1f1b2e; font-size: 13px;
+    }
+    .gs-bs-head {
+      display: flex; align-items: flex-start; justify-content: space-between; gap: 12px;
+      padding: 16px 20px 10px;
+    }
+    .gs-bs-title { font-size: 17px; font-weight: 700; }
+    .gs-bs-subtitle { margin-top: 2px; color: #8a849d; font-size: 12.5px; }
+    .gs-bs-close {
+      width: 32px; height: 32px; flex-shrink: 0; border: none; border-radius: 10px;
+      background: #f3f0fa; color: #5b556e; font-size: 20px; line-height: 1; cursor: pointer;
+    }
+    .gs-bs-close:hover { background: #e9e3f7; color: #5d3ebc; }
+    .gs-bs-tabs {
+      display: inline-flex; gap: 4px; align-self: flex-start;
+      margin: 0 20px 6px; padding: 4px; border-radius: 12px; background: #f3f0fa;
+    }
+    .gs-bs-tab {
+      padding: 6px 16px; border: none; border-radius: 9px; background: transparent;
+      color: #5b556e; font-size: 13px; font-weight: 600; cursor: pointer;
+    }
+    .gs-bs-tab:hover { background: rgba(255, 255, 255, 0.7); }
+    .gs-bs-tab.is-active { background: #fff; color: #5d3ebc; box-shadow: 0 1px 3px rgba(31, 27, 46, 0.1); }
+    .gs-bs-body { padding: 8px 20px 20px; overflow-y: auto; transition: opacity 0.15s ease; }
+    .gs-bs-body.is-loading { opacity: 0.55; pointer-events: none; }
+    .gs-bs-loading { padding: 48px 0; text-align: center; color: #8a849d; }
+    .gs-bs-error {
+      margin: 4px 0 10px; padding: 8px 12px; border-radius: 10px;
+      background: #fef2f2; color: #b91c1c; font-size: 12.5px;
+    }
+    .gs-bs-daynav { display: flex; align-items: center; gap: 10px; margin: 4px 0 12px; }
+    .gs-bs-daylabel { font-size: 14px; font-weight: 700; min-width: 230px; text-align: center; }
+    .gs-bs-navbtn {
+      width: 30px; height: 30px; border: 1px solid #ebe7f5; border-radius: 9px; background: #fff;
+      color: #5d3ebc; font-size: 18px; line-height: 1; cursor: pointer;
+    }
+    .gs-bs-navbtn:disabled { opacity: 0.35; cursor: default; }
+    .gs-bs-rangelabel { margin: 4px 0 12px; font-size: 14px; font-weight: 700; }
+    .gs-bs-cards { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin-bottom: 14px; }
+    @media (max-width: 720px) { .gs-bs-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+    .gs-bs-card { padding: 10px 12px; border: 1px solid #ebe7f5; border-radius: 12px; background: #faf9fd; }
+    .gs-bs-card-label { color: #8a849d; font-size: 11.5px; font-weight: 600; }
+    .gs-bs-card-value { margin-top: 2px; font-size: 19px; font-weight: 700; font-variant-numeric: tabular-nums; }
+    .gs-bs-card-sub { margin-top: 1px; color: #8a849d; font-size: 11.5px; }
+    .gs-bs-section { margin-top: 14px; padding: 12px 14px; border: 1px solid #ebe7f5; border-radius: 14px; }
+    .gs-bs-section-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 10px; flex-wrap: wrap; }
+    .gs-bs-section-title { font-size: 13.5px; font-weight: 700; }
+    .gs-bs-section-hint { color: #8a849d; font-size: 11.5px; }
+    .gs-bs-chart { display: flex; align-items: stretch; gap: 4px; height: 160px; }
+    .gs-bs-col { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+    .gs-bs-col.is-click { cursor: pointer; }
+    .gs-bs-col.is-click:hover .gs-bs-track { background: #ece7f8; }
+    .gs-bs-track {
+      position: relative; flex: 1 1 auto; display: flex; flex-direction: column;
+      justify-content: flex-end; align-items: center; border-radius: 8px; background: #f6f4fb;
+    }
+    .gs-bs-col.is-empty .gs-bs-track {
+      background: repeating-linear-gradient(135deg, #f6f4fb 0 6px, #fff 6px 12px);
+    }
+    .gs-bs-bar { width: 72%; border-radius: 6px 6px 3px 3px; background: #ef4444; }
+    .gs-bs-val { margin-bottom: 2px; font-size: 11px; font-weight: 700; color: #1f1b2e; font-variant-numeric: tabular-nums; }
+    .gs-bs-x { text-align: center; font-size: 11px; color: #8a849d; white-space: nowrap; overflow: hidden; }
+    .gs-bs-table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+    .gs-bs-table th { text-align: left; padding: 6px 8px; color: #8a849d; font-size: 11.5px; font-weight: 600; border-bottom: 1px solid #ebe7f5; }
+    .gs-bs-table td { padding: 7px 8px; border-bottom: 1px solid #f2f0f7; }
+    .gs-bs-table tr:last-child td { border-bottom: none; }
+    .gs-bs-table td.is-bad { color: #dc2626; font-weight: 700; }
+    .gs-bs-items { display: flex; flex-direction: column; gap: 6px; }
+    .gs-bs-item { display: grid; grid-template-columns: minmax(0, 220px) 1fr auto; align-items: center; gap: 10px; }
+    .gs-bs-item-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+    .gs-bs-item-bar { height: 8px; border-radius: 4px; background: linear-gradient(90deg, #f97316, #ef4444); min-width: 4px; }
+    .gs-bs-item-val { color: #5b556e; font-size: 12px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+    .gs-bs-empty { padding: 36px 16px; text-align: center; border: 1px dashed #ddd6f0; border-radius: 14px; }
+    .gs-bs-empty-title { font-size: 14px; font-weight: 700; }
+    .gs-bs-empty-sub { margin-top: 4px; color: #8a849d; font-size: 12.5px; }
+  `;
+  document.head.appendChild(style);
 }
 
 // -----------------------------
@@ -2392,6 +3278,29 @@ function ensureWarehouseLayoutStyleOnce() {
     }
     .ant-tabs[aria-label="Main navigation tabs"] .ant-tabs-tab[data-getirstok-hidden-tab] {
       display: none !important;
+    }
+    .ant-tabs[aria-label="Main navigation tabs"] .ant-tabs-tab-btn:has(> .getirstok-bake-tab-badge) {
+      position: relative;
+    }
+    .getirstok-bake-tab-badge {
+      position: absolute;
+      top: 0;
+      right: 0;
+      transform: translate(50%, -50%);
+      min-width: 20px;
+      height: 20px;
+      padding: 0 6px;
+      border-radius: 10px;
+      background: #ff4d4f;
+      color: #fff;
+      font-size: 12px;
+      font-weight: 700;
+      line-height: 20px;
+      text-align: center;
+      white-space: nowrap;
+      box-shadow: 0 0 0 1px #fff;
+      pointer-events: none;
+      z-index: 2;
     }
     .ant-tabs[aria-label="Main navigation tabs"] .getirstok-link-tab {
       display: inline-flex;
@@ -3188,6 +4097,7 @@ function decorateDashboardTabs() {
     if (el.parentNode !== list || el.nextSibling !== ref) list.insertBefore(el, ref);
     ref = el;
   }
+  decorateBakeTabBadge();
 }
 
 function decorateDashboardColumns() {
@@ -3214,6 +4124,7 @@ function decorateWarehouseFast() {
   decorateRemovalPage();
   decorateExpirationPage();
   decorateInventoryListPage();
+  decorateReturnsPage();
   decorateInventoryTaskTables();
   if (productFindPending && !productFindRunning) void runPendingProductFind();
 }
@@ -4472,6 +5383,44 @@ function ensureInventoryListStyleOnce() {
       color: #6b6580 !important;
     }
 
+    /* Yeni sayım: + solunda Onayla */
+    [data-getirstok-icl-table] td[data-getirstok-icl-col="action"] {
+      white-space: nowrap;
+    }
+    .getirstok-icl-approve {
+      height: 34px;
+      margin-right: 8px;
+      padding: 0 14px;
+      border: none;
+      border-radius: 10px;
+      background: linear-gradient(135deg, #7c5cdb, #5d3ebc);
+      color: #ffffff;
+      font-size: 12.5px;
+      font-weight: 700;
+      vertical-align: middle;
+      cursor: pointer;
+      box-shadow: 0 4px 10px -4px rgba(93, 62, 188, 0.6);
+      transition: transform 0.15s ease, filter 0.15s ease;
+    }
+    .getirstok-icl-approve:hover {
+      transform: translateY(-1px);
+      filter: brightness(1.08);
+    }
+    .getirstok-icl-approve[data-state="sending"] {
+      opacity: 0.7;
+      cursor: progress;
+    }
+    .getirstok-icl-approve[data-state="done"] {
+      background: #dcfce7;
+      color: #15803d;
+      box-shadow: none;
+    }
+    .getirstok-icl-approve[data-state="error"] {
+      background: #fee2e2;
+      color: #b91c1c;
+      box-shadow: none;
+    }
+
     /* Satır sonu: sayımı aç */
     [data-getirstok-icl-table] td[data-getirstok-icl-col="action"] .ant-btn {
       width: 34px !important;
@@ -4561,8 +5510,430 @@ function decorateInventoryListTable(table) {
       const v = normalizeText(autoCell.textContent).toLocaleLowerCase("tr-TR");
       setDataAttr(autoCell, "data-getirstok-icl-auto", v === "evet" ? "Otomatik" : v === "hayır" ? "Manuel" : null);
     }
+
+    syncInventoryApproveButton(cellOf("action"), status.toLocaleLowerCase("tr-TR") === "yeni");
   }
   return true;
+}
+
+// -----------------------------
+// Depo: İade Siparişler sayfası — sipariş satırları + açılan ürün kartı
+// Dış tablo siparişler, açılan satırdaki iç tablo ürünler; hücreler data-* ile CSS'ten çizilir.
+// -----------------------------
+
+const RETURN_PAGE_PATH_RE = /\/stock\/order\/return-order\/list\/?$/;
+const RETURN_ORDER_COLUMNS = {
+  "müşteri adı": "customer",
+  "kurye adı": "courier",
+  "toplayıcı adı": "picker",
+  "sipariş tarihi": "date",
+  "ürün sayımı": "count",
+};
+const RETURN_ITEM_COLUMNS = {
+  "ürün görseli": "image",
+  "ürün adı": "name",
+  "iade nedeni": "reason",
+  "hedef lokasyon": "location",
+  "iade adedi": "returnQty",
+  "sipariş adedi": "orderQty",
+};
+
+function returnReasonTone(text) {
+  const t = text.toLocaleLowerCase("tr-TR");
+  if (t.includes("bozuk") || t.includes("çürük") || t.includes("son kullanma") || t.includes("skt")) return "red";
+  if (t.includes("hasar") || t.includes("kırık") || t.includes("ezik")) return "orange";
+  if (t.includes("eksik")) return "amber";
+  if (t.includes("yanlış") || t.includes("müşteri")) return "blue";
+  return "gray";
+}
+
+function returnLocationTone(text) {
+  const t = text.toLocaleUpperCase("tr-TR");
+  if (t.startsWith("ATIK")) return "red";
+  if (t.startsWith("RAF")) return "violet";
+  return "gray";
+}
+
+function ensureReturnsStyleOnce() {
+  if (document.getElementById("getirstok-ret-style")) return;
+  const style = document.createElement("style");
+  style.id = "getirstok-ret-style";
+  style.textContent = `
+    [data-getirstok-ret-card] .ant-table { background: transparent !important; }
+    [data-getirstok-ret-card] .ant-table-container { border: none !important; }
+    [data-getirstok-ret-card] .ant-table-wrapper[data-getirstok-ret-wrap="orders"] > .ant-spin-nested-loading > .ant-spin-container > .ant-table > .ant-table-container {
+      border: 1px solid #eeebf6 !important;
+      border-radius: 16px !important;
+      overflow: hidden;
+    }
+    table[data-getirstok-ret] { width: 100% !important; border-collapse: collapse !important; }
+    table[data-getirstok-ret] > thead > tr > th {
+      padding: 11px 14px !important;
+      background: #faf9fd !important;
+      border: none !important;
+      border-bottom: 1px solid #eeebf6 !important;
+      font-size: 11px !important;
+      font-weight: 700 !important;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      white-space: nowrap;
+      color: #8a849d !important;
+    }
+    table[data-getirstok-ret] > thead > tr > th::before { display: none !important; }
+
+    /* ── Sipariş satırı ── */
+    table[data-getirstok-ret="orders"] > tbody > tr.ant-table-row > td {
+      padding: 14px !important;
+      vertical-align: middle !important;
+      background: #ffffff !important;
+      border: none !important;
+      border-top: 1px solid #f1eef8 !important;
+      font-size: 13.5px;
+      color: #3f3a52;
+      transition: background 0.15s ease;
+    }
+    table[data-getirstok-ret="orders"] > tbody > tr.ant-table-row:first-child > td { border-top: none !important; }
+    table[data-getirstok-ret="orders"] > tbody > tr.ant-table-row:hover > td { background: #faf8ff !important; }
+    table[data-getirstok-ret="orders"] > tbody > tr.ant-table-row.is-expanded > td {
+      background: #f7f4ff !important;
+    }
+    table[data-getirstok-ret="orders"] > tbody > tr.ant-table-row.is-expanded > td:first-child {
+      box-shadow: inset 4px 0 0 #7c5cdb;
+    }
+    /* Aç / kapat */
+    table[data-getirstok-ret="orders"] td[data-getirstok-ret-col="expand"] { width: 56px; }
+    table[data-getirstok-ret="orders"] td[data-getirstok-ret-col="expand"] .ant-btn {
+      width: 34px !important;
+      height: 34px !important;
+      min-width: 0 !important;
+      padding: 0 !important;
+      border-radius: 50% !important;
+      border: 1px solid #e4def4 !important;
+      background: #ffffff !important;
+      color: #5d3ebc !important;
+      font-size: 18px !important;
+      transition: background 0.15s ease, color 0.15s ease, transform 0.15s ease;
+    }
+    table[data-getirstok-ret="orders"] td[data-getirstok-ret-col="expand"] .ant-btn:hover {
+      background: #5d3ebc !important;
+      color: #ffffff !important;
+      transform: scale(1.06);
+    }
+    /* Kişiler: baş harf rozeti */
+    table[data-getirstok-ret="orders"] td[data-getirstok-ret-initials] { white-space: nowrap; }
+    table[data-getirstok-ret="orders"] td[data-getirstok-ret-initials]::before {
+      content: attr(data-getirstok-ret-initials);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 28px;
+      height: 28px;
+      margin-right: 9px;
+      border-radius: 50%;
+      font-size: 10.5px;
+      font-weight: 800;
+      letter-spacing: 0.02em;
+      color: #ffffff;
+      vertical-align: middle;
+      background: linear-gradient(135deg, #a78bfa, #7c3aed);
+    }
+    table[data-getirstok-ret="orders"] td[data-getirstok-ret-col="customer"] {
+      font-size: 14.5px !important;
+      font-weight: 700 !important;
+      color: #1f1b2e !important;
+    }
+    table[data-getirstok-ret="orders"] td[data-getirstok-ret-col="courier"]::before {
+      background: linear-gradient(135deg, #60a5fa, #2563eb);
+    }
+    table[data-getirstok-ret="orders"] td[data-getirstok-ret-col="picker"]::before {
+      background: linear-gradient(135deg, #2dd4bf, #0d9488);
+    }
+    table[data-getirstok-ret="orders"] td[data-getirstok-ret-col="courier"],
+    table[data-getirstok-ret="orders"] td[data-getirstok-ret-col="picker"] {
+      font-weight: 600 !important;
+    }
+    table[data-getirstok-ret="orders"] td[data-getirstok-ret-col="date"] {
+      white-space: nowrap;
+      font-size: 12.5px !important;
+      font-variant-numeric: tabular-nums;
+      color: #6b6580 !important;
+    }
+    /* Ürün sayısı */
+    table[data-getirstok-ret="orders"] td[data-getirstok-ret-count] { font-size: 0 !important; }
+    table[data-getirstok-ret="orders"] td[data-getirstok-ret-count]::before {
+      content: attr(data-getirstok-ret-count);
+      display: inline-flex;
+      padding: 3px 11px;
+      border-radius: 999px;
+      background: #ede7fc;
+      color: #5d3ebc;
+      font-size: 12.5px;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+    /* İadeyi Kabul Et */
+    table[data-getirstok-ret="orders"] td[data-getirstok-ret-col="action"] { text-align: right; }
+    table[data-getirstok-ret="orders"] td[data-getirstok-ret-col="action"] .ant-btn {
+      height: 36px !important;
+      padding: 0 16px !important;
+      border: none !important;
+      border-radius: 10px !important;
+      background: linear-gradient(135deg, #22c55e, #16a34a) !important;
+      color: #ffffff !important;
+      font-size: 13px !important;
+      font-weight: 700 !important;
+      box-shadow: 0 6px 14px -6px rgba(22, 163, 74, 0.65) !important;
+      transition: transform 0.15s ease, filter 0.15s ease;
+    }
+    table[data-getirstok-ret="orders"] td[data-getirstok-ret-col="action"] .ant-btn:hover {
+      transform: translateY(-1px);
+      filter: brightness(1.06);
+    }
+
+    /* ── Açılan satır: ürün kartı ── */
+    table[data-getirstok-ret="orders"] > tbody > tr.ant-table-expanded-row > td {
+      padding: 4px 14px 16px 70px !important;
+      background: #f7f4ff !important;
+      border: none !important;
+    }
+    table[data-getirstok-ret="items"] {
+      background: #ffffff;
+      border: 1px solid #ebe6f7 !important;
+      border-radius: 14px;
+      overflow: hidden;
+      border-collapse: separate !important;
+      border-spacing: 0;
+      box-shadow: 0 6px 18px -12px rgba(93, 62, 188, 0.35);
+    }
+    table[data-getirstok-ret="items"] > thead > tr > th { background: #ffffff !important; padding: 9px 14px !important; }
+    table[data-getirstok-ret="items"] > tbody > tr > td {
+      padding: 10px 14px !important;
+      vertical-align: middle !important;
+      background: #ffffff !important;
+      border: none !important;
+      border-top: 1px solid #f4f2f9 !important;
+    }
+    table[data-getirstok-ret="items"] > tbody > tr:first-child > td { border-top: none !important; }
+    table[data-getirstok-ret="items"] td[data-getirstok-ret-col="image"] { width: 72px; }
+    table[data-getirstok-ret="items"] td[data-getirstok-ret-col="image"] .ant-image,
+    table[data-getirstok-ret="items"] td[data-getirstok-ret-col="image"] .ant-image-img {
+      width: 52px !important;
+      height: 52px !important;
+    }
+    table[data-getirstok-ret="items"] td[data-getirstok-ret-col="image"] .ant-image {
+      box-sizing: border-box;
+      border-radius: 12px;
+      border: 1px solid #eeebf6;
+      background: #ffffff;
+      overflow: hidden;
+    }
+    table[data-getirstok-ret="items"] td[data-getirstok-ret-col="image"] .ant-image-img {
+      box-sizing: border-box;
+      padding: 3px;
+      object-fit: contain;
+    }
+    table[data-getirstok-ret="items"] td[data-getirstok-ret-col="image"] .ant-image-mask { border-radius: 12px; }
+    table[data-getirstok-ret="items"] td[data-getirstok-ret-col="name"] {
+      font-size: 14px !important;
+      font-weight: 700 !important;
+      line-height: 1.35;
+      color: #1f1b2e !important;
+    }
+    /* Neden */
+    table[data-getirstok-ret="items"] td[data-getirstok-ret-reason] { font-size: 0 !important; }
+    table[data-getirstok-ret="items"] td[data-getirstok-ret-reason]::before {
+      content: attr(data-getirstok-ret-reason);
+      display: inline-flex;
+      padding: 3px 11px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 700;
+      white-space: nowrap;
+      background: #f3f2f7;
+      color: #5b5570;
+    }
+    table[data-getirstok-ret="items"] td[data-getirstok-ret-tone="red"]::before { background: #fee2e2; color: #b91c1c; }
+    table[data-getirstok-ret="items"] td[data-getirstok-ret-tone="orange"]::before { background: #ffedd5; color: #c2410c; }
+    table[data-getirstok-ret="items"] td[data-getirstok-ret-tone="amber"]::before { background: #fef3c7; color: #92400e; }
+    table[data-getirstok-ret="items"] td[data-getirstok-ret-tone="blue"]::before { background: #dbeafe; color: #1d4ed8; }
+    /* Lokasyon */
+    table[data-getirstok-ret="items"] td[data-getirstok-ret-loc] { font-size: 0 !important; }
+    table[data-getirstok-ret="items"] td[data-getirstok-ret-loc]::before {
+      content: attr(data-getirstok-ret-loc);
+      display: inline-flex;
+      padding: 3px 9px;
+      border-radius: 8px;
+      font: 700 12px/1.4 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      white-space: nowrap;
+      background: #f3f2f7;
+      color: #5b5570;
+    }
+    table[data-getirstok-ret="items"] td[data-getirstok-ret-loc-tone="red"]::before { background: #fef2f2; color: #b91c1c; box-shadow: inset 0 0 0 1px #fecaca; }
+    table[data-getirstok-ret="items"] td[data-getirstok-ret-loc-tone="violet"]::before { background: #f5f3ff; color: #5d3ebc; box-shadow: inset 0 0 0 1px #ddd6fe; }
+    /* İade adedi kutusu */
+    table[data-getirstok-ret="items"] td[data-getirstok-ret-col="returnQty"] .ant-input-number {
+      width: 88px !important;
+      border-radius: 10px !important;
+      border: 1.5px solid #c4b5fd !important;
+      box-shadow: none !important;
+      overflow: hidden;
+    }
+    table[data-getirstok-ret="items"] td[data-getirstok-ret-col="returnQty"] .ant-input-number-focused,
+    table[data-getirstok-ret="items"] td[data-getirstok-ret-col="returnQty"] .ant-input-number:hover {
+      border-color: #7c5cdb !important;
+    }
+    table[data-getirstok-ret="items"] td[data-getirstok-ret-col="returnQty"] .ant-input-number-input {
+      height: 36px !important;
+      text-align: center !important;
+      font-size: 16px !important;
+      font-weight: 800 !important;
+      color: #5d3ebc !important;
+    }
+    /* Sipariş adedi */
+    table[data-getirstok-ret="items"] th[data-getirstok-ret-col="orderQty"],
+    table[data-getirstok-ret="items"] td[data-getirstok-ret-col="orderQty"] { text-align: center !important; }
+    table[data-getirstok-ret="items"] td[data-getirstok-ret-col="orderQty"] {
+      font-size: 16px !important;
+      font-weight: 800 !important;
+      font-variant-numeric: tabular-nums;
+      color: #8a849d !important;
+    }
+  `;
+  document.head.appendChild(style);
+}
+
+function returnTableColumns(table, byHeader) {
+  const headers = Array.from(table.querySelectorAll(":scope > thead > tr > th"));
+  return headers.map((th, i) => {
+    if (th.classList.contains("ant-table-row-expand-icon-cell")) return "expand";
+    const key = normalizeText(th.textContent).toLocaleLowerCase("tr-TR");
+    if (!key && i === headers.length - 1) return "action";
+    return byHeader[key] || null;
+  });
+}
+
+function markReturnColumns(table, columns, rowSelector) {
+  table.querySelectorAll(":scope > thead > tr > th").forEach((th, i) => setDataAttr(th, "data-getirstok-ret-col", columns[i]));
+  const rows = Array.from(table.querySelectorAll(rowSelector));
+  for (const tr of rows) {
+    Array.from(tr.children).forEach((td, i) => setDataAttr(td, "data-getirstok-ret-col", columns[i] ?? null));
+  }
+  return rows;
+}
+
+function decorateReturnsPage() {
+  if (!RETURN_PAGE_PATH_RE.test(window.location.pathname)) return;
+  for (const table of document.querySelectorAll(".ant-table-wrapper table")) {
+    const orderCols = returnTableColumns(table, RETURN_ORDER_COLUMNS);
+    if (orderCols.includes("customer") && orderCols.includes("count")) {
+      ensureReturnsStyleOnce();
+      ensureRemovalStyleOnce();
+      setDataAttr(table, "data-getirstok-ret", "orders");
+      setDataAttr(table.closest(".ant-table-wrapper"), "data-getirstok-ret-wrap", "orders");
+      const card = table.closest(".ant-card");
+      if (card) {
+        setDataAttr(card, "data-getirstok-rfs-card", "1");
+        setDataAttr(card, "data-getirstok-ret-card", "1");
+      }
+      for (const tr of markReturnColumns(table, orderCols, ":scope > tbody > tr.ant-table-row")) {
+        for (const td of tr.children) {
+          const col = td.getAttribute("data-getirstok-ret-col");
+          if (col === "customer" || col === "courier" || col === "picker") {
+            setDataAttr(td, "data-getirstok-ret-initials", personInitials(td.textContent) || null);
+          } else if (col === "count") {
+            const n = normalizeText(td.textContent);
+            setDataAttr(td, "data-getirstok-ret-count", /^\d+$/.test(n) ? `${n} ürün` : null);
+          }
+        }
+      }
+      continue;
+    }
+    const itemCols = returnTableColumns(table, RETURN_ITEM_COLUMNS);
+    if (itemCols.includes("reason") && itemCols.includes("returnQty")) {
+      setDataAttr(table, "data-getirstok-ret", "items");
+      for (const tr of markReturnColumns(table, itemCols, ":scope > tbody > tr.ant-table-row")) {
+        for (const td of tr.children) {
+          const col = td.getAttribute("data-getirstok-ret-col");
+          const text = normalizeText(td.textContent);
+          if (col === "reason") {
+            setDataAttr(td, "data-getirstok-ret-reason", text || null);
+            setDataAttr(td, "data-getirstok-ret-tone", text ? returnReasonTone(text) : null);
+          } else if (col === "location") {
+            setDataAttr(td, "data-getirstok-ret-loc", text || null);
+            setDataAttr(td, "data-getirstok-ret-loc-tone", text ? returnLocationTone(text) : null);
+          }
+        }
+      }
+    }
+  }
+}
+
+// ── Yeni sayımı listeden onayla ──
+// Getir'in "Onayla" butonu sayım detayı çekmecesindeki "Sayım Detayı" kartının başında (yeni
+// tasarımda gizli). Buton satırın "+"sını açar, çekmecedeki Getir butonuna basar; Getir bir onay
+// sorusu çıkarırsa kullanıcıya bırakılır.
+function syncInventoryApproveButton(actionCell, isNew) {
+  if (!actionCell) return;
+  const existing = actionCell.querySelector(":scope > .getirstok-icl-approve");
+  if (!isNew) {
+    if (existing && existing.dataset.state !== "sending") existing.remove();
+    return;
+  }
+  if (existing) return;
+  const openBtn = actionCell.querySelector(".ant-btn");
+  if (!openBtn) return;
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = "getirstok-icl-approve";
+  btn.textContent = "Onayla";
+  btn.title = "Sayımı onayla (Getir'in detay penceresindeki Onayla butonuna basar)";
+  btn.addEventListener("click", (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (btn.dataset.state === "sending") return;
+    void approveInventoryCheck(btn, openBtn);
+  });
+  actionCell.insertBefore(btn, openBtn);
+}
+
+function findApproveButton() {
+  for (const drawer of document.querySelectorAll(".ant-drawer.ant-drawer-open")) {
+    const b = Array.from(drawer.querySelectorAll("button")).find(
+      (x) => normalizeText(x.textContent).toLocaleLowerCase("tr-TR") === "onayla" && !x.disabled
+    );
+    if (b) return b;
+  }
+  return null;
+}
+
+async function approveInventoryCheck(btn, openBtn) {
+  const setState = (state, text, title) => {
+    btn.dataset.state = state;
+    btn.textContent = text;
+    if (title) btn.title = title;
+  };
+  setState("sending", "Onaylanıyor…");
+  openBtn.click();
+  const getirApprove = await waitForElement(findApproveButton, 8000);
+  if (!getirApprove) {
+    setState("error", "Onaylanamadı", "Sayım penceresinde Onayla butonu bulunamadı; + ile açıp elle deneyin");
+    return;
+  }
+  getirApprove.click();
+  // Getir onay sorusu çıkarırsa (Popconfirm / onay penceresi) kullanıcı yanıtlar
+  const question = await waitForElement(
+    () =>
+      document.querySelector(
+        ".ant-popover:not(.ant-popover-hidden) .ant-popconfirm, .ant-modal-confirm, .ant-popconfirm:not(.ant-popover-hidden)"
+      ),
+    1200
+  );
+  if (question) {
+    setState("idle", "Onayla");
+    showProductFindToast("Getir onay soruyor; açılan pencereden onayı tamamla.");
+    return;
+  }
+  setState("done", "Onaylandı ✓", "Getir'in Onayla butonuna basıldı; liste yenilenince durum değişir");
 }
 
 function inventoryListFilterText(item) {
