@@ -12,10 +12,38 @@ import {
   ACTIVE_WAREHOUSE_TOKEN_DOC_ID,
   ACTIVE_TOKEN_DOC_ID,
   ACTIVE_WAREHOUSE_ID_DOC_ID,
-  DEFAULT_WAREHOUSE_ID,
+  warehouseTokenDocId,
   type GetirToken,
   type GetirTokenType,
 } from "./types";
+import {
+  DEFAULT_PANEL_WAREHOUSE_ID,
+  SOGUKKUYU_WAREHOUSE_ID,
+  isFranchiseWarehouseId,
+} from "./franchiseWarehouses";
+
+/** Depo kimliği panelde tanımlı değilse hata fırlatır (yanlış depoya token yazmayı/okumayı önler) */
+function assertPanelWarehouseId(warehouseId: string): void {
+  if (!isFranchiseWarehouseId(warehouseId)) {
+    throw new Error(`Geçersiz depo ID: ${warehouseId}`);
+  }
+}
+
+/** Token dokümanını yazar; varsa günceller (createdAt korunur), yoksa oluşturur */
+async function upsertTokenDoc(
+  docId: string,
+  token: string,
+  type: GetirTokenType,
+  now: string
+): Promise<void> {
+  const tokenDocRef = doc(db, GETIR_TOKEN_COLLECTION, docId);
+  const existingDoc = await getDoc(tokenDocRef);
+  if (existingDoc.exists()) {
+    await setDoc(tokenDocRef, { token, type, updatedAt: now }, { merge: true });
+  } else {
+    await setDoc(tokenDocRef, { token, type, createdAt: now, updatedAt: now });
+  }
+}
 
 /**
  * Timestamp'i ISO string'e çevir
@@ -29,43 +57,31 @@ function timestampToString(timestamp: Timestamp | null | undefined): string | un
  * Getir token'ı Firestore'a kaydeder (singleton pattern - her tip için ayrı doküman)
  * @param token Bearer token (eyJ...)
  * @param type Token tipi: "franchise" (bayi paneli) veya "warehouse" (depo paneli). Varsayılan: "franchise"
+ * @param warehouseId Depo paneli token'ı hangi depoya ait (yalnızca type "warehouse"). Verilmezse
+ *   Soğukkuyu: depo kimliği göndermeyen eski eklenti Soğukkuyu'dur.
  * @returns Promise<void>
  */
-export async function saveGetirToken(token: string, type: GetirTokenType = "franchise"): Promise<void> {
+export async function saveGetirToken(
+  token: string,
+  type: GetirTokenType = "franchise",
+  warehouseId?: string
+): Promise<void> {
   try {
-    // Token tipine göre doküman ID'sini belirle
-    const docId = type === "warehouse" 
-      ? ACTIVE_WAREHOUSE_TOKEN_DOC_ID 
-      : ACTIVE_FRANCHISE_TOKEN_DOC_ID;
-    
-    const tokenDocRef = doc(db, GETIR_TOKEN_COLLECTION, docId);
-    
-    // Mevcut dokümanı kontrol et
-    const existingDoc = await getDoc(tokenDocRef);
     const now = new Date().toISOString();
-    
-    if (existingDoc.exists()) {
-      // Doküman varsa güncelle
-      await setDoc(
-        tokenDocRef,
-        {
-          token,
-          type,
-          updatedAt: now,
-          // createdAt'i koru, sadece updatedAt'i güncelle
-        },
-        { merge: true }
-      );
-    } else {
-      // Doküman yoksa oluştur
-      await setDoc(tokenDocRef, {
-        token,
-        type,
-        createdAt: now,
-        updatedAt: now,
-      });
+
+    if (type === "warehouse") {
+      const targetId = warehouseId ?? SOGUKKUYU_WAREHOUSE_ID;
+      assertPanelWarehouseId(targetId);
+      await upsertTokenDoc(warehouseTokenDocId(targetId), token, type, now);
+      // Eski tek kayıt yalnızca Soğukkuyu'ya aittir: eski okuyucular ve geri dönüş için hâlâ yazılır
+      if (targetId === SOGUKKUYU_WAREHOUSE_ID) {
+        await upsertTokenDoc(ACTIVE_WAREHOUSE_TOKEN_DOC_ID, token, type, now);
+      }
+      return;
     }
-    
+
+    await upsertTokenDoc(ACTIVE_FRANCHISE_TOKEN_DOC_ID, token, type, now);
+
     // Geriye dönük uyumluluk: Eski "active" dokümanını da güncelle (sadece franchise için)
     if (type === "franchise") {
       const legacyDocRef = doc(db, GETIR_TOKEN_COLLECTION, ACTIVE_TOKEN_DOC_ID);
@@ -125,20 +141,25 @@ export async function getGetirFranchiseToken(): Promise<string | null> {
 }
 
 /**
- * Firestore'dan aktif Getir depo paneli token'ı okur
+ * Firestore'dan bir deponun depo paneli token'ını okur.
+ * Soğukkuyu için depo başına kayıt yoksa eski tek kayda düşer; diğer depolar (Bostanlı) asla
+ * Soğukkuyu'nun token'ını kullanmaz — kendi kaydı yoksa `null` döner.
+ * @param warehouseId Panelde tanımlı depo (varsayılan Soğukkuyu)
  * @returns Promise<string | null> Token varsa token string'i, yoksa null
  */
-export async function getGetirWarehouseToken(): Promise<string | null> {
+export async function getGetirWarehouseToken(
+  warehouseId: string = DEFAULT_PANEL_WAREHOUSE_ID
+): Promise<string | null> {
+  assertPanelWarehouseId(warehouseId);
   try {
-    const tokenDocRef = doc(db, GETIR_TOKEN_COLLECTION, ACTIVE_WAREHOUSE_TOKEN_DOC_ID);
-    const tokenDoc = await getDoc(tokenDocRef);
-    
-    if (!tokenDoc.exists()) {
-      return null;
+    const tokenDoc = await getDoc(doc(db, GETIR_TOKEN_COLLECTION, warehouseTokenDocId(warehouseId)));
+    if (tokenDoc.exists() && tokenDoc.data()?.token) {
+      return tokenDoc.data().token;
     }
-    
-    const data = tokenDoc.data();
-    return data?.token || null;
+
+    if (warehouseId !== SOGUKKUYU_WAREHOUSE_ID) return null;
+    const legacyDoc = await getDoc(doc(db, GETIR_TOKEN_COLLECTION, ACTIVE_WAREHOUSE_TOKEN_DOC_ID));
+    return legacyDoc.exists() ? legacyDoc.data()?.token || null : null;
   } catch (error) {
     console.error("Getir depo paneli token okunamadı:", error);
     throw error;
@@ -229,7 +250,8 @@ export function isValidWarehouseObjectId(id: string): boolean {
 }
 
 /**
- * Eklentinin yakaladığı aktif depo ID'sini Firestore'a kaydeder.
+ * Eski eklentinin yakaladığı depo ID'sini Firestore'a kaydeder (artık hiçbir okuyucusu yok;
+ * depo kimliği token ile birlikte gelir). Yalnızca eski eklentilerin çağrısı bozulmasın diye durur.
  */
 export async function saveGetirWarehouseId(warehouseId: string): Promise<void> {
   const trimmed = warehouseId.trim();
@@ -257,26 +279,14 @@ export async function saveGetirWarehouseId(warehouseId: string): Promise<void> {
 }
 
 /**
- * Firestore'daki yakalanmış depo ID'si. Yoksa null.
+ * Depo paneli API çağrıları için depo ID'si: çağrının yapıldığı depo (varsayılan Soğukkuyu).
+ * Eskiden eklentinin son yakaladığı kayıt okunurdu; iki depo birbirinin kaydını ezmesin diye
+ * artık depo her çağrıda açıkça verilir ve Firestore okuması da gerekmez.
  */
-export async function getSavedGetirWarehouseId(): Promise<string | null> {
-  try {
-    const ref = doc(db, GETIR_TOKEN_COLLECTION, ACTIVE_WAREHOUSE_ID_DOC_ID);
-    const snap = await getDoc(ref);
-    if (!snap.exists()) return null;
-    const id = String(snap.data()?.warehouseId || "").trim();
-    return isValidWarehouseObjectId(id) ? id : null;
-  } catch (error) {
-    console.error("Getir depo ID okunamadı:", error);
-    throw error;
-  }
-}
-
-/**
- * Stok/depo API çağrıları için depo ID: önce eklentinin kaydı, yoksa yedek sabit.
- */
-export async function getActiveWarehouseId(): Promise<string> {
-  const saved = await getSavedGetirWarehouseId();
-  return saved || DEFAULT_WAREHOUSE_ID;
+export async function getActiveWarehouseId(
+  warehouseId: string = DEFAULT_PANEL_WAREHOUSE_ID
+): Promise<string> {
+  assertPanelWarehouseId(warehouseId);
+  return warehouseId;
 }
 

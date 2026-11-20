@@ -1,25 +1,8 @@
-// warehouse.getir.com MAIN world — pişirme önerisi API yanıtlarını yakala
+// warehouse.getir.com MAIN world — depo panelinin API yanıtlarını yakalar (pişirme verisi,
+// giriş/yenileme token'ı, sevkiyat). Hangisinin kullanılacağına içerik betiği depoya göre karar verir.
 (function () {
-  function looksLikeBakePayload(url, json) {
-    const u = String(url || "");
-    if (/bak(e|ing)|oven|suggest|recommend|fresh-bak|pisirme|pişir/i.test(u)) {
-      return true;
-    }
-    try {
-      const s = JSON.stringify(json);
-      if (s.length > 2_000_000) return false;
-      return /08:00|20:00|12:00|16:00|bake|oven|suggest|Pişir|pisir|baking/i.test(
-        s
-      );
-    } catch {
-      return false;
-    }
-  }
-
   function publish(url, json) {
     publishHeatingEstimations(url, json);
-    if (!looksLikeBakePayload(url, json)) return;
-    window.postMessage({ source: "getirstok-bake-hook", url, json }, "*");
   }
 
   // Pişirme Önerileri sayfasının verisi (dilim başına öneri + Raf/Donuk stokları).

@@ -1,5 +1,5 @@
 import { getGetirToken } from "./getirTokenService";
-import { FRANCHISE_WAREHOUSE_ID_SOGUKKUYU } from "./types";
+import { isFranchiseWarehouseId } from "./franchiseWarehouses";
 import { getProductIdByBarcode } from "./barcodeProductMappingService";
 import {
   getProductIdFromMergedCatalog,
@@ -33,7 +33,9 @@ function stockItemProductId(item: unknown): string | null {
 
 /** Barkod → Getir ürün kimliği: önce kayıtlı eşleştirme, sonra katalog */
 export async function resolveProductIdsForBarcodes(
-  barcodes: string[]
+  barcodes: string[],
+  /** Verilirse o deponun kataloğu kullanılır (Bostanlı'ya özgü ürünler için gerekli) */
+  warehouseId?: string
 ): Promise<Map<string, string>> {
   const result = new Map<string, string>();
   const missing: string[] = [];
@@ -48,7 +50,7 @@ export async function resolveProductIdsForBarcodes(
     })
   );
   if (missing.length === 0) return result;
-  const fromCatalog = await getProductIdsFromMergedCatalog(missing);
+  const fromCatalog = await getProductIdsFromMergedCatalog(missing, warehouseId);
   for (const barcode of missing) {
     const pid = fromCatalog.get(barcode);
     if (pid) result.set(barcode, pid);
@@ -65,6 +67,13 @@ export class GetirApiError extends Error {
   ) {
     super(message);
     this.name = "GetirApiError";
+  }
+}
+
+/** Stok okumaları varsayılan depoya düşmez: depo her zaman açıkça verilir ve tanınmalıdır. */
+function assertStockWarehouse(warehouseId: string): void {
+  if (!warehouseId || !isFranchiseWarehouseId(warehouseId)) {
+    throw new GetirApiError("Depo belirtilmedi veya geçersiz.", 400, "INVALID_WAREHOUSE");
   }
 }
 
@@ -89,7 +98,11 @@ function stockItemHasBarcode(item: unknown, barcode: string): boolean {
   return false;
 }
 
-async function fetchFranchiseStockRows(productIds: string[]): Promise<unknown[]> {
+async function fetchFranchiseStockRows(
+  productIds: string[],
+  warehouseId: string
+): Promise<unknown[]> {
+  assertStockWarehouse(warehouseId);
   const unique = [
     ...new Set(
       productIds.map((id) => id.trim()).filter((id) => OBJECT_ID_RE.test(id))
@@ -111,7 +124,7 @@ async function fetchFranchiseStockRows(productIds: string[]): Promise<unknown[]>
 
   try {
     const requestBody = {
-      warehouseIds: [FRANCHISE_WAREHOUSE_ID_SOGUKKUYU],
+      warehouseIds: [warehouseId],
       productIds: unique,
       sort: { available: 1 },
     };
@@ -188,8 +201,10 @@ async function fetchFranchiseStockRows(productIds: string[]): Promise<unknown[]>
  * Getir'e birden fazla ürün ID'si için tek stok isteği atar.
  */
 export async function getGetirStocksByProductIds(
-  productIds: string[]
+  productIds: string[],
+  warehouseId: string
 ): Promise<Map<string, number | null>> {
+  assertStockWarehouse(warehouseId);
   const unique = [
     ...new Set(
       productIds.map((id) => id.trim()).filter((id) => OBJECT_ID_RE.test(id))
@@ -199,7 +214,7 @@ export async function getGetirStocksByProductIds(
   for (const id of unique) result.set(id, null);
   if (unique.length === 0) return result;
 
-  const rows = await fetchFranchiseStockRows(unique);
+  const rows = await fetchFranchiseStockRows(unique, warehouseId);
   for (const item of rows) {
     const pid = stockItemProductId(item);
     if (!pid || !result.has(pid)) continue;
@@ -221,14 +236,99 @@ export async function getGetirStocksByProductIds(
   return result;
 }
 
+export type GetirStockProductInfo = {
+  name: string | null;
+  barcodes: string[];
+  imageUrl: string | null;
+};
+
+function localizedText(value: unknown): string | null {
+  if (typeof value === "string") return value.trim() || null;
+  if (value && typeof value === "object") {
+    const o = value as Record<string, unknown>;
+    for (const key of ["tr", "en"]) {
+      const v = o[key];
+      if (typeof v === "string" && v.trim()) return v.trim();
+    }
+  }
+  return null;
+}
+
+function stockItemInfo(item: unknown): GetirStockProductInfo {
+  const o = (item && typeof item === "object" ? item : {}) as Record<string, unknown>;
+  const barcodes: string[] = [];
+  const packagingInfo = o.packagingInfo;
+  if (packagingInfo && typeof packagingInfo === "object") {
+    for (const key of Object.keys(packagingInfo as object)) {
+      if (key === "pickingType") continue;
+      const packaging = (packagingInfo as Record<string, unknown>)[key];
+      if (!packaging || typeof packaging !== "object") continue;
+      const list = (packaging as { barcodes?: unknown }).barcodes;
+      if (!Array.isArray(list)) continue;
+      for (const b of list) {
+        const s = String(b).trim();
+        if (s && !barcodes.includes(s)) barcodes.push(s);
+      }
+    }
+  }
+  const picURLs = o.picURLs as Record<string, unknown> | undefined;
+  const firstPic = (list: unknown): string | null =>
+    Array.isArray(list) && typeof list[0] === "string" ? list[0] : null;
+  return {
+    name: localizedText(o.fullName) ?? localizedText(o.name),
+    barcodes,
+    imageUrl:
+      localizedText(o.picURL) ?? firstPic(picURLs?.tr) ?? firstPic(picURLs?.en),
+  };
+}
+
+/**
+ * Ürün ID'lerinin ad / barkodlar / görsel bilgisi (deponun stok kaydından).
+ * Katalogda olmayan (ör. elle eklenen) ürünlerin barkoduyla eşleşebilmek için.
+ * Hata olursa boş döner; çağıran taraf bunsuz da çalışmalı.
+ */
+export async function getGetirStockProductInfoByProductIds(
+  productIds: readonly string[],
+  warehouseId: string
+): Promise<Map<string, GetirStockProductInfo>> {
+  const result = new Map<string, GetirStockProductInfo>();
+  const unique = [
+    ...new Set(
+      productIds.map((id) => id.trim()).filter((id) => OBJECT_ID_RE.test(id))
+    ),
+  ];
+  const CHUNK = 100;
+  const chunks: string[][] = [];
+  for (let i = 0; i < unique.length; i += CHUNK) {
+    chunks.push(unique.slice(i, i + CHUNK));
+  }
+  const PARALLEL = 4;
+  for (let i = 0; i < chunks.length; i += PARALLEL) {
+    await Promise.all(
+      chunks.slice(i, i + PARALLEL).map(async (chunk) => {
+        try {
+          const rows = await fetchFranchiseStockRows(chunk, warehouseId);
+          for (const item of rows) {
+            const pid = stockItemProductId(item);
+            if (pid) result.set(pid, stockItemInfo(item));
+          }
+        } catch (error) {
+          console.warn("[Getir API] Ürün bilgisi alınamadı:", error);
+        }
+      })
+    );
+  }
+  return result;
+}
+
 /**
  * Getir API'den belirli bir ürün ID'si için stok miktarını çeker (HIZLI YÖNTEM)
  */
 export async function getGetirStockByProductId(
   productId: string,
-  _warehouseIds: string[] = []
+  warehouseId: string
 ): Promise<number | null> {
-  const map = await getGetirStocksByProductIds([productId]);
+  const map = await getGetirStocksByProductIds([productId], warehouseId);
   return map.get(productId.trim()) ?? null;
 }
 
@@ -236,8 +336,10 @@ export async function getGetirStockByProductId(
  * Barkod listesi → raf adedi. Kimliği olmayan barkodlar Getir taramasına düşmez (null).
  */
 export async function getGetirStocksByBarcodes(
-  barcodes: string[]
+  barcodes: string[],
+  warehouseId: string
 ): Promise<Record<string, number | null>> {
+  assertStockWarehouse(warehouseId);
   const unique = [
     ...new Set(barcodes.map((b) => b.trim()).filter((b) => b.length > 0)),
   ];
@@ -245,11 +347,11 @@ export async function getGetirStocksByBarcodes(
   for (const barcode of unique) stocks[barcode] = null;
   if (unique.length === 0) return stocks;
 
-  const idByBarcode = await resolveProductIdsForBarcodes(unique);
+  const idByBarcode = await resolveProductIdsForBarcodes(unique, warehouseId);
   const productIds = [...new Set(idByBarcode.values())];
   if (productIds.length === 0) return stocks;
 
-  const rows = await fetchFranchiseStockRows(productIds);
+  const rows = await fetchFranchiseStockRows(productIds, warehouseId);
   for (const [barcode, productId] of idByBarcode) {
     const byId = rows.find((item) => stockItemProductId(item) === productId);
     const availableById = (byId as { available?: unknown } | undefined)
@@ -277,7 +379,11 @@ export async function getGetirStocksByBarcodes(
  * @returns Promise<number | null> Stok miktarı (ürün bulunamazsa veya hata varsa null)
  * @throws GetirApiError Token yoksa veya network hatası varsa
  */
-export async function getGetirStock(barcode: string): Promise<number | null> {
+export async function getGetirStock(
+  barcode: string,
+  warehouseId: string
+): Promise<number | null> {
+  assertStockWarehouse(warehouseId);
   try {
     console.log("[Getir API] Fetching stock for barcode:", barcode);
 
@@ -285,7 +391,7 @@ export async function getGetirStock(barcode: string): Promise<number | null> {
     const productIdFromMapping = await getProductIdByBarcode(barcode);
     const productIdFromCatalog = productIdFromMapping
       ? null
-      : await getProductIdFromMergedCatalog(barcode);
+      : await getProductIdFromMergedCatalog(barcode, warehouseId);
     const productId = productIdFromMapping ?? productIdFromCatalog;
 
     if (productId) {
@@ -295,7 +401,7 @@ export async function getGetirStock(barcode: string): Promise<number | null> {
           : "[Getir API] Product ID found in catalog (json/supplemental), using fast method:",
         productId
       );
-      return await getGetirStockByProductId(productId);
+      return await getGetirStockByProductId(productId, warehouseId);
     }
 
     // Ürün ID'si bulunamadı - eski yöntemle (pagination ile) arama yap
@@ -327,7 +433,7 @@ export async function getGetirStock(barcode: string): Promise<number | null> {
       console.log("[Getir API] Fetching stocks from Getir API...");
       
       const requestBody = {
-        warehouseIds: [FRANCHISE_WAREHOUSE_ID_SOGUKKUYU],
+        warehouseIds: [warehouseId],
         sort: {
           available: 1,
         },

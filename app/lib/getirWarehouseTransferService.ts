@@ -1,5 +1,7 @@
 import { getCatalogInfoByProductIds } from "./catalogProductIdResolver";
+import { getGetirStockProductInfoByProductIds } from "./getirApiService";
 import { getGetirWarehouseToken } from "./getirTokenService";
+import { DEFAULT_PANEL_WAREHOUSE_ID, warehouseName } from "./franchiseWarehouses";
 import { GetirWarehouseApiError } from "./getirWarehouseApiService";
 import { istanbulDayToUtcIsoRange, IstanbulDayBoundsError } from "./istanbulDayBounds";
 import {
@@ -17,14 +19,53 @@ export type TransferListRow = {
   palletCodes: string[];
 };
 
+/** Palet kodu -> o paletteki adet. null = bilinmiyor (satır birden fazla palete ait). */
+export type PalletQuantities = Record<string, number | null>;
+
 export type TransferProductRow = {
   name: string | null;
   barcode: string | null;
   quantity: number | null;
   palletCodes: string[];
+  palletQuantities?: PalletQuantities;
   productId: string | null;
   transferOrderNumbers: string[];
+  /** Ürüne ait tüm bilinen barkodlar (eşleştirme için; `barcode` ana barkod) */
+  barcodes?: string[];
+  imageUrl?: string | null;
 };
+
+/**
+ * Tek bir ürün satırının adedi, yalnızca satır tek bir palete aitse o palete yazılır.
+ * Satır birden fazla palet koduna sahipse adet paylaştırılamaz (null).
+ */
+function palletQuantitiesForRow(
+  palletCodes: readonly string[],
+  quantity: number | null
+): PalletQuantities {
+  const out: PalletQuantities = {};
+  const unique = [...new Set(palletCodes)];
+  for (const code of unique) {
+    out[code] = unique.length === 1 ? quantity : null;
+  }
+  return out;
+}
+
+function mergePalletQuantities(
+  a: PalletQuantities | undefined,
+  b: PalletQuantities | undefined
+): PalletQuantities {
+  const out: PalletQuantities = { ...(a ?? {}) };
+  for (const [code, qty] of Object.entries(b ?? {})) {
+    if (!(code in out)) {
+      out[code] = qty;
+      continue;
+    }
+    const prev = out[code];
+    out[code] = prev == null || qty == null ? null : prev + qty;
+  }
+  return out;
+}
 
 /** Liste POST gövdesindeki tarih alanı (query string'de yok). */
 export const TRANSFER_LIST_DATE_FIELD = "createdAt";
@@ -315,6 +356,50 @@ export async function enrichTransferProductsFromCatalog(
   });
 }
 
+const PLACEHOLDER_NAME_RE = /^Ürün [0-9a-f]{6}$/i;
+
+/**
+ * Katalogda olmayan ürünler (ör. panele elle eklenenler) teslimat detayında yalnızca
+ * ürün ID'siyle gelir. Deponun stok kaydından ad, tüm barkodlar ve görsel alınır ki
+ * barkodla eşleşebilsinler. Alınamazsa satırlar olduğu gibi kalır.
+ */
+export async function enrichTransferProductsFromStock(
+  rows: TransferProductRow[],
+  warehouseId: string
+): Promise<TransferProductRow[]> {
+  const ids = [
+    ...new Set(
+      rows.map((row) => row.productId).filter((id): id is string => Boolean(id))
+    ),
+  ];
+  if (ids.length === 0) return rows;
+  let info: Awaited<ReturnType<typeof getGetirStockProductInfoByProductIds>>;
+  try {
+    info = await getGetirStockProductInfoByProductIds(ids, warehouseId);
+  } catch {
+    return rows;
+  }
+  return rows.map((row) => {
+    const found = row.productId ? info.get(row.productId) : undefined;
+    if (!found) return row;
+    const barcodes = [
+      ...new Set(
+        [row.barcode?.trim() ?? "", ...(row.barcodes ?? []), ...found.barcodes].filter(
+          (b) => b.length > 0
+        )
+      ),
+    ];
+    const hasRealName = Boolean(row.name) && !PLACEHOLDER_NAME_RE.test(row.name ?? "");
+    return {
+      ...row,
+      name: hasRealName ? row.name : found.name || row.name,
+      barcode: row.barcode?.trim() || barcodes[0] || null,
+      barcodes,
+      imageUrl: row.imageUrl || found.imageUrl,
+    };
+  });
+}
+
 function parseProductRowsFromRoot(root: unknown): TransferProductRow[] {
   const inheritedPallets = new Set<string>();
   collectPalletCodes(root, inheritedPallets);
@@ -342,6 +427,21 @@ function parseProductRowsFromRoot(root: unknown): TransferProductRow[] {
     if (palletCodes.size === 0) {
       inheritedPallets.forEach((code) => palletCodes.add(code));
     }
+    const quantity =
+      pickNumber(row, [
+        "receivedCount",
+        "orderedCount",
+        "quantity",
+        "sentQuantity",
+        "receivedQuantity",
+        "transferredQuantity",
+        "plannedQuantity",
+        "packedQuantity",
+        "amount",
+        "count",
+        "qty",
+      ]) ?? pickNumber(nameSource, ["quantity", "count", "qty"]);
+    const rowPalletCodes = [...palletCodes];
     return {
       name: pickString(nameSource, [
         "name",
@@ -359,21 +459,9 @@ function parseProductRowsFromRoot(root: unknown): TransferProductRow[] {
         "urunAd",
       ]),
       barcode: pickBarcode(nameSource) || pickBarcode(row),
-      quantity:
-        pickNumber(row, [
-          "receivedCount",
-          "orderedCount",
-          "quantity",
-          "sentQuantity",
-          "receivedQuantity",
-          "transferredQuantity",
-          "plannedQuantity",
-          "packedQuantity",
-          "amount",
-          "count",
-          "qty",
-        ]) ?? pickNumber(nameSource, ["quantity", "count", "qty"]),
-      palletCodes: [...palletCodes],
+      quantity,
+      palletCodes: rowPalletCodes,
+      palletQuantities: palletQuantitiesForRow(rowPalletCodes, quantity),
       productId: pickProductId(row),
       transferOrderNumbers: [],
     };
@@ -531,12 +619,13 @@ function transferListScore(payload: unknown): number {
 
 export async function replayWarehouseTransferCapture(
   capture: WarehouseTransferCapture,
-  options?: { listDateYmd?: string; pickRichestList?: boolean }
+  options?: { listDateYmd?: string; pickRichestList?: boolean; warehouseId?: string }
 ): Promise<unknown> {
-  const token = await getGetirWarehouseToken();
+  const warehouseId = options?.warehouseId ?? DEFAULT_PANEL_WAREHOUSE_ID;
+  const token = await getGetirWarehouseToken(warehouseId);
   if (!token) {
     throw new GetirWarehouseApiError(
-      "Depo paneli token'ı bulunamadı. Transfer listesini açık tutup eklentiyi yenileyin.",
+      `${warehouseName(warehouseId)} depo paneli token'ı bulunamadı. Transfer listesini açık tutup eklentiyi yenileyin.`,
       undefined,
       "NO_TOKEN"
     );
@@ -677,6 +766,7 @@ export function mergeTransferProductsForIncoming(
       map.set(key, {
         ...row,
         palletCodes: [...row.palletCodes],
+        palletQuantities: { ...(row.palletQuantities ?? {}) },
         transferOrderNumbers: [...(row.transferOrderNumbers ?? [])],
       });
       continue;
@@ -688,6 +778,14 @@ export function mergeTransferProductsForIncoming(
     existing.palletCodes = [
       ...new Set([...existing.palletCodes, ...row.palletCodes]),
     ];
+    existing.palletQuantities = mergePalletQuantities(
+      existing.palletQuantities,
+      row.palletQuantities
+    );
+    existing.barcodes = [
+      ...new Set([...(existing.barcodes ?? []), ...(row.barcodes ?? [])]),
+    ];
+    if (!existing.imageUrl && row.imageUrl) existing.imageUrl = row.imageUrl;
     existing.transferOrderNumbers = [
       ...new Set([
         ...(existing.transferOrderNumbers ?? []),
@@ -706,8 +804,11 @@ export type TransferProductPublic = {
   barcode: string | null;
   quantity: number | null;
   palletCodes: string[];
+  palletQuantities: PalletQuantities;
   productId: string | null;
   transferOrderNumbers: string[];
+  barcodes: string[];
+  imageUrl: string | null;
 };
 
 export function toPublicTransferProduct(
@@ -718,6 +819,9 @@ export function toPublicTransferProduct(
     barcode: row.barcode,
     quantity: row.quantity,
     palletCodes: row.palletCodes,
+    palletQuantities: row.palletQuantities ?? {},
+    barcodes: row.barcodes ?? (row.barcode ? [row.barcode] : []),
+    imageUrl: row.imageUrl ?? null,
     productId: row.productId,
     transferOrderNumbers: row.transferOrderNumbers ?? [],
   };
@@ -737,14 +841,15 @@ export type TransferProductsForDateResult = {
 };
 
 export async function getTransferProductsForDate(
-  dateYmd: string
+  dateYmd: string,
+  warehouseId: string = DEFAULT_PANEL_WAREHOUSE_ID
 ): Promise<TransferProductsForDateResult> {
   istanbulDayUtcBoundsForYmd(dateYmd);
 
-  const listCapture = await getWarehouseTransferCapture("list");
+  const listCapture = await getWarehouseTransferCapture("list", warehouseId);
   if (!listCapture || !isInboundTransferListUrl(listCapture.url)) {
     throw new GetirWarehouseApiError(
-      "Transfer listesi henüz yakalanmadı. Depo panelinde Transfer Teslimat Listesi’ni açıp tarihi uygulayın, eklentiyi yenileyin.",
+      `${warehouseName(warehouseId)} için transfer listesi henüz yakalanmadı. Depo panelinde Transfer Teslimat Listesi’ni açıp tarihi uygulayın, eklentiyi yenileyin.`,
       400,
       "NEED_LIST_CAPTURE"
     );
@@ -753,6 +858,7 @@ export async function getTransferProductsForDate(
   const listPayload = await replayWarehouseTransferCapture(listCapture, {
     listDateYmd: dateYmd,
     pickRichestList: true,
+    warehouseId,
   });
   const transfers = parseTransferListRows(listPayload);
   const withIds = transfers.filter((row) => deliveryObjectId(row));
@@ -791,7 +897,7 @@ export async function getTransferProductsForDate(
             url: inboundTransferDetailUrl(listCapture.url, id),
             method: "GET",
             requestBody: null,
-          });
+          }, { warehouseId });
           const parsed = parseTransferProductRows(detailPayload).map(
             (product) => ({
               ...product,
@@ -812,7 +918,8 @@ export async function getTransferProductsForDate(
     for (const rows of chunkRows) collected.push(...rows);
   }
 
-  const enriched = await enrichTransferProductsFromCatalog(collected);
+  const fromCatalog = await enrichTransferProductsFromCatalog(collected);
+  const enriched = await enrichTransferProductsFromStock(fromCatalog, warehouseId);
   const merged = mergeTransferProductsForIncoming(enriched);
   const products = merged.map(toPublicTransferProduct);
 

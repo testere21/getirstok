@@ -3,18 +3,23 @@ import { DpsParseError } from "@/app/lib/dpsParse";
 import { dpsRetentionCutoff, validateDpsRange } from "@/app/lib/dpsRange";
 import { deleteDpsScoresBefore, readDpsScore, writeDpsScore } from "@/app/lib/dpsStore";
 import { DpsApiError, fetchDpsCriteria } from "@/app/lib/getirDpsService";
+import { resolvePanelWarehouseId } from "@/app/lib/franchiseWarehouses";
 import { istanbulTodayYmd } from "@/app/lib/pickerStatsPeriod";
 
 export const runtime = "nodejs";
 
 /**
- * Soğukkuyu DPS puanları. Kayıt varsa kayıttan, yoksa Getir'den çekip kaydeder.
- * `?from=YYYY-MM-DD&to=YYYY-MM-DD[&rank=1]`. CORS başlığı yok.
+ * Bir deponun DPS puanları. Kayıt varsa kayıttan, yoksa Getir'den çekip kaydeder.
+ * `?from=YYYY-MM-DD&to=YYYY-MM-DD[&rank=1][&warehouseId=…]` (depo verilmezse Soğukkuyu). CORS başlığı yok.
  */
 export async function GET(request: Request) {
   const url = new URL(request.url);
   const from = url.searchParams.get("from") ?? "";
   const to = url.searchParams.get("to") ?? "";
+  const warehouseId = resolvePanelWarehouseId(url.searchParams.get("warehouseId"));
+  if (!warehouseId) {
+    return NextResponse.json({ success: false, error: "Geçersiz depo." }, { status: 400 });
+  }
   const singleDay = from === to;
   // Sıralama sadece tek gün için anlamlı; tek günde Getir'e her zaman sıralamalı gidilir
   const wantRank = singleDay && url.searchParams.get("rank") === "1";
@@ -26,19 +31,26 @@ export async function GET(request: Request) {
   }
 
   try {
-    const cached = await readDpsScore(from, to);
+    const cached = await readDpsScore(from, to, warehouseId);
     if (cached && (!wantRank || cached.ranked)) {
       return NextResponse.json({ success: true, empty: false, source: "cache", score: cached });
     }
 
-    const result = await fetchDpsCriteria({ from, to, ranked: singleDay });
+    const result = await fetchDpsCriteria({ from, to, ranked: singleDay, warehouseId });
     if (result.empty) {
       return NextResponse.json({ success: true, empty: true, source: null, score: null });
     }
 
-    const score = { ...result.snapshot, from, to, ranked: singleDay, fetchedAt: new Date().toISOString() };
+    const score = {
+      ...result.snapshot,
+      from,
+      to,
+      warehouseId,
+      ranked: singleDay,
+      fetchedAt: new Date().toISOString(),
+    };
     await writeDpsScore(score);
-    console.log("[DPS] Getir'den çekildi ve kaydedildi:", from, to, singleDay ? `sıra ${score.rank}` : "");
+    console.log("[DPS] Getir'den çekildi ve kaydedildi:", warehouseId, from, to, singleDay ? `sıra ${score.rank}` : "");
 
     // Yeni kayıt yazılırken 5 aydan eski kayıtlar temizlenir; hata olursa cevap bozulmasın
     try {

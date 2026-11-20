@@ -53,6 +53,45 @@ Her panel için:
 - `content.js` - Content script (sayfada bildirim gösterme)
 - `popup.html` - Eklenti popup arayüzü
 - `popup.js` - Popup script (token durumunu gösterme)
+- `warehouses.js` - Depo tablosu (Soğukkuyu, Bostanlı) ve depo başına özellik bayrakları
+
+## Depolar ve özellikler (2.1.0)
+
+Tek eklenti iki depoda da çalışır. Depo, sayfa adresindeki `/r/{depo kimliği}/` bölümünden anlaşılır; adreste yoksa en son görülen depo kullanılır. Tanınmayan depoda yalnızca temel düzen çalışır, hiçbir şey sunucuya gönderilmez.
+
+| Özellik | Soğukkuyu | Bostanlı |
+| --- | --- | --- |
+| `layout` (düzen düzeltmeleri) | açık | açık |
+| `boardSearch` (Kontrol Paneli'nde paket arama kutusu) | açık | açık |
+| `bakery` (Fırın sekmesi) | açık | açık |
+| `bakeryStats` (Fırın istatistiği) | açık | açık |
+| `tokenSync` (token gönderimi) | açık | açık |
+| `transferCapture` (Sevkiyat için transfer yakalama) | açık | açık |
+| `barcodeSearch` (sipariş barkod arama) | açık | kapalı |
+| `picking` (Toplama / TM düğmesi, barkod aramaya bağlı) | açık | kapalı |
+| `expiryStock` (SKT stok sütunu) | açık | kapalı |
+
+Eklenti ikonuna tıklayınca açılan pencerenin altındaki **Depo Özellikleri** bölümünden açık sekmedeki (yoksa son görülen) **tanınan depo** için, yani Soğukkuyu ya da Bostanlı, her özelliği "Varsayılan / Açık / Kapalı" yapabilirsiniz. Seçimler yalnızca eklentinin yüklü olduğu bu bilgisayardaki tarayıcıya aittir (başka bilgisayara geçmez). `bakeryStats`, `tokenSync` ve `transferCapture` kilitlidir: pencerede gösterilmez, kayıtlı bir seçim olsa bile her zaman açıktır. Ayarlar parola ile korunur (parola girilmeden seçimler kilitli kalır, pencere kapanınca tekrar kilitlenir). Seçimler `chrome.storage.local` içindeki `featureOverrides` alanında durur; değişiklikten sonra açık Getir depo sayfalarını yenileyin. Tanınmayan depolarda seçim dikkate alınmaz.
+
+### Paket arama kutusu (Kontrol Paneli)
+
+Sipariş panosunun üstünde küçük bir **Paket ara** düğmesi durur; tıklayınca arama çubuğu aşağı doğru açılır. Çubuğun dışına tıklanınca (ya da Esc / düğmeye tekrar basılınca) çubuk kapanır, arama silinir ve pano varsayılan görünümüne döner. Yazılanlara göre kartlar süzülür: **BNK.050** gibi lokasyon, kurye ya da toplayıcı adı, sipariş kodu ve **paket içeriği** (ör. "eker ayran"; birden çok kelimede hepsi aranır, Türkçe harf farkı önemsenmez). Kartta ürün adı görünmediği için eşleşmeyen kartların sipariş pencereleri görünmeden açılıp okunur ve kapatılır (üstte "içerikler okunuyor" yazar); okunanlar 15 dakika önbellekte kalır, sonraki aramalar anında sonuç verir. "Temizle" yazıyı siler. Ayarlardan "Ana ekranda paket arama kutusu" ile kapatılabilir.
+
+### Sayfa görünümleri
+
+Aynı bölümün altındaki **Sayfa Görünümleri** ile Bostanlı'da her sayfa/bölüm için görünüm seçilir (varsayılan: Yeni görünüm). Soğukkuyu hep yeni görünümdedir.
+
+| Sayfa / bölüm | Seçenekler |
+| --- | --- |
+| Sol menü, Kontrol Paneli üst sekmeleri, Sipariş panosu, Kurye / toplayıcı paneli, Sipariş detayı penceresi, Sayım detayı penceresi | Yeni görünüm / Eski görünüm |
+| Satıştan Kaldırma, Ürün Son Kullanma Tarihleri, Sayım Listesi, İade Siparişler | Yeni görünüm / Eski görünüm / Gizli |
+
+- **Yeni görünüm:** eklentinin sadeleştirilmiş hali.
+- **Eski görünüm:** Getir'in kendi hali; eklenti o sayfaya dokunmaz, daha önce eklediklerini kaldırır.
+- **Gizli:** sayfanın ana kartı gizlenir, yerine hiçbir yazı konmaz (yan menüdeki bağlantı kalır).
+- "Sadeleştirilmiş görünüm" özelliği kapalıysa tüm sayfalar eski görünümdedir. Seçimler `pageViews` alanında tutulur; değişiklik açık sayfalara hemen uygulanır (olmazsa sayfayı yenileyin).
+
+Token ve sevkiyat verisi ilgili depo kimliğiyle gönderilir; Bostanlı verisi Soğukkuyu kaydını ezmez. Pişirme önerisini panele yükleme özelliği kaldırıldı.
 
 ## Development vs Production
 

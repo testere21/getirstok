@@ -53,6 +53,264 @@ function showTokenCapturedNotification(panelName) {
 const isFranchisePanel = /^franchise(-v2)?\.getir\.com$/.test(window.location.hostname);
 const isWarehousePanel = window.location.hostname.includes("warehouse.getir.com");
 
+// -----------------------------
+// Tek eklenti, iki depo (Soğukkuyu + Bostanlı): depo sayfa adresindeki `/r/{24 hane}/` kimliğinden
+// algılanır; hangi özelliğin açık olduğu depo tablosundan (warehouses.js) ve kullanıcının ayar
+// seçiminden gelir. Özellikler her kullanımda o anki depoya göre sorulur (`featureOn`), çünkü panel
+// tek sayfalık uygulama: kimlik adrese sayfa açıldıktan sonra da gelebilir.
+// -----------------------------
+
+const WH = globalThis.GETIRSTOK_WAREHOUSES;
+/** Bu sayfa oturumunda adreste görülen son depo (adres sonradan `/r/...` içermese de kaybolmasın) */
+let pageWarehouseSeen = null;
+/** Bu bilgisayarda en son görülen depo (arka plan ve öteki sayfalar da yazar); adreste depo yokken yedek */
+let storedWarehouseId = null;
+/** Ayarlardan gelen seçimler: { depo: { özellik: true | false } } */
+let featureOverrides = {};
+let featureCache = null;
+/** Ayarlardan gelen sayfa görünümü seçimleri: { depo: { sayfa: "new" | "old" | "hidden" } } */
+let pageViewOverrides = {};
+/** Ayarlar değişince görünümün hemen yenilenmesi için (gözlemci kurulunca atanır) */
+let refreshDecorationsNow = () => {};
+/** Kayıtlı ayarlar okundu mu; okunana kadar sayfa "hazır" işaretlenmez (seçilen görünüm bir an bile yanlış çıkmasın) */
+let settingsLoaded = false;
+
+function rememberWarehouseId(id) {
+  if (!isWarehousePanel || !WH.isKnownWarehouse(id) || id === storedWarehouseId) return;
+  storedWarehouseId = id;
+  try {
+    chrome.storage.local.set({ lastWarehouseId: id, lastWarehouseIdCapturedAt: new Date().toISOString() });
+  } catch {
+    /* eklenti bağlamı yok */
+  }
+}
+
+/** Yalnızca bu sayfanın adresinden (ya da bu sayfa oturumunda daha önce görülenden) */
+function pageWarehouseId() {
+  const fromUrl = WH.warehouseIdFromPath(window.location.pathname);
+  if (fromUrl) {
+    pageWarehouseSeen = fromUrl;
+    rememberWarehouseId(fromUrl);
+  }
+  return fromUrl || pageWarehouseSeen;
+}
+
+/** Sayfada depo yoksa bu bilgisayarda son görülen; hiç yoksa null */
+function activeWarehouseId() {
+  return pageWarehouseId() || storedWarehouseId;
+}
+
+/** Bağlantı adresleri için: depo hiç bilinmiyorsa Soğukkuyu (eski eklentinin davranışı) */
+function currentWarehouseId() {
+  return activeWarehouseId() || WH.SOGUKKUYU_ID;
+}
+
+function featureOn(name) {
+  const id = activeWarehouseId();
+  if (!featureCache || featureCache.id !== id || featureCache.overrides !== featureOverrides) {
+    featureCache = { id, overrides: featureOverrides, features: WH.featuresFor(id, featureOverrides) };
+  }
+  return featureCache.features[name] === true;
+}
+
+/**
+ * Bir sayfanın/bölümün görünümü: "new" (eklentinin görünümü) | "old" (Getir'in kendi görünümü) | "hidden".
+ * "Sadeleştirilmiş görünüm" (layout) kapalıysa hepsi eski görünümdür.
+ */
+function pageViewMode(pageKey) {
+  if (!featureOn("layout")) return "old";
+  return WH.pageViewFor(activeWarehouseId(), pageKey, pageViewOverrides);
+}
+
+try {
+  chrome.storage.local.get(["lastWarehouseId", "featureOverrides", "pageViews"], (store) => {
+    const id = WH.normalizeId(store?.lastWarehouseId);
+    if (id && WH.isKnownWarehouse(id)) storedWarehouseId = id;
+    featureOverrides = store?.featureOverrides && typeof store.featureOverrides === "object" ? store.featureOverrides : {};
+    pageViewOverrides = store?.pageViews && typeof store.pageViews === "object" ? store.pageViews : {};
+    settingsLoaded = true;
+    refreshDecorationsNow();
+  });
+  // Depolama cevap vermezse sayfa gizli kalmasın
+  setTimeout(() => {
+    if (settingsLoaded) return;
+    settingsLoaded = true;
+    refreshDecorationsNow();
+  }, 1500);
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area !== "local") return;
+    if (changes.featureOverrides) {
+      const next = changes.featureOverrides.newValue;
+      featureOverrides = next && typeof next === "object" ? next : {};
+    }
+    if (changes.pageViews) {
+      const next = changes.pageViews.newValue;
+      pageViewOverrides = next && typeof next === "object" ? next : {};
+    }
+    if (changes.featureOverrides || changes.pageViews) refreshDecorationsNow();
+    if (changes.lastWarehouseId) {
+      const id = WH.normalizeId(changes.lastWarehouseId.newValue);
+      if (id && WH.isKnownWarehouse(id)) storedWarehouseId = id;
+    }
+  });
+} catch {
+  /* eklenti bağlamı yok (ör. test sayfası) */
+  settingsLoaded = true;
+}
+
+// -----------------------------
+// Sayfa görünümleri: "eski görünüm" ve "gizli" için ortak yardımcılar
+// Eklentinin görünümü yalnızca data-getirstok-* nitelikleri, birkaç sınıf ve eklenen elemanlarla
+// çizilir (stiller bunlara bağlı). "Eski görünüm" = bunların kaldırılması; Getir'in sayfası olduğu gibi kalır.
+// "Gizli" = sayfanın ana kartı gizlenir, yerine kısa bir not gelir.
+// -----------------------------
+
+const PAGE_VIEW_SCRUB = {
+  sidebar: {},
+  tabs: { attrs: ["data-getirstok-hidden-tab"], elements: [".getirstok-link-tab"] },
+  board: { attrs: ["data-getirstok-filled-column", "data-getirstok-stage", "data-getirstok-empty-row"] },
+  courier: { attrs: ["data-getirstok-courier"] },
+  orderModal: { classes: ["getirstok-order-modal"], attrs: ["data-getirstok-field", "data-getirstok-filled"] },
+  removal: {
+    attrs: [
+      "data-getirstok-rfs-card",
+      "data-getirstok-rfs-col",
+      "data-getirstok-rfs-initials",
+      "data-getirstok-rfs-name",
+      "data-getirstok-rfs-reason",
+      "data-getirstok-rfs-row",
+      "data-getirstok-rfs-size",
+      "data-getirstok-rfs-skip",
+      "data-getirstok-rfs-skipped",
+      "data-getirstok-rfs-status",
+      "data-getirstok-rfs-table",
+      "data-getirstok-rfs-tone",
+      "data-getirstok-rfs-unit",
+    ],
+  },
+  expiration: {
+    attrs: [
+      "data-getirstok-exp-card",
+      "data-getirstok-exp-col",
+      "data-getirstok-exp-status",
+      "data-getirstok-exp-table",
+    ],
+    elements: [".getirstok-exp-chip"],
+  },
+  inventoryList: {
+    // Sayım listesi kartları Satıştan Kaldırma stilini de paylaşır
+    alsoStrip: [["[data-getirstok-icl-card]", "data-getirstok-rfs-card"]],
+    attrs: [
+      "data-getirstok-icl-auto",
+      "data-getirstok-icl-card",
+      "data-getirstok-icl-col",
+      "data-getirstok-icl-complete",
+      "data-getirstok-icl-hidden",
+      "data-getirstok-icl-progress",
+      "data-getirstok-icl-status",
+      "data-getirstok-icl-table",
+      "data-getirstok-icl-tone",
+    ],
+    elements: [".getirstok-icl-approve"],
+  },
+  returns: {
+    alsoStrip: [["[data-getirstok-ret-card]", "data-getirstok-rfs-card"]],
+    attrs: [
+      "data-getirstok-ret",
+      "data-getirstok-ret-card",
+      "data-getirstok-ret-col",
+      "data-getirstok-ret-count",
+      "data-getirstok-ret-initials",
+      "data-getirstok-ret-loc",
+      "data-getirstok-ret-loc-tone",
+      "data-getirstok-ret-reason",
+      "data-getirstok-ret-tone",
+      "data-getirstok-ret-wrap",
+    ],
+  },
+  inventoryTask: {
+    attrs: [
+      "data-getirstok-ic-col",
+      "data-getirstok-ic-drawer",
+      "data-getirstok-ic-hidden",
+      "data-getirstok-ic-open",
+      "data-getirstok-ic-state",
+      "data-getirstok-ic-stock",
+      "data-getirstok-ic-table",
+      "data-getirstok-ic-title",
+      "data-getirstok-ic-v",
+      "data-getirstok-ic-warn",
+      "data-getirstok-itd-drawer",
+      "data-getirstok-itd-open",
+      "data-getirstok-itd-row",
+      "data-getirstok-itd-show",
+    ],
+    elements: ["tr.getirstok-itd-tr"],
+  },
+};
+
+const pageViewSelectors = {};
+function pageViewSelectorsFor(key) {
+  if (!pageViewSelectors[key]) {
+    const spec = PAGE_VIEW_SCRUB[key] || {};
+    pageViewSelectors[key] = {
+      // Tamamen silinecek elemanlar (eklediklerimiz + gizli sayfa notu)
+      remove: [...(spec.elements || []), `[data-getirstok-hidden-note="${key}"]`].join(","),
+      // Yalnızca nitelik/sınıfı kaldırılacak elemanlar (Getir'in kendi elemanları)
+      strip: [
+        ...(spec.attrs || []).map((a) => `[${a}]`),
+        ...(spec.classes || []).map((c) => `.${c}`),
+        `[data-getirstok-page-hidden="${key}"]`,
+      ].join(","),
+    };
+  }
+  return pageViewSelectors[key];
+}
+
+/** Sayfayı eski (Getir'in kendi) görünümüne döndürür; eklenenleri siler. Yapacak bir şey yoksa ucuz. */
+function revertPageView(key) {
+  const spec = PAGE_VIEW_SCRUB[key];
+  if (!spec) return;
+  const sel = pageViewSelectorsFor(key);
+  for (const [from, attr] of spec.alsoStrip || []) {
+    for (const el of document.querySelectorAll(from)) el.removeAttribute(attr);
+  }
+  for (const el of document.querySelectorAll(sel.remove)) el.remove();
+  for (const el of document.querySelectorAll(sel.strip)) {
+    for (const attr of spec.attrs || []) el.removeAttribute(attr);
+    for (const cls of spec.classes || []) el.classList.remove(cls);
+    el.removeAttribute("data-getirstok-page-hidden");
+  }
+}
+
+function revertAllPageViews() {
+  for (const key of Object.keys(PAGE_VIEW_SCRUB)) revertPageView(key);
+}
+
+function ensurePageViewStyleOnce() {
+  if (document.getElementById("getirstok-pageview-style")) return;
+  const style = document.createElement("style");
+  style.id = "getirstok-pageview-style";
+  style.textContent = `
+    [data-getirstok-page-hidden] { display: none !important; }
+  `;
+  document.head.appendChild(style);
+}
+
+/** "Gizli" görünümde sayfanın ana kartını sessizce gizler (yerine hiçbir yazı konmaz); değilse gizliliği kaldırır */
+function syncPageHidden(card, key, hidden) {
+  if (!card) return;
+  // Önceki sürümün eklediği not varsa temizle
+  const prev = card.previousElementSibling;
+  if (prev && prev.matches(`[data-getirstok-hidden-note="${key}"]`)) prev.remove();
+  if (!hidden) {
+    setDataAttr(card, "data-getirstok-page-hidden", null);
+    return;
+  }
+  ensurePageViewStyleOnce();
+  setDataAttr(card, "data-getirstok-page-hidden", key);
+}
+
 // Storage'dan token yakalama olayını dinle
 chrome.storage.onChanged.addListener((changes, areaName) => {
   if (areaName === "local") {
@@ -62,7 +320,7 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
     }
     
     // Depo Paneli token yakalandı
-    if (changes.lastCapturedAt_warehouse && isWarehousePanel) {
+    if (changes.lastCapturedAt_warehouse && isWarehousePanel && featureOn("tokenSync")) {
       showTokenCapturedNotification("Depo Paneli");
     }
   }
@@ -97,7 +355,17 @@ try {
     rerenderBarcodes();
   });
   // Sayfa açılınca güncel listeyi iste (başka bilgisayarda yapılan düzeltmeler gelsin)
-  chrome.runtime.sendMessage({ type: "GETIRSTOK_BARCODE_OVERRIDES_REFRESH" }, () => void chrome.runtime.lastError);
+  // Yalnızca barkod özelliği açık depoda (Bostanlı'da sunucuya gitmesin). Kısa gecikme: depo
+  // henüz adresten/kayıttan algılanmamış olabilir
+  setTimeout(() => {
+    try {
+      if (featureOn("barcodeSearch")) {
+        chrome.runtime.sendMessage({ type: "GETIRSTOK_BARCODE_OVERRIDES_REFRESH" }, () => void chrome.runtime.lastError);
+      }
+    } catch {
+      /* eklenti yeniden yüklendi */
+    }
+  }, 1500);
 } catch {
   /* eklenti bağlamı yok (ör. test sayfası) */
 }
@@ -1585,6 +1853,11 @@ const ORDER_FIELD_BY_LABEL = {
 function decorateOrderModal(orderTable) {
   const modal = orderTable.closest(".ant-modal-content");
   if (!modal) return;
+  if (pageViewMode("orderModal") !== "new") {
+    // Eski görünüm: pencere Getir'in kendi haliyle kalır
+    revertPageView("orderModal");
+    return;
+  }
   if (!modal.classList.contains("getirstok-order-modal")) {
     modal.classList.add("getirstok-order-modal");
   }
@@ -1611,12 +1884,16 @@ function decorateOrderModal(orderTable) {
 function tryInjectButtons() {
   if (!isFranchisePanel && !isWarehousePanel) return;
   if (isWarehousePanel) {
-    decorateWarehouseLayout();
-    decorateBakeryPage();
+    if (featureOn("layout")) decorateWarehouseLayout();
+    decorateBakeryPage(); // "bakery" ve "bakeryStats" bayrakları kendi içinde
+    if (featureOn("boardSearch")) decorateBoardSearch();
+    else removeBoardSearch();
   }
+  // Sipariş penceresinin yeniden stili de bu stil bloğundadır; barkod kapalı olsa da gerekir
   ensureStyleOnce();
-  tryInjectBarcodeToggleButton();
-  tryInjectPickingButton();
+  const barcodeSearchOn = featureOn("barcodeSearch");
+  if (barcodeSearchOn) tryInjectBarcodeToggleButton();
+  if (featureOn("picking")) tryInjectPickingButton();
 
   // 1) Eğer gerçek <table> varsa: ÜRÜN ADI sütunlarına buton ve barkod ekle
   const tables = Array.from(document.querySelectorAll("table"));
@@ -1641,6 +1918,8 @@ function tryInjectButtons() {
     if (nameColIndices.length === 0) continue;
 
     decorateOrderModal(table);
+    // Barkod eşleştirme/arama kapalıysa (ör. Bostanlı) sipariş penceresi yalnızca yeniden stillenir
+    if (!barcodeSearchOn) continue;
 
     // Her ürün adı sütununun sağındaki ilk "Adet" sütunu (iki sütunlu tabloda kendi adet'i)
     const qtyColByName = new Map();
@@ -1693,6 +1972,8 @@ const BAKE_BRAND_PREFIX_RE = /^La Lorraine\s+/i;
 let heatingStocks = null;
 let lastHeatingJson = null;
 let lastHeatingDataAt = 0;
+/** Son pişirme verisi hangi depo sayfasında alındı (istatistik başka depoya yazılmasın) */
+let lastHeatingWarehouseId = null;
 
 function bakeNameKey(name) {
   return normalizeText(name).toLocaleLowerCase("tr-TR");
@@ -1725,28 +2006,14 @@ function heatingSlotKey(startDate) {
   return null;
 }
 
-/** Panelin Fırın sekmesi için öneriler: ekrandan okumak yerine Getir'in kendi verisinden */
-function bakeItemsFromHeating(json) {
-  const map = {};
-  for (const slot of Array.isArray(json?.data) ? json.data : []) {
-    const key = heatingSlotKey(slot?.startDate);
-    if (!key) continue;
-    for (const p of Array.isArray(slot?.products) ? slot.products : []) {
-      const qty = Number(p?.prediction);
-      const pid = /^[a-f0-9]{24}$/i.test(String(p?.productId || "")) ? p.productId : undefined;
-      mergeBakeItem(map, p?.fullName || p?.name, key, qty, pid);
-    }
-  }
-  return Object.values(map);
-}
-
 function applyHeatingJson(json) {
   heatingStocks = buildHeatingStocks(json);
   lastHeatingJson = json;
   lastHeatingDataAt = Date.now();
-  publishBakeSuggestions(bakeItemsFromHeating(json));
+  lastHeatingWarehouseId = pageWarehouseId();
   bakeAlertItems = heatingAlertItems(json);
-  setBakeAlertTotal(bakeAlertItems.reduce((n, it) => n + it.qty, 0));
+  // Rozet ve ses yalnızca "bakery" açıkken; istatistik kaydı (bakeryStats) bu veriyi ayrıca kullanır
+  setBakeAlertTotal(featureOn("bakery") ? bakeAlertItems.reduce((n, it) => n + it.qty, 0) : 0);
 }
 
 function currentBakeSlotKey(now = new Date()) {
@@ -1980,17 +2247,18 @@ function ensureBakeStyleOnce() {
       background: #faf9fe;
       border-radius: 10px;
     }
-    [data-getirstok-bake-item] .ant-collapse-header-text {
+    /* Getir antd'yi güncelledi: başlık metni kutusu .ant-collapse-header-text → .ant-collapse-title (ikisi de desteklenir) */
+    [data-getirstok-bake-item] :is(.ant-collapse-header-text, .ant-collapse-title) {
       flex: 1 1 auto !important;
       min-width: 0 !important;
     }
-    [data-getirstok-bake-item] .ant-collapse-header-text > div {
+    [data-getirstok-bake-item] :is(.ant-collapse-header-text, .ant-collapse-title) > div {
       display: flex !important;
       align-items: center !important;
       gap: 8px !important;
       flex-direction: row !important;
     }
-    [data-getirstok-bake-item] .ant-collapse-header-text > div > div:first-child {
+    [data-getirstok-bake-item] :is(.ant-collapse-header-text, .ant-collapse-title) > div > div:first-child {
       flex: 1 1 auto;
       min-width: 0;
     }
@@ -2004,7 +2272,7 @@ function ensureBakeStyleOnce() {
       flex-shrink: 0;
       border-radius: 8px !important;
     }
-    [data-getirstok-bake-item] .ant-collapse-header-text > div > div:first-child > div {
+    [data-getirstok-bake-item] :is(.ant-collapse-header-text, .ant-collapse-title) > div > div:first-child > div {
       display: flex !important;
       align-items: center !important;
       gap: 8px !important;
@@ -2093,7 +2361,7 @@ function ensureBakeStyleOnce() {
     }
 
     /* Açılan detay: Satılan / Rezerve / Donuk / Raf */
-    [data-getirstok-bake-item] .ant-collapse-content-box {
+    [data-getirstok-bake-item] :is(.ant-collapse-content-box, .ant-collapse-body) {
       padding: 0 8px 8px 46px !important;
     }
     [data-getirstok-bake-item] [class*="productStocks"] {
@@ -2131,7 +2399,7 @@ function decorateBakeItem(item, isCurrentSlot) {
   const header = item.querySelector(":scope > .ant-collapse-header");
   const nameEl = header?.querySelector(".ant-typography");
   const labelEl = header?.querySelector('[class*="progressBarLabel"]');
-  const row = header?.querySelector(".ant-collapse-header-text > div");
+  const row = header?.querySelector(".ant-collapse-header-text > div, .ant-collapse-title > div");
   if (!nameEl || !labelEl || !row) return;
 
   const fullName = normalizeText(nameEl.textContent);
@@ -2199,7 +2467,8 @@ function decorateBakeItem(item, isCurrentSlot) {
 
 function decorateBakeryPage() {
   if (!BAKE_PAGE_PATH_RE.test(window.location.pathname)) return;
-  ensureBakeStatsButton();
+  if (featureOn("bakeryStats")) ensureBakeStatsButton();
+  if (!featureOn("bakery")) return;
   const cards = Array.from(document.querySelectorAll('[class*="heatingEstimationCard"]'));
   if (cards.length === 0) return;
   ensureBakeStyleOnce();
@@ -2337,7 +2606,11 @@ function sendRuntimeMessage(msg) {
 }
 
 function recordBakeStatsMinute() {
-  if (!lastHeatingJson) return;
+  if (!featureOn("bakeryStats")) return;
+  // Kayıt yalnızca sayfanın deposu kesinse tutulur: yedek ya da varsayılan depoya hiçbir şey yazılmaz
+  const warehouseId = pageWarehouseId();
+  if (!warehouseId || !WH.isKnownWarehouse(warehouseId)) return;
+  if (!lastHeatingJson || lastHeatingWarehouseId !== warehouseId) return;
   if (Date.now() - lastHeatingDataAt > BAKE_STATS_FRESH_MS) return;
   const now = new Date();
   if (!currentBakeSlotKey(now)) return;
@@ -2346,7 +2619,7 @@ function recordBakeStatsMinute() {
   const minute = now.getMinutes();
   const items = bakeAlertItems;
   const total = items.reduce((n, it) => n + it.qty, 0);
-  const rec = ((bakeStatsPending[currentWarehouseId()] ??= {})[day] ??= emptyBakeStatsDay());
+  const rec = ((bakeStatsPending[warehouseId] ??= {})[day] ??= emptyBakeStatsDay());
   const h = (rec.h[hour] ??= { o: "0".repeat(60), a: "0".repeat(60), q: 0 });
   h.o = bitSet(h.o, minute);
   if (total > 0) {
@@ -2382,6 +2655,8 @@ function flushBakeStats() {
 
 function migrateLegacyBakeStats() {
   if (!extensionAlive() || !chrome.storage?.local) return;
+  // 1.8.7'nin yerel kayıtları Soğukkuyu'ya aittir (Bostanlı'da o sürüm kullanılmadı)
+  if (!featureOn("bakeryStats") || pageWarehouseId() !== WH.SOGUKKUYU_ID) return;
   try {
     chrome.storage.local.get(null, async (store) => {
       if (chrome.runtime.lastError || !store) return;
@@ -2392,7 +2667,7 @@ function migrateLegacyBakeStats() {
         const rec = store[k];
         days[k.slice(BAKE_STATS_LEGACY_PREFIX.length)] = { h: rec?.h || {}, ih: {}, slots: rec?.slots || {} };
       }
-      const res = await sendRuntimeMessage({ type: "GETIRSTOK_BAKE_STATS_PUSH", warehouseId: currentWarehouseId(), days });
+      const res = await sendRuntimeMessage({ type: "GETIRSTOK_BAKE_STATS_PUSH", warehouseId: WH.SOGUKKUYU_ID, days });
       if (res?.ok) chrome.storage.local.remove(keys);
     });
   } catch {
@@ -2985,11 +3260,7 @@ const COURIER_STATUS_BY_TEXT = {
   "geri dönüyor": "returning",
 };
 
-function ensureWarehouseLayoutStyleOnce() {
-  if (document.getElementById("getirstok-layout-style")) return;
-  const style = document.createElement("style");
-  style.id = "getirstok-layout-style";
-  style.textContent = `
+const LAYOUT_CSS = `
     /* ── Sol menü ──
        Yapı ve sıra Getir'in; sadece görünüm. Seviyeler: ana başlık → alt başlık (oklu) → sayfa bağlantısı (noktalı).
        Getir üzerine gelince zemini koyu mor, yazıyı beyaz yapıyor (bazısı !important); burada hepsi açık zemin + koyu yazı. */
@@ -3620,7 +3891,53 @@ function ensureWarehouseLayoutStyleOnce() {
     [data-getirstok-courier="available"] [class*="statusInnerTag--"] { background: #dcfce7 !important; color: #15803d !important; }
     [data-getirstok-courier="returning"] [class*="statusInnerTag--"] { background: #fef3c7 !important; color: #92400e !important; }
   `;
-  document.head.appendChild(style);
+
+/**
+ * Yukarıdaki stil dört bölüme ayrılır (başlık yorumlarından); her bölüm kendi `<style>` elemanında durur,
+ * ayarlardaki görünümü "yeni" olan bölümün stili eklenir, "eski" olanınki kaldırılır.
+ */
+const LAYOUT_STYLE_MARKERS = [
+  ["sidebar", "/* ── Sol menü"],
+  ["tabs", "/* ── Üst sekmeler"],
+  ["board", "/* ── Kontrol Paneli: sipariş panosu"],
+  ["courier", "/* ── Kurye / toplayıcı paneli"],
+];
+let layoutCssBySection = null;
+
+function layoutCssSections() {
+  if (layoutCssBySection) return layoutCssBySection;
+  const positions = LAYOUT_STYLE_MARKERS.map(([key, marker]) => [key, LAYOUT_CSS.indexOf(marker)]);
+  const sections = {};
+  if (positions.some(([, at]) => at < 0)) {
+    // Başlık bulunamazsa hepsi tek bölüm gibi davranır (eskisi gibi)
+    for (const [key] of positions) sections[key] = "";
+    sections.sidebar = LAYOUT_CSS;
+  } else {
+    positions.forEach(([key, at], i) => {
+      const end = i + 1 < positions.length ? positions[i + 1][1] : LAYOUT_CSS.length;
+      sections[key] = LAYOUT_CSS.slice(at, end);
+    });
+  }
+  layoutCssBySection = sections;
+  return sections;
+}
+
+/** Her bölümün stilini ayardaki görünüme göre ekler/kaldırır; yapacak bir şey yoksa DOM'a dokunmaz */
+function ensureWarehouseLayoutStyleOnce() {
+  const sections = layoutCssSections();
+  for (const key of Object.keys(sections)) {
+    const id = `getirstok-layout-style-${key}`;
+    const existing = document.getElementById(id);
+    const wanted = pageViewMode(key) === "new" && sections[key] !== "";
+    if (wanted && !existing) {
+      const style = document.createElement("style");
+      style.id = id;
+      style.textContent = sections[key];
+      document.head.appendChild(style);
+    } else if (!wanted && existing) {
+      existing.remove();
+    }
+  }
 }
 
 // Kontrol Paneli üst sekmeleri: iki sekme gizlenir, yerine başka sayfalara giden sekmeler gelir.
@@ -3649,13 +3966,6 @@ const DASHBOARD_LINK_TABS = [
 function addDaysLocalYmd(ymd, days) {
   const [y, m, d] = ymd.split("-").map(Number);
   return localYmd(new Date(y, m - 1, d + days));
-}
-
-/** Adreste depo kimliği yoksa Soğukkuyu */
-const DEFAULT_WAREHOUSE_ID = "6113e59fbb8549d0f20e65f5";
-
-function currentWarehouseId() {
-  return window.location.pathname.match(/\/r\/([a-f0-9]{24})(\/|$)/i)?.[1] ?? DEFAULT_WAREHOUSE_ID;
 }
 
 function dashboardLinkUrl(tab) {
@@ -3881,7 +4191,11 @@ function typeIntoInput(input, value) {
 function findProductFilterSelect(card) {
   const selects = Array.from(
     card.querySelectorAll(".layout__filter .ant-select.ant-select-show-search:not(.ant-select-disabled)")
-  ).filter((s) => !s.closest('[aria-label="saved-queries-dropdown"]'));
+  ).filter(
+    (s) =>
+      !s.closest('[aria-label="saved-queries-dropdown"]') &&
+      !s.querySelector('input[aria-label="saved-queries-dropdown"]')
+  );
   return (
     selects.find((s) =>
       normalizeText(s.querySelector(".ant-select-selection-placeholder")?.textContent)
@@ -4076,6 +4390,12 @@ function createDashboardLinkTab(tab) {
 function decorateDashboardTabs() {
   const list = document.querySelector('.ant-tabs[aria-label="Main navigation tabs"] .ant-tabs-nav-list');
   if (!list) return;
+  if (pageViewMode("tabs") !== "new") {
+    // Eski görünüm: Getir'in sekmeleri olduğu gibi (gizlenenler geri gelir, eklenen sekmeler silinir)
+    revertPageView("tabs");
+    decorateBakeTabBadge();
+    return;
+  }
   let lastHidden = null;
   for (const tab of list.querySelectorAll(":scope > .ant-tabs-tab:not(.getirstok-link-tab)")) {
     const label = normalizeText(tab.querySelector(".ant-tabs-tab-btn")?.textContent).toLocaleLowerCase("tr-TR");
@@ -4101,6 +4421,10 @@ function decorateDashboardTabs() {
 }
 
 function decorateDashboardColumns() {
+  if (pageViewMode("board") !== "new") {
+    revertPageView("board");
+    return;
+  }
   for (const column of document.querySelectorAll('[class*="orderColumn--"]')) {
     const header = column.querySelector('[class*="orderHeader--"]');
     const countText = header?.querySelector(":scope > .ant-typography")?.textContent;
@@ -4109,6 +4433,338 @@ function decorateDashboardColumns() {
     const empty = !hasCards && /^\s*0\s*(\/\s*0\s*)?$/.test(countText ?? "");
     setDataAttr(column, "data-getirstok-filled-column", empty ? null : "1");
     setDataAttr(column, "data-getirstok-stage", ORDER_STAGE_BY_HEADER[title] ?? null);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Ana ekran paket arama (Kontrol Paneli)
+// Kartın görünen metni (sipariş kodu, kurye, toplayıcı, BNK lokasyonu...) anında aranır. Paket içeriği
+// (ürün adları) kartta yoktur: eşleşmeyen kartların sipariş penceresi görünmez biçimde açılıp okunur,
+// kapatılır ve sonuç önbelleğe alınır; sonraki aramalar anında sonuç verir.
+// ---------------------------------------------------------------------------
+const BOARD_SEARCH_ID = "getirstok-board-search";
+const BOARD_SEARCH_CACHE_MS = 15 * 60 * 1000;
+const BOARD_SEARCH_FAIL_MS = 2 * 60 * 1000;
+let boardSearchQuery = "";
+let boardSearchTimer = null;
+let boardScanRunning = false;
+let boardScanDone = 0;
+let boardScanTotal = 0;
+/** kart anahtarı -> { text: aranabilir ürün metni, at } */
+const boardContentCache = new Map();
+/** kart anahtarı -> en son başarısız deneme zamanı */
+const boardScanFailed = new Map();
+
+/** Küçük harf + Türkçe karakterleri sadeleştir ("Eker Ayran" ile "eker ayran" ve "ekér" aynı) */
+function foldSearchText(text) {
+  return normalizeText(text)
+    .toLocaleLowerCase("tr-TR")
+    .replace(/[ıçğöşü]/g, (c) => ({ ı: "i", ç: "c", ğ: "g", ö: "o", ş: "s", ü: "u" })[c]);
+}
+
+function boardSearchTokens() {
+  return foldSearchText(boardSearchQuery).split(" ").filter(Boolean);
+}
+
+function boardOrderCards() {
+  return Array.from(document.querySelectorAll('[class*="orderCard--"]')).filter(
+    (card) => !card.parentElement?.closest('[class*="orderCard--"]')
+  );
+}
+
+/** Kartın kararlı anahtarı: ilk bilgi satırı (sipariş kodu) */
+function boardCardKey(card) {
+  const first = card.querySelector('[class*="textWithIcons--"]');
+  const key = foldSearchText(first?.textContent);
+  return key && key !== "-" ? key : null;
+}
+
+function boardCardMatches(card, tokens) {
+  const key = boardCardKey(card);
+  const cached = key ? boardContentCache.get(key) : null;
+  const haystack = `${foldSearchText(card.textContent)} ${cached?.text ?? ""}`;
+  return tokens.every((t) => haystack.includes(t));
+}
+
+function setBoardSearchStatus(text) {
+  const el = document.querySelector(`#${BOARD_SEARCH_ID} .getirstok-board-search-status`);
+  if (el && el.textContent !== text) el.textContent = text;
+}
+
+function applyBoardFilter() {
+  const tokens = boardSearchTokens();
+  const cards = boardOrderCards();
+  let shown = 0;
+  for (const card of cards) {
+    const match = tokens.length === 0 || boardCardMatches(card, tokens);
+    setDataAttr(card, "data-getirstok-search-hide", match ? null : "1");
+    if (match) shown++;
+  }
+  const clear = document.querySelector(`#${BOARD_SEARCH_ID} .getirstok-board-search-clear`);
+  if (clear) clear.hidden = tokens.length === 0;
+  if (tokens.length === 0) {
+    setBoardSearchStatus("");
+  } else if (boardScanRunning) {
+    setBoardSearchStatus(`${shown} paket · içerikler okunuyor ${boardScanDone}/${boardScanTotal}`);
+  } else {
+    setBoardSearchStatus(`${shown} / ${cards.length} paket`);
+  }
+}
+
+/** Görünür (kapanış animasyonu bitmemiş olanlar dahil) açık sipariş penceresi */
+function visibleOrderModalContent() {
+  for (const wrap of document.querySelectorAll(".ant-modal-wrap")) {
+    if (getComputedStyle(wrap).display === "none") continue;
+    const content = wrap.querySelector(".ant-modal-content");
+    if (content) return content;
+  }
+  return null;
+}
+
+/** Sipariş penceresindeki ürün adları (barkod/gramaj çözümlemesi olmadan) */
+function readModalProductNames(modal) {
+  const names = [];
+  for (const table of modal.querySelectorAll("table")) {
+    const ths = Array.from(table.querySelector("thead")?.querySelectorAll("th") ?? []);
+    const heads = ths.map((th) => normalizeText(th.textContent).toLocaleLowerCase("tr-TR"));
+    const nameCols = heads.flatMap((h, i) => (h.includes("ürün adı") ? [i] : []));
+    if (nameCols.length === 0 || !heads.includes("adet")) continue;
+    for (const tr of table.querySelectorAll("tbody tr")) {
+      const tds = Array.from(tr.querySelectorAll("td"));
+      for (const idx of nameCols) {
+        const name = tds[idx] ? getCleanProductNameFromCell(tds[idx]) : "";
+        if (looksLikeProductName(name)) names.push(name);
+      }
+    }
+  }
+  return names;
+}
+
+async function closeScannedModal(modal) {
+  const wrap = modal.closest(".ant-modal-wrap");
+  const closeBtn = wrap?.querySelector(".ant-modal-close");
+  if (closeBtn) closeBtn.click();
+  else wrap?.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", keyCode: 27, bubbles: true }));
+  if (await waitForElement(() => (visibleOrderModalContent() ? null : true), 2500)) return;
+  // Kapanmadıysa bir kez daha Escape ile dene
+  document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", keyCode: 27, bubbles: true }));
+  await waitForElement(() => (visibleOrderModalContent() ? null : true), 2000);
+}
+
+/** Tek kartın içeriğini okur; başarıda önbelleğe yazar. */
+async function scanBoardCard(card) {
+  const key = boardCardKey(card);
+  if (!key) return false;
+  // Kullanıcının açtığı bir pencere varsa ona dokunma
+  if (visibleOrderModalContent()) {
+    if (!(await waitForElement(() => (visibleOrderModalContent() ? null : true), 3000))) return false;
+  }
+  const root = document.documentElement;
+  root.setAttribute("data-getirstok-scanning", "1");
+  let modal = null;
+  try {
+    simulateClick(card.querySelector('[class*="textWithIcons--"]') || card);
+    modal = await waitForElement(() => visibleOrderModalContent(), 3500);
+    if (!modal) return false;
+    const names = await waitForElement(() => {
+      const found = readModalProductNames(modal);
+      return found.length ? found : null;
+    }, 3500);
+    if (!names) return false;
+    boardContentCache.set(key, { text: foldSearchText(names.join(" ")), at: Date.now() });
+    return true;
+  } finally {
+    if (modal) await closeScannedModal(modal);
+    root.removeAttribute("data-getirstok-scanning");
+  }
+}
+
+function boardCardsNeedingScan(tokens) {
+  const now = Date.now();
+  return boardOrderCards().filter((card) => {
+    const key = boardCardKey(card);
+    if (!key) return false;
+    const cached = boardContentCache.get(key);
+    if (cached && now - cached.at < BOARD_SEARCH_CACHE_MS) return false;
+    const failedAt = boardScanFailed.get(key);
+    if (failedAt && now - failedAt < BOARD_SEARCH_FAIL_MS) return false;
+    return !boardCardMatches(card, tokens);
+  });
+}
+
+async function runBoardScan() {
+  if (boardScanRunning) return;
+  boardScanRunning = true;
+  boardScanDone = 0;
+  try {
+    for (let guard = 0; guard < 300; guard++) {
+      const tokens = boardSearchTokens();
+      if (tokens.length === 0 || !featureOn("boardSearch") || !document.getElementById(BOARD_SEARCH_ID)) break;
+      const pending = boardCardsNeedingScan(tokens);
+      if (pending.length === 0) break;
+      boardScanTotal = boardScanDone + pending.length;
+      applyBoardFilter();
+      const card = pending[0];
+      const ok = await scanBoardCard(card).catch(() => false);
+      const key = boardCardKey(card);
+      if (!ok && key) boardScanFailed.set(key, Date.now());
+      boardScanDone++;
+      applyBoardFilter();
+    }
+  } finally {
+    boardScanRunning = false;
+    document.documentElement.removeAttribute("data-getirstok-scanning");
+    applyBoardFilter();
+  }
+}
+
+function onBoardSearchInput(value) {
+  boardSearchQuery = value;
+  clearTimeout(boardSearchTimer);
+  boardSearchTimer = setTimeout(() => {
+    applyBoardFilter();
+    if (boardSearchTokens().length > 0) void runBoardScan();
+  }, 220);
+}
+
+let boardSearchOpen = false;
+let boardSearchOutsideBound = false;
+
+/** Arama çubuğunu açar/kapatır. Kapanınca arama temizlenir ve pano varsayılan görünümüne döner. */
+function setBoardSearchOpen(open) {
+  const bar = document.getElementById(BOARD_SEARCH_ID);
+  boardSearchOpen = open;
+  if (!bar) return;
+  bar.dataset.open = open ? "1" : "0";
+  bar.querySelector(".getirstok-board-search-toggle")?.setAttribute("aria-expanded", String(open));
+  const input = bar.querySelector(".getirstok-board-search-input");
+  if (open) {
+    setTimeout(() => input?.focus(), 80);
+    return;
+  }
+  clearTimeout(boardSearchTimer);
+  boardSearchQuery = "";
+  if (input) {
+    input.value = "";
+    input.blur();
+  }
+  applyBoardFilter();
+}
+
+function buildBoardSearchBar() {
+  const bar = document.createElement("div");
+  bar.id = BOARD_SEARCH_ID;
+  bar.dataset.open = boardSearchOpen ? "1" : "0";
+
+  const toggle = document.createElement("button");
+  toggle.type = "button";
+  toggle.className = "getirstok-board-search-toggle";
+  toggle.setAttribute("aria-expanded", String(boardSearchOpen));
+  toggle.innerHTML =
+    '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><span>Paket ara</span>';
+  toggle.addEventListener("click", () => setBoardSearchOpen(!boardSearchOpen));
+
+  const panel = document.createElement("div");
+  panel.className = "getirstok-board-search-panel";
+  const row = document.createElement("div");
+  row.className = "getirstok-board-search-row";
+  const input = document.createElement("input");
+  input.type = "search";
+  input.className = "getirstok-board-search-input";
+  input.placeholder = "Ürün (eker ayran), BNK.050, kurye veya toplayıcı adı…";
+  input.autocomplete = "off";
+  input.spellcheck = false;
+  input.value = boardSearchQuery;
+  input.addEventListener("input", () => onBoardSearchInput(input.value));
+  input.addEventListener("keydown", (e) => {
+    e.stopPropagation(); // panelin kısayolları yazarken devreye girmesin
+    if (e.key === "Escape") setBoardSearchOpen(false);
+  });
+  const clear = document.createElement("button");
+  clear.type = "button";
+  clear.className = "getirstok-board-search-clear";
+  clear.textContent = "Temizle";
+  clear.hidden = true;
+  clear.addEventListener("click", () => {
+    input.value = "";
+    onBoardSearchInput("");
+    input.focus();
+  });
+  const status = document.createElement("span");
+  status.className = "getirstok-board-search-status";
+  row.append(input, clear, status);
+  panel.append(row);
+  bar.append(toggle, panel);
+
+  // Çubuğun dışına (gerçek) dokunma/tıklama kapatır; taramanın sahte tıklamaları (isTrusted=false) sayılmaz
+  if (!boardSearchOutsideBound) {
+    boardSearchOutsideBound = true;
+    document.addEventListener(
+      "pointerdown",
+      (e) => {
+        if (!e.isTrusted || !boardSearchOpen) return;
+        const current = document.getElementById(BOARD_SEARCH_ID);
+        if (current && !current.contains(e.target)) setBoardSearchOpen(false);
+      },
+      true
+    );
+  }
+  return bar;
+}
+
+const BOARD_SEARCH_CSS = `
+#${BOARD_SEARCH_ID}{display:flex;flex-direction:column;align-items:flex-start;gap:0;margin:0 0 8px}
+#${BOARD_SEARCH_ID} .getirstok-board-search-toggle{display:inline-flex;align-items:center;gap:6px;height:34px;padding:0 14px;border:1px solid #d9d2ee;border-radius:999px;background:#fff;color:#5d3ebc;font-size:13px;font-weight:600;cursor:pointer;box-shadow:0 1px 3px rgba(93,62,188,.1);transition:background .15s,box-shadow .15s}
+#${BOARD_SEARCH_ID} .getirstok-board-search-toggle:hover{background:#f6f3ff}
+#${BOARD_SEARCH_ID}[data-open="1"] .getirstok-board-search-toggle{background:#5d3ebc;border-color:#5d3ebc;color:#fff}
+#${BOARD_SEARCH_ID} .getirstok-board-search-panel{align-self:stretch;max-height:0;opacity:0;overflow:hidden;visibility:hidden;transition:max-height .22s ease,opacity .18s ease,margin-top .22s ease,visibility 0s linear .22s}
+#${BOARD_SEARCH_ID}[data-open="1"] .getirstok-board-search-panel{max-height:72px;opacity:1;visibility:visible;margin-top:8px;transition:max-height .22s ease,opacity .18s ease,margin-top .22s ease,visibility 0s}
+#${BOARD_SEARCH_ID} .getirstok-board-search-row{display:flex;align-items:center;gap:10px;padding:8px 12px;background:#fff;border:1px solid #e6e0f5;border-radius:12px;box-shadow:0 1px 4px rgba(93,62,188,.08)}
+#${BOARD_SEARCH_ID} .getirstok-board-search-input{flex:1 1 auto;min-width:160px;height:36px;padding:0 12px;border:1px solid #d9d2ee;border-radius:8px;font-size:14px;outline:none;background:#fff}
+#${BOARD_SEARCH_ID} .getirstok-board-search-input:focus{border-color:#5d3ebc;box-shadow:0 0 0 2px rgba(93,62,188,.15)}
+#${BOARD_SEARCH_ID} .getirstok-board-search-clear{height:36px;padding:0 12px;border:1px solid #d9d2ee;border-radius:8px;background:#f6f3ff;color:#5d3ebc;font-weight:600;cursor:pointer}
+#${BOARD_SEARCH_ID} .getirstok-board-search-clear[hidden]{display:none}
+#${BOARD_SEARCH_ID} .getirstok-board-search-status{font-size:13px;font-weight:600;color:#5d3ebc;white-space:nowrap}
+[data-getirstok-search-hide]{display:none!important}
+html[data-getirstok-scanning] .ant-modal-root,html[data-getirstok-scanning] .ant-modal-mask,html[data-getirstok-scanning] .ant-modal-wrap{opacity:0!important;pointer-events:none!important}
+html[data-getirstok-scanning] body{overflow:auto!important;width:auto!important}
+`;
+
+function ensureBoardSearchStyleOnce() {
+  if (document.getElementById("getirstok-board-search-style")) return;
+  const style = document.createElement("style");
+  style.id = "getirstok-board-search-style";
+  style.textContent = BOARD_SEARCH_CSS;
+  (document.head || document.documentElement).appendChild(style);
+}
+
+function removeBoardSearch() {
+  document.getElementById(BOARD_SEARCH_ID)?.remove();
+  for (const card of document.querySelectorAll("[data-getirstok-search-hide]")) {
+    card.removeAttribute("data-getirstok-search-hide");
+  }
+}
+
+function decorateBoardSearch() {
+  const board = document.querySelector('[class*="ordersList--"]');
+  let bar = document.getElementById(BOARD_SEARCH_ID);
+  if (!board) {
+    bar?.remove(); // sipariş panosu olmayan sekmelerde (harita vb.) görünmesin
+    return;
+  }
+  ensureBoardSearchStyleOnce();
+  if (!bar) bar = buildBoardSearchBar();
+  const tabs = board.closest('.ant-tabs[aria-label="Main navigation tabs"]');
+  const holder = tabs?.querySelector(":scope > .ant-tabs-content-holder");
+  if (tabs && holder) {
+    if (bar.parentNode !== tabs || bar.nextElementSibling !== holder) tabs.insertBefore(bar, holder);
+  } else if (bar.nextElementSibling !== board || bar.parentNode !== board.parentNode) {
+    board.parentNode.insertBefore(bar, board);
+  }
+  applyBoardFilter();
+  // Yeni gelen kartlar için (arama açıkken) içerik taraması
+  if (boardSearchTokens().length > 0 && !boardScanRunning && boardCardsNeedingScan(boardSearchTokens()).length > 0) {
+    void runBoardScan();
   }
 }
 
@@ -4133,14 +4789,20 @@ function decorateWarehouseLayout() {
   decorateWarehouseFast();
 
   // Henüz atanmamış bilgi satırları ("-") gizlensin; kart sadece dolu bilgiyi göstersin
-  for (const row of document.querySelectorAll('[class*="orderCard--"] [class*="textWithIcons--"]')) {
-    const value = normalizeText(row.textContent);
-    setDataAttr(row, "data-getirstok-empty-row", value === "-" || value === "" ? "1" : null);
+  if (pageViewMode("board") === "new") {
+    for (const row of document.querySelectorAll('[class*="orderCard--"] [class*="textWithIcons--"]')) {
+      const value = normalizeText(row.textContent);
+      setDataAttr(row, "data-getirstok-empty-row", value === "-" || value === "" ? "1" : null);
+    }
   }
 
-  for (const card of document.querySelectorAll('[class*="courierAndPickerCard--"]')) {
-    const statusText = normalizeText(card.querySelector('[class*="statusInnerTag--"]')?.textContent).toLocaleLowerCase("tr-TR");
-    setDataAttr(card, "data-getirstok-courier", COURIER_STATUS_BY_TEXT[statusText] ?? null);
+  if (pageViewMode("courier") === "new") {
+    for (const card of document.querySelectorAll('[class*="courierAndPickerCard--"]')) {
+      const statusText = normalizeText(card.querySelector('[class*="statusInnerTag--"]')?.textContent).toLocaleLowerCase("tr-TR");
+      setDataAttr(card, "data-getirstok-courier", COURIER_STATUS_BY_TEXT[statusText] ?? null);
+    }
+  } else {
+    revertPageView("courier");
   }
 }
 
@@ -4218,7 +4880,7 @@ function ensureExpirationStyleOnce() {
     [data-getirstok-exp-card] .ant-collapse > .ant-collapse-item {
       border-bottom: none !important;
     }
-    [data-getirstok-exp-card] .ant-collapse-content {
+    [data-getirstok-exp-card] :is(.ant-collapse-content, .ant-collapse-panel) {
       background: transparent !important;
       border-top: none !important;
     }
@@ -4391,6 +5053,17 @@ function setExpirationChip(td, chip) {
   setDataAttr(el, "data-tone", chip.tone);
 }
 
+/**
+ * Tablonun <colgroup> kayıtlarına da sütun işareti koyar; gizlenen sütunların <col>'u da gizlenir.
+ * Yoksa gizli hücreler sıradan çıkınca kalan hücreler sola kayar, genişlikler yanlış sütunlardan
+ * alınır ve sağda boş bir şerit kalır. Sütun sayıları uyuşmazsa dokunulmaz.
+ */
+function markColgroupColumns(table, attr, columns) {
+  const cols = Array.from(table.querySelectorAll(":scope > colgroup > col"));
+  if (cols.length !== columns.length) return;
+  cols.forEach((el, i) => setDataAttr(el, attr, columns[i] ?? null));
+}
+
 function decorateExpirationTable(table) {
   const headerCells = Array.from(table.querySelectorAll(":scope > thead > tr > th"));
   const columns = headerCells.map(
@@ -4399,6 +5072,7 @@ function decorateExpirationTable(table) {
   if (!columns.includes("expiry") || !columns.includes("removal")) return false;
 
   headerCells.forEach((th, i) => setDataAttr(th, "data-getirstok-exp-col", columns[i]));
+  markColgroupColumns(table, "data-getirstok-exp-col", columns);
   // Ölçüm satırı da gizlenmeli; yoksa "table-layout: fixed" gizli sütunların genişliğini korur
   const measureCells = table.querySelectorAll(":scope > tbody > tr.ant-table-measure-row > *");
   measureCells.forEach((cell, i) => setDataAttr(cell, "data-getirstok-exp-col", columns[i] ?? null));
@@ -4427,13 +5101,21 @@ function decorateExpirationTable(table) {
 
 function decorateExpirationPage() {
   if (!EXPIRATION_PAGE_PATH_RE.test(window.location.pathname)) return;
+  const mode = pageViewMode("expiration");
+  if (mode === "old") {
+    revertPageView("expiration");
+    return;
+  }
   for (const table of document.querySelectorAll(".ant-table-wrapper table")) {
     if (!decorateExpirationTable(table)) continue;
     ensureExpirationStyleOnce();
     const wrapper = table.closest(".ant-table-wrapper");
     if (wrapper) setDataAttr(wrapper, "data-getirstok-exp-table", "1");
     const card = table.closest(".ant-card");
-    if (card) setDataAttr(card, "data-getirstok-exp-card", "1");
+    if (card) {
+      setDataAttr(card, "data-getirstok-exp-card", "1");
+      syncPageHidden(card, "expiration", mode === "hidden");
+    }
   }
 }
 
@@ -4561,7 +5243,7 @@ function ensureRemovalStyleOnce() {
     [data-getirstok-rfs-card] .ant-collapse-header {
       padding: 10px 16px 0 !important;
     }
-    [data-getirstok-rfs-card] .ant-collapse-header-text {
+    [data-getirstok-rfs-card] :is(.ant-collapse-header-text, .ant-collapse-title) {
       font-size: 11px !important;
       font-weight: 700 !important;
       letter-spacing: 0.08em;
@@ -4571,11 +5253,11 @@ function ensureRemovalStyleOnce() {
     [data-getirstok-rfs-card] .ant-collapse-expand-icon {
       display: none !important;
     }
-    [data-getirstok-rfs-card] .ant-collapse-content {
+    [data-getirstok-rfs-card] :is(.ant-collapse-content, .ant-collapse-panel) {
       background: transparent !important;
       border-top: none !important;
     }
-    [data-getirstok-rfs-card] .ant-collapse-content-box {
+    [data-getirstok-rfs-card] :is(.ant-collapse-content-box, .ant-collapse-body) {
       padding: 10px 16px 14px !important;
     }
     [data-getirstok-rfs-card] .layout__filter-gap > :not(:last-child) {
@@ -4586,7 +5268,8 @@ function ensureRemovalStyleOnce() {
       gap: 10px !important;
     }
     ${REMOVAL_HIDDEN_FILTERS.map(
-      (label) => `[data-getirstok-rfs-card] .layout__filter > [aria-label="${label}"]`
+      (label) =>
+        `[data-getirstok-rfs-card] .layout__filter > [aria-label="${label}"],\n    [data-getirstok-rfs-card] .layout__filter > :has(input[aria-label="${label}"])`
     ).join(",\n    ")} {
       display: none !important;
     }
@@ -4596,6 +5279,7 @@ function ensureRemovalStyleOnce() {
       min-height: 38px;
     }
     [data-getirstok-rfs-card] .layout__filter .ant-select-selector,
+    [data-getirstok-rfs-card] .layout__filter > .ant-select,
     [data-getirstok-rfs-card] .layout__filter > .ant-picker {
       min-height: 38px !important;
       border-radius: 10px !important;
@@ -4604,12 +5288,15 @@ function ensureRemovalStyleOnce() {
       box-shadow: none !important;
     }
     [data-getirstok-rfs-card] .layout__filter .ant-select-selection-placeholder,
+    [data-getirstok-rfs-card] .layout__filter .ant-select-placeholder,
     [data-getirstok-rfs-card] .layout__filter .ant-picker-input > input::placeholder {
       color: #a59dbd !important;
     }
     [data-getirstok-rfs-card] .layout__filter .ant-select:hover .ant-select-selector,
+    [data-getirstok-rfs-card] .layout__filter > .ant-select:hover,
     [data-getirstok-rfs-card] .layout__filter > .ant-picker:hover,
     [data-getirstok-rfs-card] .layout__filter .ant-select-focused .ant-select-selector,
+    [data-getirstok-rfs-card] .layout__filter > .ant-select-focused,
     [data-getirstok-rfs-card] .layout__filter > .ant-picker-focused {
       border-color: #a78bfa !important;
     }
@@ -4633,7 +5320,8 @@ function ensureRemovalStyleOnce() {
       border-radius: 10px !important;
       border-color: #e4def4 !important;
     }
-    [data-getirstok-rfs-card] [aria-label="saved-queries-dropdown"] .ant-select-selector {
+    [data-getirstok-rfs-card] [aria-label="saved-queries-dropdown"] .ant-select-selector,
+    [data-getirstok-rfs-card] .ant-select:has(input[aria-label="saved-queries-dropdown"]) {
       border-radius: 10px !important;
       border-color: #e4def4 !important;
     }
@@ -4752,7 +5440,7 @@ function ensureRemovalStyleOnce() {
     [data-getirstok-rfs-table] .ant-table-tbody > tr.ant-table-row[data-getirstok-rfs-row] > td[data-getirstok-rfs-col="created"] {
       box-shadow: inset 4px 0 0 var(--getirstok-rfs-accent);
     }
-    [data-getirstok-rfs-table] .ant-table-tbody > tr.ant-table-row[data-getirstok-rfs-row] > td.ant-table-cell-fix-right {
+    [data-getirstok-rfs-table] .ant-table-tbody > tr.ant-table-row[data-getirstok-rfs-row] > td:is(.ant-table-cell-fix-right, .ant-table-cell-fix-end) {
       background: var(--getirstok-rfs-end) !important;
     }
     [data-getirstok-rfs-table] .ant-table-tbody > tr.ant-table-row[data-getirstok-rfs-row] {
@@ -4762,7 +5450,7 @@ function ensureRemovalStyleOnce() {
     [data-getirstok-rfs-table] .ant-table-tbody > tr.ant-table-row[data-getirstok-rfs-row]:hover {
       background: linear-gradient(90deg, var(--getirstok-rfs-hover-start) 0%, var(--getirstok-rfs-hover-end) 100%);
     }
-    [data-getirstok-rfs-table] .ant-table-tbody > tr.ant-table-row[data-getirstok-rfs-row]:hover > td.ant-table-cell-fix-right {
+    [data-getirstok-rfs-table] .ant-table-tbody > tr.ant-table-row[data-getirstok-rfs-row]:hover > td:is(.ant-table-cell-fix-right, .ant-table-cell-fix-end) {
       background: var(--getirstok-rfs-hover-end) !important;
     }
     [data-getirstok-rfs-table] tr[data-getirstok-rfs-row="amber"] {
@@ -4984,12 +5672,13 @@ function decorateRemovalTable(table) {
   const columns = headerCells.map((th) => {
     if (th.classList.contains("ant-table-selection-column")) return "select";
     const key = normalizeText(th.textContent).toLocaleLowerCase("tr-TR");
-    if (!key && th.classList.contains("ant-table-cell-fix-right")) return "action";
+    if (!key && (th.classList.contains("ant-table-cell-fix-right") || th.classList.contains("ant-table-cell-fix-end"))) return "action";
     return REMOVAL_COLUMN_BY_HEADER[key] || null;
   });
   if (!columns.includes("name") || !columns.includes("reason")) return null;
 
   headerCells.forEach((th, i) => setDataAttr(th, "data-getirstok-rfs-col", columns[i]));
+  markColgroupColumns(table, "data-getirstok-rfs-col", columns);
   let skipped = 0;
   // Ölçüm satırı da gizlenmeli; yoksa gizli sütunların genişliği korunur
   table
@@ -5155,6 +5844,11 @@ function decorateRemovalPage() {
     removalDefaultsStarted = false;
     return;
   }
+  const mode = pageViewMode("removal");
+  if (mode === "old") {
+    revertPageView("removal");
+    return;
+  }
   for (const table of document.querySelectorAll(".ant-table-wrapper table")) {
     const skipped = decorateRemovalTable(table);
     if (skipped == null) continue;
@@ -5167,7 +5861,9 @@ function decorateRemovalPage() {
     const card = table.closest(".ant-card");
     if (card) {
       setDataAttr(card, "data-getirstok-rfs-card", "1");
-      if (!removalDefaultsStarted) {
+      syncPageHidden(card, "removal", mode === "hidden");
+      // Gizliyken tarih/sayfa boyutu varsayılanları uygulanmaz (sayfa görünmüyor)
+      if (!removalDefaultsStarted && mode === "new") {
         removalDefaultsStarted = true;
         void applyRemovalDefaults(card);
       }
@@ -5214,7 +5910,10 @@ function ensureInventoryListStyleOnce() {
   style.textContent = `
     [data-getirstok-icl-hidden],
     [data-getirstok-icl-card] [aria-label="saved-queries-dropdown"],
+    [data-getirstok-icl-card] .ant-space-item:has(> .ant-select > .ant-select-content > input[aria-label="saved-queries-dropdown"]),
+    [data-getirstok-icl-card] .ant-select:has(> .ant-select-content > input[aria-label="saved-queries-dropdown"]),
     [data-getirstok-icl-card] .onboarding-save-filter,
+    [data-getirstok-icl-col="blank"],
     [data-getirstok-icl-col="id"],
     [data-getirstok-icl-col="warehouse"],
     [data-getirstok-icl-col="job"],
@@ -5461,15 +6160,20 @@ function decorateInventoryListTable(table) {
   const columns = headerCells.map((th) => {
     if (th.classList.contains("ant-table-selection-column")) return "select";
     const key = normalizeText(th.textContent).toLocaleLowerCase("tr-TR");
-    if (!key && th.classList.contains("ant-table-cell-fix-right")) return "action";
+    if (!key && (th.classList.contains("ant-table-cell-fix-right") || th.classList.contains("ant-table-cell-fix-end"))) return "action";
     return INVENTORY_LIST_COLUMN_BY_HEADER[key] || null;
   });
   if (!columns.includes("progress") || !columns.includes("auto")) return false;
   // Son sütun (satırı açan buton) başlıksız; sabit sağ sütun değilse de sondaki boş başlık
   const last = columns.length - 1;
   if (columns[last] == null && !normalizeText(headerCells[last]?.textContent)) columns[last] = "action";
+  // Yeni antd: seçim sütunundan sonra başlıksız, boş bir sütun daha geliyor → gizlenir
+  headerCells.forEach((th, i) => {
+    if (columns[i] == null && !normalizeText(th.textContent) && !th.querySelector("input, button")) columns[i] = "blank";
+  });
 
   headerCells.forEach((th, i) => setDataAttr(th, "data-getirstok-icl-col", columns[i]));
+  markColgroupColumns(table, "data-getirstok-icl-col", columns);
   table
     .querySelectorAll(":scope > tbody > tr.ant-table-measure-row > *")
     .forEach((cell, i) => setDataAttr(cell, "data-getirstok-icl-col", columns[i] ?? null));
@@ -5814,6 +6518,7 @@ function returnTableColumns(table, byHeader) {
 
 function markReturnColumns(table, columns, rowSelector) {
   table.querySelectorAll(":scope > thead > tr > th").forEach((th, i) => setDataAttr(th, "data-getirstok-ret-col", columns[i]));
+  markColgroupColumns(table, "data-getirstok-ret-col", columns);
   const rows = Array.from(table.querySelectorAll(rowSelector));
   for (const tr of rows) {
     Array.from(tr.children).forEach((td, i) => setDataAttr(td, "data-getirstok-ret-col", columns[i] ?? null));
@@ -5823,6 +6528,11 @@ function markReturnColumns(table, columns, rowSelector) {
 
 function decorateReturnsPage() {
   if (!RETURN_PAGE_PATH_RE.test(window.location.pathname)) return;
+  const mode = pageViewMode("returns");
+  if (mode === "old") {
+    revertPageView("returns");
+    return;
+  }
   for (const table of document.querySelectorAll(".ant-table-wrapper table")) {
     const orderCols = returnTableColumns(table, RETURN_ORDER_COLUMNS);
     if (orderCols.includes("customer") && orderCols.includes("count")) {
@@ -5834,6 +6544,7 @@ function decorateReturnsPage() {
       if (card) {
         setDataAttr(card, "data-getirstok-rfs-card", "1");
         setDataAttr(card, "data-getirstok-ret-card", "1");
+        syncPageHidden(card, "returns", mode === "hidden");
       }
       for (const tr of markReturnColumns(table, orderCols, ":scope > tbody > tr.ant-table-row")) {
         for (const td of tr.children) {
@@ -5938,7 +6649,7 @@ async function approveInventoryCheck(btn, openBtn) {
 
 function inventoryListFilterText(item) {
   const placeholder =
-    item.querySelector(".ant-select-selection-placeholder")?.textContent ||
+    item.querySelector(".ant-select-selection-placeholder, .ant-select-placeholder")?.textContent ||
     (item.matches("input[placeholder]") ? item.getAttribute("placeholder") : "") ||
     item.querySelector("input[placeholder]")?.getAttribute("placeholder") ||
     "";
@@ -5949,17 +6660,24 @@ function hideInventoryListFilters(card) {
   for (const item of card.querySelectorAll(".layout__filter > *")) {
     if (item.closest(".ant-drawer")) continue;
     if (item.hasAttribute("data-getirstok-icl-hidden")) continue;
-    const aria = item.getAttribute("aria-label") || "";
+    // Yeni antd: aria-label sarmalayıcıda değil içteki input'ta
+    const aria = item.getAttribute("aria-label") || item.querySelector("input[aria-label]")?.getAttribute("aria-label") || "";
     const hide =
       INVENTORY_LIST_HIDDEN_FILTER_ARIA_RE.test(aria) ||
       INVENTORY_LIST_HIDDEN_FILTER_TEXTS.has(inventoryListFilterText(item)) ||
       // Depo filtresi seçili ve kilitli geliyor
-      (item.matches(".ant-select-disabled") && !item.querySelector(".ant-select-selection-placeholder"));
+      (item.matches(".ant-select-disabled") &&
+        !item.querySelector(".ant-select-selection-placeholder, .ant-select-placeholder"));
     if (hide) item.setAttribute("data-getirstok-icl-hidden", "1");
   }
 }
 
 function decorateInventoryListPage() {
+  const mode = pageViewMode("inventoryList");
+  if (mode === "old") {
+    revertPageView("inventoryList");
+    return;
+  }
   for (const table of document.querySelectorAll(".ant-table-wrapper table")) {
     if (table.closest(".ant-drawer")) continue;
     if (!decorateInventoryListTable(table)) continue;
@@ -5972,6 +6690,7 @@ function decorateInventoryListPage() {
       setDataAttr(card, "data-getirstok-rfs-card", "1");
       setDataAttr(card, "data-getirstok-icl-card", "1");
       hideInventoryListFilters(card);
+      syncPageHidden(card, "inventoryList", mode === "hidden");
     }
   }
 }
@@ -6081,6 +6800,7 @@ function scheduleExpiryStockRetry() {
 }
 
 function requestExpiryStock(barcodes) {
+  if (!featureOn("expiryStock")) return;
   let added = false;
   for (const b of barcodes) {
     if (!expiryStockNeedsFetch(b) || expiryStockQueue.has(b)) continue;
@@ -6306,14 +7026,17 @@ function ensureInventoryTaskStyleOnce() {
       overflow: hidden !important;
       box-shadow: 0 24px 64px -16px rgba(31, 27, 46, 0.45) !important;
     }
-    .ant-drawer[data-getirstok-ic-drawer] .ant-drawer-content {
+    /* Yeni antd'de .ant-drawer-content + .ant-drawer-wrapper-body yerine tek .ant-drawer-section var */
+    .ant-drawer[data-getirstok-ic-drawer] :is(.ant-drawer-content, .ant-drawer-section) {
       border-radius: 20px !important;
       max-height: min(88vh, 900px);
     }
-    .ant-drawer[data-getirstok-ic-drawer] .ant-drawer-wrapper-body {
+    .ant-drawer[data-getirstok-ic-drawer] :is(.ant-drawer-wrapper-body, .ant-drawer-section) {
       display: flex !important;
       flex-direction: column !important;
+      height: auto !important;
       max-height: min(88vh, 900px);
+      overflow: hidden !important;
     }
     .ant-drawer[data-getirstok-ic-drawer] .ant-drawer-header {
       padding: 14px 18px !important;
@@ -6353,8 +7076,28 @@ function ensureInventoryTaskStyleOnce() {
     .ant-drawer[data-getirstok-ic-drawer] .ant-drawer-body {
       flex: 1 1 auto !important;
       min-height: 0 !important;
+      /* Üst kutuların yükseklik hesabına bağlı kalmadan kendi başına kayar (başlık ≈ 64px) */
+      max-height: calc(min(88vh, 900px) - 64px) !important;
+      overflow-x: hidden !important;
       overflow-y: auto !important;
+      overscroll-behavior: contain;
       padding: 14px 18px 18px !important;
+    }
+    /* Gövdenin içindekiler kendi yükseklik/kaydırma sınırını koymasın; tek kaydıran gövde olsun */
+    .ant-drawer[data-getirstok-ic-drawer] .ant-drawer-body .ant-card,
+    .ant-drawer[data-getirstok-ic-drawer] .ant-drawer-body .ant-card-body,
+    .ant-drawer[data-getirstok-ic-drawer] .ant-drawer-body .ant-spin-nested-loading,
+    .ant-drawer[data-getirstok-ic-drawer] .ant-drawer-body .ant-spin-container,
+    .ant-drawer[data-getirstok-ic-drawer] .ant-drawer-body .ant-table-wrapper {
+      height: auto !important;
+      max-height: none !important;
+      overflow: visible !important;
+    }
+    .ant-drawer[data-getirstok-ic-drawer] .ant-drawer-body .ant-table-body,
+    .ant-drawer[data-getirstok-ic-drawer] .ant-drawer-body .ant-table-content {
+      height: auto !important;
+      max-height: none !important;
+      overflow: visible !important;
     }
     /* "Sayım Detayı" bölümü gizli: sadece ürün listesi */
     [data-getirstok-ic-hidden] {
@@ -6373,7 +7116,7 @@ function ensureInventoryTaskStyleOnce() {
     }
 
     /* Satır sonu butonu */
-    [data-getirstok-ic-table] td.ant-table-cell-fix-right .ant-btn,
+    [data-getirstok-ic-table] td:is(.ant-table-cell-fix-right, .ant-table-cell-fix-end) .ant-btn,
     [data-getirstok-ic-table] td:last-child .ant-btn {
       width: 32px !important;
       height: 32px !important;
@@ -6543,6 +7286,7 @@ function decorateInventoryTaskTable(table) {
 
   const rows = Array.from(table.querySelectorAll(":scope > tbody > tr.ant-table-row"));
   const wanted = [];
+  const expiryStockOn = featureOn("expiryStock");
   for (const tr of rows) {
     // Aynı satır (Getir içeriği değişmediyse) aynı stok sürümüyle tekrar işlenmez
     const stamp = `${expiryStockVersion}|${tr.children.length}|${tr.getAttribute("data-row-key") || ""}`;
@@ -6550,6 +7294,8 @@ function decorateInventoryTaskTable(table) {
     tr.setAttribute("data-getirstok-ic-v", stamp);
     const cells = Array.from(tr.children);
     cells.forEach((td, i) => setDataAttr(td, "data-getirstok-ic-col", columns[i] ?? null));
+    // SKT stoğu kapalıysa (ör. Bostanlı) ad hücresine stok yazısı konmaz
+    if (!expiryStockOn) continue;
     const barcodeCell = cells[columns.indexOf("barcodes")];
     const stockCell = cells[columns.indexOf("name")];
     if (!barcodeCell || !stockCell) continue;
@@ -6747,6 +7493,8 @@ function pairLots(stocks, expiries, unit) {
 }
 
 function rowExpiryStock(row) {
+  // SKT kaydı alınmayan depoda sistem stoğu yalnızca Getir'in verdiği değerdir
+  if (!featureOn("expiryStock")) return { state: "none" };
   return expiryStockForBarcodes(inventoryCellBarcodes(row.querySelector('td[data-getirstok-ic-col="barcodes"]')));
 }
 
@@ -6913,6 +7661,10 @@ function onInventoryRowButtonClick(e) {
 }
 
 function decorateInventoryTaskTables() {
+  if (pageViewMode("inventoryTask") !== "new") {
+    revertPageView("inventoryTask");
+    return;
+  }
   for (const table of document.querySelectorAll(".ant-table-wrapper table")) {
     if (!decorateInventoryTaskTable(table)) continue;
     ensureInventoryTaskStyleOnce();
@@ -6954,6 +7706,7 @@ if (isWarehousePanel) {
   window.addEventListener("message", (event) => {
     if (event.source !== window) return;
     if (event.data?.source !== "getirstok-heating-estimations") return;
+    if (!featureOn("bakery") && !featureOn("bakeryStats")) return;
     applyHeatingJson(event.data.json);
     decorateBakeryPage();
   });
@@ -6998,12 +7751,21 @@ if (isFranchisePanel || isWarehousePanel) {
     if (!isWarehousePanel || isInjecting) return;
     mo.disconnect();
     try {
-      decorateWarehouseFast();
+      if (!settingsLoaded) {
+        // Kayıtlı ayarlar gelene kadar bekle (yanlış görünüm bir an bile çizilmesin)
+      } else if (featureOn("layout")) {
+        decorateWarehouseFast();
+      } else {
+        // Sadeleştirilmiş görünüm kapalı: eklentinin işaretleri ve stilleri kaldırılır
+        ensureWarehouseLayoutStyleOnce();
+        revertAllPageViews();
+      }
     } catch (error) {
       console.warn("[GetirStok] Hızlı düzenleme hatası:", error);
     } finally {
-      // warehouse-early.css bu işarete kadar sekmeleri ve sayaçları gizli tutar
-      if (!document.documentElement.hasAttribute("data-getirstok-ready")) {
+      // warehouse-early.css bu işarete kadar sekmeleri ve sayaçları gizli tutar.
+      // Kayıtlı ayarlar okunmadan işaretlenmez: seçilen görünüm bir an bile yanlış çıkmasın.
+      if (settingsLoaded && !document.documentElement.hasAttribute("data-getirstok-ready")) {
         document.documentElement.setAttribute("data-getirstok-ready", "1");
       }
       mo.observe(document.documentElement, { childList: true, subtree: true });
@@ -7016,291 +7778,39 @@ if (isFranchisePanel || isWarehousePanel) {
   });
   mo.observe(document.documentElement, { childList: true, subtree: true });
   runFastDecorations();
+  // Ayarlar (özellik / sayfa görünümü) değişince sayfa yenilenmeden uygulanır
+  refreshDecorationsNow = () => {
+    runFastDecorations();
+    debouncedInject();
+  };
   // İlk deneme
   setTimeout(safeInjectButtons, 800);
   setTimeout(safeInjectButtons, 2500);
 }
 
 // -----------------------------
-// Depo: Pişirme Önerileri → panele kaydet
+// Depo: pişirme dilimleri (istatistik tablosu)
 // -----------------------------
 
 const BAKE_SLOT_KEYS = ["08-12", "12-16", "16-20", "20-00"];
 
-function headerTextToSlotKey(text) {
-  const t = String(text || "").replace(/\s+/g, " ");
-  if (/08:00/.test(t) && /12:00/.test(t)) return "08-12";
-  if (/12:00/.test(t) && /16:00/.test(t)) return "12-16";
-  if (/16:00/.test(t) && /20:00/.test(t)) return "16-20";
-  if (/20:00/.test(t) && /00:00/.test(t)) return "20-00";
-  return null;
-}
-
-function countSlotHeadersInText(text) {
-  const t = String(text || "");
-  let n = 0;
-  if (/08:00\s*[-–]\s*12:00/.test(t)) n++;
-  if (/12:00\s*[-–]\s*16:00/.test(t)) n++;
-  if (/16:00\s*[-–]\s*20:00/.test(t)) n++;
-  if (/20:00\s*[-–]\s*00:00/.test(t)) n++;
-  return n;
-}
-
-function firstNumberField(obj, keys) {
-  if (!obj || typeof obj !== "object") return null;
-  for (const k of keys) {
-    const n = Number(obj[k]);
-    if (Number.isFinite(n) && n >= 0) return n;
-  }
-  return null;
-}
-
-function mergeBakeItem(map, name, slot, qty, productId) {
-  const n = String(name || "").replace(/\s+/g, " ").trim();
-  if (!n || n.length < 4 || !slot || !Number.isFinite(qty)) return;
-  if (!map[n]) map[n] = { name: n, slots: {}, productId };
-  map[n].slots[slot] = Math.round(qty);
-  if (productId && !map[n].productId) map[n].productId = productId;
-}
-
-function walkBakeJson(node, map, inheritedSlot) {
-  if (!node || typeof node !== "object") return;
-  if (Array.isArray(node)) {
-    node.forEach((x) => walkBakeJson(x, map, inheritedSlot));
-    return;
-  }
-  const slotFromText = headerTextToSlotKey(
-    String(
-      node.label ||
-        node.title ||
-        node.name ||
-        node.interval ||
-        node.slot ||
-        node.timeRange ||
-        node.startHour ||
-        ""
-    )
-  );
-  const start = node.start || node.from || node.startTime || node.begin;
-  const end = node.end || node.to || node.endTime || node.finish;
-  const slotFromRange = headerTextToSlotKey(`${start || ""} ${end || ""}`);
-  const slot = slotFromRange || slotFromText || inheritedSlot;
-
-  const productName =
-    node.productName ||
-    node.fullName ||
-    node.product?.name ||
-    (typeof node.name === "string" && !headerTextToSlotKey(node.name)
-      ? node.name
-      : null);
-  const productId = String(
-    node.productId || node.product?.id || node.id || node._id || ""
-  );
-  const qty = firstNumberField(node, [
-    "bakeCount",
-    "suggestedBake",
-    "quantityToBake",
-    "toBake",
-    "cookAmount",
-    "bakingSuggestion",
-    "suggestedQuantity",
-    "recommendedQuantity",
-    "bakeQuantity",
-    "amountToBake",
-    "productionAmount",
-    "suggestedBakeCount",
-    "bakeSuggestion",
-    "numberToBake",
-    "pisir",
-    "pişir",
-  ]);
-  if (productName && slot && qty != null) {
-    const pid = /^[a-f0-9]{24}$/i.test(productId) ? productId : undefined;
-    mergeBakeItem(map, productName, slot, qty, pid);
-  }
-
-  for (const v of Object.values(node)) {
-    if (v && typeof v === "object") walkBakeJson(v, map, slot);
-  }
-}
-
-function scrapeDomBakeSuggestions() {
-  const map = {};
-  const headerEls = [];
-  const all = document.querySelectorAll("h1,h2,h3,h4,div,span,p,button");
-  for (const el of all) {
-    const raw = (el.textContent || "").replace(/\s+/g, " ").trim();
-    if (raw.length > 64) continue;
-    const key = headerTextToSlotKey(raw);
-    if (!key) continue;
-    headerEls.push({ el, key, len: raw.length });
-  }
-  const headersByKey = {};
-  for (const h of headerEls) {
-    if (!headersByKey[h.key] || h.len < headersByKey[h.key].len) {
-      headersByKey[h.key] = h;
-    }
-  }
-  const headers = Object.values(headersByKey);
-  if (headers.length === 0) return [];
-
-  const badgeCandidates = document.querySelectorAll("span,div,p,button,li");
-  const badges = [];
-  for (const el of badgeCandidates) {
-    const t = (el.textContent || "").replace(/\s+/g, " ").trim();
-    const m = t.match(/^(\d+)\s*Pişir$/i);
-    if (!m) continue;
-    let childAlso = false;
-    const kids = el.querySelectorAll("span,div,p,button");
-    for (const k of kids) {
-      if (k !== el && /^\d+\s*Pişir$/i.test((k.textContent || "").replace(/\s+/g, " ").trim())) {
-        childAlso = true;
-        break;
-      }
-    }
-    if (childAlso) continue;
-    badges.push({ el, qty: Number(m[1]) });
-  }
-
-  function slotForBadge(el) {
-    const r = el.getBoundingClientRect();
-    const cx = r.left + r.width / 2;
-    let best = null;
-    let bestDist = Infinity;
-    for (const h of headers) {
-      const hr = h.el.getBoundingClientRect();
-      if (hr.width < 8) continue;
-      const hcx = hr.left + hr.width / 2;
-      const dist = Math.abs(cx - hcx);
-      const inColumn = cx >= hr.left - 24 && cx <= hr.right + 24;
-      const score = inColumn ? dist / 4 : dist;
-      if (score < bestDist) {
-        bestDist = score;
-        best = h.key;
-      }
-    }
-    return best;
-  }
-
-  function productNameNear(badgeEl) {
-    let el = badgeEl.parentElement;
-    for (let i = 0; i < 12 && el; i++) {
-      const raw = el.innerText || "";
-      const lines = raw
-        .split("\n")
-        .map((s) => s.replace(/\s+/g, " ").trim())
-        .filter(Boolean);
-      for (const line of lines) {
-        if (line.length < 8 || line.length > 90) continue;
-        if (/^\d+\s*Pişir$/i.test(line)) continue;
-        if (headerTextToSlotKey(line)) continue;
-        if (/^(satılan|rezerve|donuk|raf)\b/i.test(line)) continue;
-        if (/pişirme öner|pişirme talimat/i.test(line)) continue;
-        if (!/[a-zA-ZçğıöşüÇĞİÖŞÜ]/.test(line)) continue;
-        if (/^\d+$/.test(line)) continue;
-        return line;
-      }
-      el = el.parentElement;
-    }
-    return "";
-  }
-
-  for (const { el, qty } of badges) {
-    const slot = slotForBadge(el);
-    const name = productNameNear(el);
-    if (slot && name) mergeBakeItem(map, name, slot, qty);
-  }
-
-  // Aktif (açık detaylı) kartlar = şu anki saat dilimi — sütun eşleşmesi kaçarsa yedek
-  const hour = new Date().getHours();
-  let currentSlot = null;
-  if (hour >= 8 && hour < 12) currentSlot = "08-12";
-  else if (hour >= 12 && hour < 16) currentSlot = "12-16";
-  else if (hour >= 16 && hour < 20) currentSlot = "16-20";
-  else if (hour >= 20) currentSlot = "20-00";
-
-  function isExpandedCard(badgeEl) {
-    let p = badgeEl.parentElement;
-    for (let i = 0; i < 10 && p; i++) {
-      const t = p.innerText || "";
-      if (/Satılan/i.test(t) && /\bRaf\b/i.test(t) && /Donuk/i.test(t)) {
-        return true;
-      }
-      p = p.parentElement;
-    }
-    return false;
-  }
-
-  if (currentSlot) {
-    for (const { el, qty } of badges) {
-      if (!isExpandedCard(el)) continue;
-      const name = productNameNear(el);
-      if (name) mergeBakeItem(map, name, currentSlot, qty);
-    }
-  }
-  return Object.values(map);
-}
-
-let lastBakePayloadHash = "";
-
-function publishBakeSuggestions(items) {
-  if (!Array.isArray(items) || items.length === 0) return;
-  const cleaned = items
-    .map((it) => ({
-      name: String(it.name || "").trim(),
-      productId: it.productId,
-      slots: it.slots || {},
-    }))
-    .filter((it) => it.name && BAKE_SLOT_KEYS.some((k) => it.slots[k] != null));
-  if (cleaned.length === 0) return;
-  const hash = JSON.stringify(cleaned);
-  if (hash === lastBakePayloadHash) return;
-  console.log(
-    "[Getir Token Yakalayıcı] Pişirme önerileri yakalandı:",
-    cleaned.length,
-    cleaned.slice(0, 3)
-  );
-  try {
-    chrome.runtime.sendMessage(
-      { type: "BAKERY_SUGGESTIONS_SAVE", items: cleaned },
-      (res) => {
-        if (chrome.runtime.lastError) {
-          lastBakePayloadHash = "";
-          console.error(
-            "[Getir Token Yakalayıcı] Pişirme önerisi kayıt kanalı:",
-            chrome.runtime.lastError.message
-          );
-          return;
-        }
-        if (res && res.ok) {
-          lastBakePayloadHash = hash;
-          console.log(
-            "[Getir Token Yakalayıcı] Pişirme önerileri panele kaydedildi"
-          );
-        } else {
-          lastBakePayloadHash = "";
-          console.error(
-            "[Getir Token Yakalayıcı] Pişirme önerileri kaydı başarısız:",
-            res
-          );
-        }
-      }
-    );
-  } catch (e) {
-    lastBakePayloadHash = "";
-    console.error("[Getir Token Yakalayıcı] Pişirme önerisi gönderilemedi:", e);
-  }
-}
+// -----------------------------
+// Depo: sayfadaki Getir isteklerinden yakalanan veriler (MAIN world kancasından gelir)
+// Her biri yalnızca kendi özelliği açıksa panele iletilir; kapalıysa hiçbir yere gönderilmez.
+// (Pişirme önerilerini panele yükleme kaldırıldı: panel artık okumuyor.)
+// -----------------------------
 
 if (isWarehousePanel) {
   window.addEventListener("message", (event) => {
     if (event.source !== window) return;
     const data = event.data;
     if (data && data.source === "getirstok-oidc-hook") {
+      if (!featureOn("tokenSync")) return;
       try {
         chrome.runtime.sendMessage({
           type: "WAREHOUSE_OIDC_TOKEN",
           data: data.data,
+          warehouseId: pageWarehouseId(),
         });
       } catch {
         /* ignore */
@@ -7308,6 +7818,7 @@ if (isWarehousePanel) {
       return;
     }
     if (data && data.source === "getirstok-transfer-hook") {
+      if (!featureOn("transferCapture")) return;
       try {
         chrome.runtime.sendMessage({
           type: "WAREHOUSE_TRANSFER_CAPTURE",
@@ -7315,38 +7826,11 @@ if (isWarehousePanel) {
           method: data.method,
           requestBody: data.requestBody,
           summary: data.summary,
+          warehouseId: pageWarehouseId(),
         });
       } catch {
         /* ignore */
       }
-      return;
     }
-    if (!data || data.source !== "getirstok-bake-hook") return;
-    const map = {};
-    walkBakeJson(data.json, map, null);
-    publishBakeSuggestions(Object.values(map));
   });
-
-  function tryScrapeBakePage() {
-    // Getir'in verisi yakalandıysa (heating-estimations) ekrandan okumaya gerek yok;
-    // üstelik sayfa sadeleştirilince gizlenen yazılar ekran okumasını yanıltır
-    if (!heatingStocks) loadHeatingStocksFromSession();
-    if (heatingStocks) return;
-    const bodyText = document.body ? document.body.innerText : "";
-    if (!bodyText) return;
-    if (!/\d+\s*Pişir/i.test(bodyText)) return;
-    const items = scrapeDomBakeSuggestions();
-    if (items.length === 0) {
-      console.warn(
-        "[Getir Token Yakalayıcı] Pişir rozetleri var ama sütun/ürün eşleşmedi, tekrar denenecek"
-      );
-      return;
-    }
-    publishBakeSuggestions(items);
-  }
-
-  setInterval(tryScrapeBakePage, 6000);
-  setTimeout(tryScrapeBakePage, 1500);
-  setTimeout(tryScrapeBakePage, 4000);
 }
-

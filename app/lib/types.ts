@@ -15,6 +15,8 @@ export interface StockItem {
   createdAt: string;
   updatedAt?: string; // Son güncellenme tarihi (opsiyonel, sadece güncelleme yapıldığında set edilir)
   imageUrl?: string; // Ürün görseli URL'i (opsiyonel)
+  /** Kaydın ait olduğu depo (franchiseWarehouses.ts). Eski kayıtlara göçle Soğukkuyu yazıldı. */
+  warehouseId?: string;
 }
 
 /** ID ile birlikte stok kalemi (listeleme/okuma için) */
@@ -53,15 +55,21 @@ export const ACTIVE_WAREHOUSE_TOKEN_DOC_ID = "active_warehouse"; // Depo paneli 
 /** Eski aktif token doküman ID'si (geriye dönük uyumluluk için) */
 export const ACTIVE_TOKEN_DOC_ID = "active";
 
-/** Aktif depo ID dokümanı (eklenti Depo Paneli URL'sinden yakalar) */
-export const ACTIVE_WAREHOUSE_ID_DOC_ID = "active_warehouse_id";
+/**
+ * Depo paneli token'ı depo başınadır: `active_warehouse_{depoId}`.
+ * Eski tek kayıt (`active_warehouse`) yalnızca Soğukkuyu'ya aittir; Soğukkuyu için hâlâ
+ * yazılır ve yedek olarak okunur, başka depo asla ona düşmez.
+ */
+export function warehouseTokenDocId(warehouseId: string): string {
+  return `${ACTIVE_WAREHOUSE_TOKEN_DOC_ID}_${warehouseId}`;
+}
 
-/** Varsayılan warehouse ID — eklenti henüz ID yakalamadıysa yedek (Depo Paneli) */
-export const DEFAULT_WAREHOUSE_ID = "5dc32d8b734a192200caddf8";
+/** Eski aktif depo ID dokümanı (eklenti Depo Paneli URL'sinden yakalardı); yalnızca eski eklentiler için */
+export const ACTIVE_WAREHOUSE_ID_DOC_ID = "active_warehouse_id";
 
 /**
  * Franchise (bayi) stok sorgusu — daima Soğukkuyu.
- * Bostanlı / Ulupark seçimi panel stoğunu değiştirmez.
+ * Bostanlı seçimi panel stoğunu henüz değiştirmez (yol haritası Adım 7).
  */
 export const FRANCHISE_WAREHOUSE_ID_SOGUKKUYU = "6113e59fbb8549d0f20e65f5";
 

@@ -5,6 +5,7 @@ import {
   formatMissingMatchLine,
   groupIncomingProductsByPallet,
   matchMissingWithTransferProducts,
+  palletQuantityFor,
   searchMatchesIncomingProduct,
   sortIncomingProducts,
   sortIncomingProductsByPallet,
@@ -233,3 +234,113 @@ test("groupIncomingProductsByPallet: palet gruplama ve miktar hesaplama", () => 
   assert.equal(groups[2].totalQty, 2);
 });
 
+
+test("arama: önbellekli anahtar Türkçe karakter, barkod ve palet için doğru çalışır", () => {
+  const row = {
+    name: "ÇİKOLATALI Süt 1 L",
+    barcode: "8690575109219",
+    quantity: 3,
+    palletCodes: ["K0011526041"],
+  };
+  // aynı satır art arda sorgulanır (önbellek devreye girer)
+  for (let i = 0; i < 3; i++) {
+    assert.equal(searchMatchesIncomingProduct(row, "çikolata"), true);
+    assert.equal(searchMatchesIncomingProduct(row, "cikolata"), true);
+    assert.equal(searchMatchesIncomingProduct(row, "SÜT"), true);
+    assert.equal(searchMatchesIncomingProduct(row, "sut"), true);
+    assert.equal(searchMatchesIncomingProduct(row, "109219"), true);
+    assert.equal(searchMatchesIncomingProduct(row, "k0011526041"), true);
+    assert.equal(searchMatchesIncomingProduct(row, "ayran"), false);
+    assert.equal(searchMatchesIncomingProduct(row, "   "), true);
+  }
+  // alanlar arası birleşik eşleşme olmamalı (ad sonu + barkod başı)
+  assert.equal(searchMatchesIncomingProduct(row, "l 8690"), false);
+});
+
+test("sıralama: Türkçe ad sırası ve palet kodu sayısal sırası", () => {
+  const rows = [
+    { name: "Zeytin", barcode: "1", quantity: 1, palletCodes: ["K10"] },
+    { name: "Çay", barcode: "2", quantity: 1, palletCodes: ["K2"] },
+    { name: "Ayran", barcode: "3", quantity: 1, palletCodes: [] },
+  ];
+  assert.deepEqual(
+    sortIncomingProducts(rows).map((r) => r.name),
+    ["Ayran", "Çay", "Zeytin"]
+  );
+  assert.deepEqual(
+    sortIncomingProductsByPallet(rows).map((r) => r.name),
+    ["Çay", "Zeytin", "Ayran"]
+  );
+});
+
+test("palet adedi: palet başına adet, bilinmiyorsa tek palette toplam, çok paletteyse null", () => {
+  const multi = {
+    quantity: 30,
+    palletCodes: ["K1", "K2", "K3"],
+    palletQuantities: { K1: 10, K2: 20, K3: null },
+  };
+  assert.equal(palletQuantityFor(multi, "K1"), 10);
+  assert.equal(palletQuantityFor(multi, "K2"), 20);
+  assert.equal(palletQuantityFor(multi, "K3"), null);
+  const single = { quantity: 7, palletCodes: ["K9"] };
+  assert.equal(palletQuantityFor(single, "K9"), 7);
+});
+
+test("eşleşme: aynı ürünün paletleri birleşince palet adetleri korunur", () => {
+  const rows = matchMissingWithTransferProducts(
+    [{ name: "Ayran", barcode: "111", quantity: 1 }],
+    [
+      { name: "Ayran", barcode: "111", quantity: 12, palletCodes: ["K1"], palletQuantities: { K1: 12 } },
+      { name: "Ayran", barcode: "111", quantity: 5, palletCodes: ["K2"], palletQuantities: { K2: 5 } },
+      { name: "Ayran", barcode: "111", quantity: 3, palletCodes: ["K1"], palletQuantities: { K1: 3 } },
+    ]
+  );
+  assert.equal(rows.length, 1);
+  assert.deepEqual(rows[0].palletCodes, ["K1", "K2"]);
+  assert.deepEqual(rows[0].palletQuantities, { K1: 15, K2: 5 });
+  assert.equal(rows[0].transferQty, 20);
+});
+
+test("eşleşme: elle eklenen ürün sevkiyat ürününün ek barkoduyla ve baştaki sıfır farkıyla bulunur", () => {
+  const rows = matchMissingWithTransferProducts(
+    [
+      { name: "Torku Tahin 600 G", barcode: "8690120059945", quantity: 2 },
+      { name: "Elle eklenen B", barcode: "8698529301443", quantity: 1 },
+      { name: "Alakasız", barcode: "9999999999999", quantity: 1 },
+    ],
+    [
+      // ana barkod farklı, panele girilen barkod ek barkodlardan biri
+      {
+        name: "Torku Tahin (600 g)",
+        barcode: "8690120000001",
+        barcodes: ["8690120000001", "8690120059945"],
+        quantity: 6,
+        palletCodes: ["K1"],
+        palletQuantities: { K1: 6 },
+      },
+      // GTIN-14 biçimi (baştaki sıfır)
+      {
+        name: "Seyidoğlu Pekmez",
+        barcode: "08698529301443",
+        quantity: 4,
+        palletCodes: ["K2"],
+        palletQuantities: { K2: 4 },
+      },
+    ]
+  );
+  assert.equal(rows.length, 2);
+  assert.deepEqual(rows.map((r) => r.barcode), ["8690120059945", "8698529301443"]);
+  assert.deepEqual(rows[0].palletCodes, ["K1"]);
+  assert.equal(rows[1].transferQty, 4);
+});
+
+test("arama: ek barkodlarla da bulunur", () => {
+  const row = {
+    name: "Torku Tahin",
+    barcode: "8690120000001",
+    barcodes: ["8690120000001", "8690120059945"],
+    quantity: 1,
+    palletCodes: [],
+  };
+  assert.equal(searchMatchesIncomingProduct(row, "8690120059945"), true);
+});

@@ -5,6 +5,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { getGetirStockByProductId, GetirApiError } from "@/app/lib/getirApiService";
+import { resolvePanelWarehouseId } from "@/app/lib/franchiseWarehouses";
 
 export async function OPTIONS() {
   return new NextResponse(null, {
@@ -36,7 +37,16 @@ export async function GET(request: NextRequest) {
 
     console.log("[Getir Stock API] GET request received for product ID:", productId);
 
-    const stock = await getGetirStockByProductId(productId);
+    // Depo verilmezse Soğukkuyu (eski istemciler); tanınmayan depo reddedilir
+    const warehouseId = resolvePanelWarehouseId(searchParams.get("warehouseId"));
+    if (!warehouseId) {
+      return NextResponse.json(
+        { error: "Geçersiz depo." },
+        { status: 400, headers: { "Access-Control-Allow-Origin": "*" } }
+      );
+    }
+
+    const stock = await getGetirStockByProductId(productId, warehouseId);
 
     return NextResponse.json(
       { stock, productId },

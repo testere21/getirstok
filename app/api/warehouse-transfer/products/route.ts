@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { GetirWarehouseApiError } from "@/app/lib/getirWarehouseApiService";
 import { getTransferProductsForDate } from "@/app/lib/getirWarehouseTransferService";
+import { resolvePanelWarehouseId } from "@/app/lib/franchiseWarehouses";
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
@@ -41,7 +42,20 @@ export async function POST(request: Request) {
       );
     }
 
-    const result = await getTransferProductsForDate(date);
+    // Depo verilmezse Soğukkuyu (eski istemciler); tanınmayan depo reddedilir
+    const warehouseId = resolvePanelWarehouseId(
+      body && typeof body === "object" && !Array.isArray(body)
+        ? (body as { warehouseId?: unknown }).warehouseId
+        : undefined
+    );
+    if (!warehouseId) {
+      return NextResponse.json(
+        { success: false, products: [], error: "Geçersiz depo." },
+        { status: 400, headers: CORS_HEADERS }
+      );
+    }
+
+    const result = await getTransferProductsForDate(date, warehouseId);
     return NextResponse.json(
       {
         success: true,

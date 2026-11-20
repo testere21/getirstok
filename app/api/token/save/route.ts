@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { saveGetirToken } from "@/app/lib/getirTokenService";
+import { resolvePanelWarehouseId } from "@/app/lib/franchiseWarehouses";
 
 /** CORS header'ları - Chrome eklentisi ve diğer origin'lerden gelen istekler için */
 const CORS_HEADERS = {
@@ -18,7 +19,7 @@ export async function POST(request: Request) {
   try {
     // Request body'yi parse et
     const body = await request.json();
-    const { token, type } = body;
+    const { token, type, warehouseId } = body;
 
     // Token validasyonu
     if (!token || typeof token !== "string") {
@@ -56,13 +57,25 @@ export async function POST(request: Request) {
       );
     }
 
-    // Token'ı Firestore'a kaydet (type bilgisi ile)
-    await saveGetirToken(trimmedToken, tokenType);
+    // Depo paneli token'ı depo başınadır. Depo kimliği göndermeyen eski eklenti Soğukkuyu'dur;
+    // tanınmayan bir kimlik reddedilir (token yanlış depoya yazılmasın). Bayi token'ı depoya bağlı değil.
+    const targetWarehouseId =
+      tokenType === "warehouse" ? resolvePanelWarehouseId(warehouseId) : null;
+    if (tokenType === "warehouse" && !targetWarehouseId) {
+      return NextResponse.json(
+        { error: "Geçersiz veya desteklenmeyen depo" },
+        { status: 400, headers: CORS_HEADERS }
+      );
+    }
+
+    // Token'ı Firestore'a kaydet (type ve depo bilgisi ile)
+    await saveGetirToken(trimmedToken, tokenType, targetWarehouseId ?? undefined);
 
     // Başarılı response (token'ın ilk 10 karakterini logla, tam token'ı loglama)
     const panelName = tokenType === "franchise" ? "Bayi Paneli" : "Depo Paneli";
     console.log(
-      `[Token Save API] ${panelName} token başarıyla kaydedildi: ${trimmedToken.substring(0, 10)}...`
+      `[Token Save API] ${panelName} token başarıyla kaydedildi: ${trimmedToken.substring(0, 10)}...` +
+        (targetWarehouseId ? ` (depo: ${targetWarehouseId})` : "")
     );
 
     return NextResponse.json(
@@ -70,6 +83,7 @@ export async function POST(request: Request) {
         success: true,
         message: `${panelName} token başarıyla kaydedildi`,
         type: tokenType,
+        ...(targetWarehouseId ? { warehouseId: targetWarehouseId } : {}),
       },
       { status: 200, headers: CORS_HEADERS }
     );

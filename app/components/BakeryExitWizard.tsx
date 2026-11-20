@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ChevronLeft, ChevronRight, ChefHat, X } from "lucide-react";
 import { BarcodeImage } from "@/app/components/BarcodeImage";
-import type { BakeryResolvedRow } from "@/app/lib/bakeryProductBarcodes";
+import type { BakeryResolvedRow } from "@/app/lib/bakeryProducts";
 import { getBakeryFullImageUrl } from "@/app/lib/bakeryFullImage";
 
 type Phase = "barcode" | "photo";
@@ -122,7 +122,8 @@ export function BakeryExitWizard({
     return () => window.removeEventListener("keydown", onKey);
   }, [isOpen, onClose, photoLightboxOpen, handleNext, handleBack]);
 
-  if (!isOpen || queue.length === 0 || !row || stockQty === null || stockQty <= 0) {
+  // Stoğu okunamayan ürün de gösterilir ("Stok okunamadı"); stoğu 0 olanlar kuyruğa hiç girmez
+  if (!isOpen || queue.length === 0 || !row) {
     return null;
   }
 
@@ -188,14 +189,27 @@ export function BakeryExitWizard({
                     {row.barcode}
                   </p>
                 </div>
-                <div className="rounded-xl border border-emerald-800/50 bg-emerald-950/40 px-4 py-3 text-center">
-                  <p className="text-[11px] font-semibold uppercase tracking-wider text-emerald-400/90">
-                    Raf stok
-                  </p>
-                  <p className="mt-1 text-3xl font-semibold tabular-nums text-emerald-300">
-                    {stockQty}
-                  </p>
-                </div>
+                {stockQty === null ? (
+                  <div
+                    className="rounded-xl border border-amber-700/60 bg-amber-950/40 px-4 py-3 text-center"
+                    role="status"
+                  >
+                    <p className="text-[11px] font-semibold uppercase tracking-wider text-amber-400/90">
+                      Raf stok
+                    </p>
+                    <p className="mt-1 text-xl font-semibold text-amber-300">Stok okunamadı</p>
+                    <p className="mt-1 text-xs text-amber-200/70">Rafı elle kontrol edin.</p>
+                  </div>
+                ) : (
+                  <div className="rounded-xl border border-emerald-800/50 bg-emerald-950/40 px-4 py-3 text-center">
+                    <p className="text-[11px] font-semibold uppercase tracking-wider text-emerald-400/90">
+                      Raf stok
+                    </p>
+                    <p className="mt-1 text-3xl font-semibold tabular-nums text-emerald-300">
+                      {stockQty}
+                    </p>
+                  </div>
+                )}
               </div>
             ) : (
               <div className="flex h-full min-h-0 flex-col">

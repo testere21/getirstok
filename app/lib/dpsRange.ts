@@ -1,5 +1,6 @@
 /** DPS tarih kuralları: en son gün dün (Getir bugünü hesaplamıyor), en eski 5 ay önce. */
 import { addDaysYmd, isYmd } from "./pickerStatsPeriod";
+import { SOGUKKUYU_WAREHOUSE_ID } from "./franchiseWarehouses";
 
 export const DPS_RETENTION_MONTHS = 5;
 
@@ -40,6 +41,11 @@ export function validateDpsRange(from: string, to: string, today: string): strin
   return null;
 }
 
-export function dpsDocId(from: string, to: string): string {
-  return `${from}_${to}`;
+/**
+ * Önbellek doküman kimliği. Soğukkuyu kayıtları eskiden depo bilgisiz `{from}_{to}` ile yazıldı;
+ * onlar aynen kalır. Diğer depolar `{depoId}_{from}_{to}` ile ayrı saklanır.
+ */
+export function dpsDocId(from: string, to: string, warehouseId?: string): string {
+  if (!warehouseId || warehouseId === SOGUKKUYU_WAREHOUSE_ID) return `${from}_${to}`;
+  return `${warehouseId}_${from}_${to}`;
 }

@@ -1,4 +1,4 @@
-import { doc, getDoc, onSnapshot, setDoc } from "firebase/firestore";
+import { doc, setDoc } from "firebase/firestore";
 import { db } from "./firebase";
 import { GETIR_TOKEN_COLLECTION } from "./types";
 import {
@@ -7,6 +7,11 @@ import {
   type BakeSlotKey,
   type BakeSlotMap,
 } from "./bakeryBakeSuggestions";
+
+/**
+ * Yalnızca eski eklentinin yüklemesini karşılar (panel artık okumuyor).
+ * Roadmap Adım 8'de eklentiden yükleme kalkınca bu dosya ve `/api/bakery-suggestions/save` silinecek.
+ */
 
 /** getir_tokens içinde (mevcut Firestore kurallarıyla yazılabilir) */
 export const BAKERY_BAKE_SUGGESTIONS_DOC_ID = "bakery_bake_suggestions";
@@ -62,40 +67,5 @@ export async function saveBakeryBakeSuggestions(
     bakeSuggestionsDocRef(),
     { items: sanitized, updatedAt: now },
     { merge: true }
-  );
-}
-
-export async function getBakeryBakeSuggestions(): Promise<{
-  items: BakeryBakeSuggestionItem[];
-  updatedAt: string | null;
-}> {
-  const snap = await getDoc(bakeSuggestionsDocRef());
-  if (!snap.exists()) {
-    return { items: [], updatedAt: null };
-  }
-  const data = snap.data();
-  return {
-    items: parseBakeryBakeSuggestionItems(data?.items),
-    updatedAt: typeof data?.updatedAt === "string" ? data.updatedAt : null,
-  };
-}
-
-/** Panel: dakikalık API yok; eklenti yazınca anında gelir. */
-export function subscribeBakeryBakeSuggestions(
-  onData: (items: BakeryBakeSuggestionItem[]) => void,
-  onError?: (error: Error) => void
-): () => void {
-  return onSnapshot(
-    bakeSuggestionsDocRef(),
-    (snap) => {
-      if (!snap.exists()) {
-        onData([]);
-        return;
-      }
-      onData(parseBakeryBakeSuggestionItems(snap.data()?.items));
-    },
-    (error) => {
-      onError?.(error instanceof Error ? error : new Error(String(error)));
-    }
   );
 }

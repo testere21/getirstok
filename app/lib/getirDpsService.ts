@@ -3,7 +3,7 @@
  * Getir puanları her istekte baştan hesaplıyor (3–6 sn); sonuç Firestore'da saklanır.
  */
 import { getGetirFranchiseToken } from "./getirTokenService";
-import { FRANCHISE_WAREHOUSE_ID_SOGUKKUYU } from "./types";
+import { DEFAULT_PANEL_WAREHOUSE_ID } from "./franchiseWarehouses";
 import { parseDpsCriteria, type DpsParseResult } from "./dpsParse";
 
 const CRITERIA_URL = "https://franchise-api-gateway.getirapi.com/wps/criteria";
@@ -27,10 +27,13 @@ export interface DpsRequest {
   to: string;
   /** Sıralama + etraftaki depolar da gelsin (`isRanked=true`) */
   ranked?: boolean;
+  /** Panelde tanımlı depo (çağıran doğrular); verilmezse Soğukkuyu */
+  warehouseId?: string;
 }
 
 /**
- * Soğukkuyu'nun verilen aralıktaki DPS puanlarını Getir'den çeker.
+ * Bir deponun (varsayılan Soğukkuyu) verilen aralıktaki DPS puanlarını Getir'den çeker.
+ * Bayi paneli token'ı tek hesap; iki depo da aynı token'la sorgulanır.
  * @returns `{ empty: true }` Getir o aralığı henüz hesaplamadıysa (ör. bugün)
  * @throws DpsApiError Token yok/geçersiz, yetki yok, zaman aşımı veya Getir hatası
  */
@@ -39,6 +42,7 @@ export async function fetchDpsCriteria(request: DpsRequest): Promise<DpsParseRes
     throw new DpsApiError("Tarih YYYY-MM-DD biçiminde olmalı.", 400, "BAD_DATE");
   }
 
+  const warehouseId = request.warehouseId ?? DEFAULT_PANEL_WAREHOUSE_ID;
   const token = await getGetirFranchiseToken();
   if (!token) {
     throw new DpsApiError(
@@ -51,7 +55,7 @@ export async function fetchDpsCriteria(request: DpsRequest): Promise<DpsParseRes
   const params = new URLSearchParams({
     startDate: request.from,
     endDate: request.to,
-    warehouseId: FRANCHISE_WAREHOUSE_ID_SOGUKKUYU,
+    warehouseId,
     isRanked: request.ranked ? "true" : "false",
   });
 
@@ -98,5 +102,5 @@ export async function fetchDpsCriteria(request: DpsRequest): Promise<DpsParseRes
   } catch {
     throw new DpsApiError("Getir'den okunamayan bir DPS cevabı geldi.", 502, "BAD_RESPONSE");
   }
-  return parseDpsCriteria(json, FRANCHISE_WAREHOUSE_ID_SOGUKKUYU);
+  return parseDpsCriteria(json, warehouseId);
 }

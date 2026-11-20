@@ -1,18 +1,16 @@
-import { readFile } from "fs/promises";
-import { join } from "path";
 import type { CatalogProduct } from "./types";
+import { loadCatalogJson } from "./catalogLoader";
 import {
   fetchAllSupplementalCatalogAsCatalogProducts,
   mergeProductsJsonWithSupplemental,
   normalizeCatalogBarcodeKey,
 } from "./supplementalCatalogProductService";
 
-async function loadMergedCatalog(): Promise<CatalogProduct[]> {
+/** `warehouseId` Bostanlı ise yalnızca Bostanlı'da olan ürünler de kataloğa dahil edilir */
+async function loadMergedCatalog(warehouseId?: string): Promise<CatalogProduct[]> {
   let jsonProducts: CatalogProduct[] = [];
   try {
-    const path = join(process.cwd(), "data", "products.json");
-    const content = await readFile(path, "utf-8");
-    const data = JSON.parse(content) as CatalogProduct[];
+    const data = await loadCatalogJson(warehouseId);
     jsonProducts = Array.isArray(data) ? data : [];
   } catch (e) {
     console.warn("[catalogProductIdResolver] products.json okunamadı:", e);
@@ -28,7 +26,8 @@ async function loadMergedCatalog(): Promise<CatalogProduct[]> {
 }
 
 export async function getProductIdsFromMergedCatalog(
-  barcodes: readonly string[]
+  barcodes: readonly string[],
+  warehouseId?: string
 ): Promise<Map<string, string>> {
   const result = new Map<string, string>();
   const unique = [
@@ -36,7 +35,7 @@ export async function getProductIdsFromMergedCatalog(
   ];
   if (unique.length === 0) return result;
 
-  const merged = await loadMergedCatalog();
+  const merged = await loadMergedCatalog(warehouseId);
   const byNorm = new Map<string, string>();
   for (const x of merged) {
     const pid = x.productId?.trim();
@@ -54,7 +53,8 @@ export async function getProductIdsFromMergedCatalog(
 }
 
 export async function getCatalogInfoByProductIds(
-  productIds: readonly string[]
+  productIds: readonly string[],
+  warehouseId?: string
 ): Promise<Map<string, { barcode: string; name: string }>> {
   const result = new Map<string, { barcode: string; name: string }>();
   const wanted = new Set(
@@ -64,7 +64,7 @@ export async function getCatalogInfoByProductIds(
   );
   if (wanted.size === 0) return result;
 
-  const merged = await loadMergedCatalog();
+  const merged = await loadMergedCatalog(warehouseId);
   for (const x of merged) {
     const pid = x.productId?.trim().toLowerCase();
     if (!pid || !wanted.has(pid)) continue;
@@ -78,8 +78,9 @@ export async function getCatalogInfoByProductIds(
 }
 
 export async function getProductIdFromMergedCatalog(
-  barcode: string
+  barcode: string,
+  warehouseId?: string
 ): Promise<string | null> {
-  const m = await getProductIdsFromMergedCatalog([barcode]);
+  const m = await getProductIdsFromMergedCatalog([barcode], warehouseId);
   return m.get(barcode.trim()) ?? null;
 }

@@ -1,6 +1,13 @@
 import { getGetirWarehouseToken } from "./getirTokenService";
 import { GetirWarehouseApiError } from "./getirWarehouseApiService";
-import { FRANCHISE_WAREHOUSE_ID_SOGUKKUYU } from "./types";
+import { isFranchiseWarehouseId } from "./franchiseWarehouses";
+
+/** Sayım işlemleri varsayılan depoya düşmez: depo her zaman açıkça verilir ve tanınmalıdır. */
+function assertKnownWarehouse(warehouseId: string): void {
+  if (!warehouseId || !isFranchiseWarehouseId(warehouseId)) {
+    throw new GetirWarehouseApiError("Depo belirtilmedi veya geçersiz.", 400, "INVALID_WAREHOUSE");
+  }
+}
 
 const INVENTORY_CHECK_URL =
   "https://warehouse-panel-api-gateway.getirapi.com/gstore-inventory-checks";
@@ -38,13 +45,14 @@ type GetirPostMessages = {
   rejected: string;
 };
 
-/** Depo paneli gateway'ine POST atar; hata durumlarını GetirWarehouseApiError'a çevirir. */
+/** Depo paneli gateway'ine POST atar (o deponun token'ıyla); hata durumlarını GetirWarehouseApiError'a çevirir. */
 async function postToWarehouseGateway(
   url: string,
   body: unknown,
-  messages: GetirPostMessages
+  messages: GetirPostMessages,
+  warehouseId: string
 ): Promise<{ json: unknown; text: string }> {
-  const token = await getGetirWarehouseToken();
+  const token = await getGetirWarehouseToken(warehouseId);
   if (!token) {
     throw new GetirWarehouseApiError(
       "Depo paneli token'ı yok. warehouse.getir.com'u açıp giriş yapın.",
@@ -129,7 +137,11 @@ async function postToWarehouseGateway(
  * @returns Açılan sayımın kimliği (`inventoryCheckId`)
  * @throws GetirWarehouseApiError Token yoksa, süresi dolmuşsa veya Getir reddederse
  */
-export async function createInventoryCheck(productIds: string[]): Promise<string> {
+export async function createInventoryCheck(
+  productIds: string[],
+  warehouseId: string
+): Promise<string> {
+  assertKnownWarehouse(warehouseId);
   if (productIds.length === 0) {
     throw new GetirWarehouseApiError("Sayım için en az bir ürün seçin.", 400, "EMPTY");
   }
@@ -140,7 +152,7 @@ export async function createInventoryCheck(productIds: string[]): Promise<string
       scope: SCOPE_PARTIAL,
       productIds,
       reason: { type: REASON_STOCK_SUSPICION },
-      warehouseId: FRANCHISE_WAREHOUSE_ID_SOGUKKUYU,
+      warehouseId,
     },
     {
       logLabel: "Sayım açılamadı",
@@ -148,7 +160,8 @@ export async function createInventoryCheck(productIds: string[]): Promise<string
         "Depo paneli zamanında yanıt vermedi. Sayım açılmış olabilir; tekrar denemeden önce depo panelindeki sayım listesine bakın.",
       forbidden: "Depo panelinde sayım açma yetkiniz yok.",
       rejected: "Sayım açılamadı",
-    }
+    },
+    warehouseId
   );
 
   const inventoryCheckId = (json as { data?: { inventoryCheckId?: unknown } } | null)
@@ -169,7 +182,11 @@ export async function createInventoryCheck(productIds: string[]): Promise<string
  * Depo panelindeki "Onayla" butonunun karşılığı: sayım "Yeni" → "Hazır" olur, görevler oluşur.
  * @throws GetirWarehouseApiError Token yoksa, süresi dolmuşsa veya Getir reddederse
  */
-export async function approveInventoryCheck(inventoryCheckId: string): Promise<void> {
+export async function approveInventoryCheck(
+  inventoryCheckId: string,
+  warehouseId: string
+): Promise<void> {
+  assertKnownWarehouse(warehouseId);
   if (!isValidInventoryCheckId(inventoryCheckId)) {
     throw new GetirWarehouseApiError("Geçersiz sayım numarası.", 400, "INVALID_ID");
   }
@@ -184,7 +201,8 @@ export async function approveInventoryCheck(inventoryCheckId: string): Promise<v
           "Depo paneli zamanında yanıt vermedi. Sayım onaylanmış olabilir; depo panelinde sayımın durumuna bakın.",
         forbidden: "Depo panelinde sayım onaylama yetkiniz yok.",
         rejected: "Sayım onaylanamadı",
-      }
+      },
+      warehouseId
     );
   } catch (error) {
     // Getir, "Yeni" olmayan sayım için "Sayım durumu uygun değil!" döner

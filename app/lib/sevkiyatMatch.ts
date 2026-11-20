@@ -7,17 +7,43 @@ export type MissingMatchInput = {
   imageUrl?: string | null;
 };
 
+/** Palet kodu -> o paletteki adet (null = bilinmiyor). */
+export type PalletQuantityMap = Record<string, number | null>;
+
 export type TransferMatchInput = {
   name: string | null;
   barcode: string | null;
   quantity: number | null;
   palletCodes: string[];
+  palletQuantities?: PalletQuantityMap;
+  /** Ürünün tüm bilinen barkodları (ana barkoda ek) */
+  barcodes?: string[];
+  imageUrl?: string | null;
 };
+
+/**
+ * Ürünün belirli bir paletteki adedi. Bilinmiyorsa: ürün tek paletteyse toplam adet,
+ * değilse null.
+ */
+export function palletQuantityFor(
+  product: {
+    quantity: number | null;
+    palletCodes: readonly string[];
+    palletQuantities?: PalletQuantityMap;
+  },
+  palletCode: string
+): number | null {
+  const q = product.palletQuantities?.[palletCode];
+  if (q != null) return q;
+  if (product.palletCodes.length === 1) return product.quantity;
+  return null;
+}
 
 export type SevkiyatMatchRow = {
   displayName: string;
   missingQty: number;
   palletCodes: string[];
+  palletQuantities?: PalletQuantityMap;
   transferQty: number | null;
   barcode: string | null;
   imageUrl: string | null;
@@ -27,12 +53,27 @@ export function normalizeSevkiyatBarcode(barcode: string): string {
   return barcode.trim();
 }
 
+/** Eşleştirme anahtarı: boşluksuz, baştaki sıfırlar atılmış (EAN-13 / GTIN-14 farkı için) */
+export function barcodeMatchKey(barcode: string): string {
+  return barcode.replace(/\s+/g, "").replace(/^0+/, "");
+}
+
+function transferBarcodeKeys(row: TransferMatchInput): string[] {
+  const keys = new Set<string>();
+  for (const b of [row.barcode, ...(row.barcodes ?? [])]) {
+    if (!b) continue;
+    const k = barcodeMatchKey(b);
+    if (k) keys.add(k);
+  }
+  return [...keys];
+}
+
 export function normalizeSevkiyatName(name: string): string {
   return name.trim().replace(/\s+/g, " ").toLocaleLowerCase("tr-TR");
 }
 
 function transferKey(row: TransferMatchInput, index: number): string {
-  const barcode = row.barcode ? normalizeSevkiyatBarcode(row.barcode) : "";
+  const barcode = row.barcode ? barcodeMatchKey(row.barcode) : "";
   if (barcode) return `b:${barcode}`;
   const name = row.name ? normalizeSevkiyatName(row.name) : "";
   if (name) return `n:${name}`;
@@ -41,6 +82,17 @@ function transferKey(row: TransferMatchInput, index: number): string {
 
 function mergeTransfers(rows: TransferMatchInput[]): TransferMatchInput {
   const palletCodes = [...new Set(rows.flatMap((row) => row.palletCodes))];
+  const palletQuantities: PalletQuantityMap = {};
+  for (const row of rows) {
+    for (const [code, qty] of Object.entries(row.palletQuantities ?? {})) {
+      if (!(code in palletQuantities)) {
+        palletQuantities[code] = qty;
+        continue;
+      }
+      const prev = palletQuantities[code];
+      palletQuantities[code] = prev == null || qty == null ? null : prev + qty;
+    }
+  }
   let transferQty: number | null = null;
   for (const row of rows) {
     if (row.quantity == null) continue;
@@ -48,11 +100,18 @@ function mergeTransfers(rows: TransferMatchInput[]): TransferMatchInput {
   }
   const named = rows.find((row) => row.name?.trim());
   const barcoded = rows.find((row) => row.barcode?.trim());
+  const barcodes = [
+    ...new Set(
+      rows.flatMap((row) => [row.barcode?.trim() ?? "", ...(row.barcodes ?? [])])
+    ),
+  ].filter((b) => b.length > 0);
   return {
     name: named?.name ?? rows[0]?.name ?? null,
     barcode: barcoded?.barcode ?? rows[0]?.barcode ?? null,
     quantity: transferQty,
     palletCodes,
+    palletQuantities,
+    barcodes,
   };
 }
 
@@ -72,6 +131,7 @@ function toMatchRow(
     displayName,
     missingQty,
     palletCodes: [...transfer.palletCodes],
+    palletQuantities: { ...(transfer.palletQuantities ?? {}) },
     transferQty: transfer.quantity,
     barcode,
     imageUrl: group.imageUrl,
@@ -160,11 +220,10 @@ export function matchMissingWithTransferProducts(
   const byName = new Map<string, number[]>();
 
   transferProducts.forEach((row, index) => {
-    const barcode = row.barcode ? normalizeSevkiyatBarcode(row.barcode) : "";
-    if (barcode) {
-      const list = byBarcode.get(barcode) ?? [];
+    for (const key of transferBarcodeKeys(row)) {
+      const list = byBarcode.get(key) ?? [];
       list.push(index);
-      byBarcode.set(barcode, list);
+      byBarcode.set(key, list);
     }
     const name = row.name ? normalizeSevkiyatName(row.name) : "";
     if (name) {
@@ -206,7 +265,9 @@ export function matchMissingWithTransferProducts(
 
     let transfer: TransferMatchInput | null = null;
     if (group.barcodeKey) {
-      transfer = takeTransfer(unusedIndices(byBarcode.get(group.barcodeKey)));
+      transfer = takeTransfer(
+        unusedIndices(byBarcode.get(barcodeMatchKey(group.barcodeKey)))
+      );
     }
     if (!transfer) {
       transfer = matchByName(group.nameKey);
@@ -225,11 +286,18 @@ export function formatMissingMatchLine(row: SevkiyatMatchRow): string {
   return `${base} · ${row.palletCodes.join(", ")} paletinde var`;
 }
 
+// Collator bir kez oluşturulur (her karşılaştırmada yeniden kurmak çok yavaş)
+const TR_NAME_COLLATOR = new Intl.Collator("tr-TR", { sensitivity: "base" });
+const TR_NUMERIC_COLLATOR = new Intl.Collator("tr-TR", {
+  numeric: true,
+  sensitivity: "base",
+});
+
 export function sortIncomingProducts(
   rows: readonly TransferMatchInput[]
 ): TransferMatchInput[] {
   return [...rows].sort((a, b) =>
-    (a.name || "").localeCompare(b.name || "", "tr-TR", { sensitivity: "base" })
+    TR_NAME_COLLATOR.compare(a.name || "", b.name || "")
   );
 }
 
@@ -279,34 +347,40 @@ export function turkishToAscii(str: string): string {
  * Ürün adı, barkod veya palet kodu üzerinden esnek Türkçe arama.
  * Büyük/küçük harf ve Türkçe karakter toleranslıdır.
  */
+type IncomingSearchable = {
+  name: string | null;
+  barcode: string | null;
+  barcodes?: string[];
+  palletCodes?: string[];
+};
+
+// Ürün nesnesi başına bir kez hazırlanan arama metni (her tuşta yeniden
+// küçültme / Türkçe karakter dönüşümü yapılmasın diye).
+const searchKeyCache = new WeakMap<object, string>();
+
+function incomingSearchKey(product: IncomingSearchable): string {
+  const cached = searchKeyCache.get(product);
+  if (cached !== undefined) return cached;
+  const name = product.name || "";
+  const key = [
+    name.toLocaleLowerCase("tr-TR"),
+    turkishToAscii(name),
+    [product.barcode || "", ...(product.barcodes ?? [])].join(" ").toLowerCase(),
+    (product.palletCodes || []).join(" ").toLowerCase(),
+  ].join("\n");
+  searchKeyCache.set(product, key);
+  return key;
+}
+
 export function searchMatchesIncomingProduct(
-  product: {
-    name: string | null;
-    barcode: string | null;
-    palletCodes?: string[];
-  },
+  product: IncomingSearchable,
   query: string
 ): boolean {
   const q = query.trim();
   if (!q) return true;
-
-  const qLower = q.toLocaleLowerCase("tr-TR");
-  const qAscii = turkishToAscii(q);
-
-  const name = product.name || "";
-  const barcode = product.barcode || "";
-  const pallets = (product.palletCodes || []).join(" ");
-
-  const nameLower = name.toLocaleLowerCase("tr-TR");
-  const nameAscii = turkishToAscii(name);
-  const barcodeLower = barcode.toLowerCase();
-  const palletsLower = pallets.toLowerCase();
-
+  const key = incomingSearchKey(product);
   return (
-    nameLower.includes(qLower) ||
-    nameAscii.includes(qAscii) ||
-    barcodeLower.includes(qLower) ||
-    palletsLower.includes(qLower)
+    key.includes(q.toLocaleLowerCase("tr-TR")) || key.includes(turkishToAscii(q))
   );
 }
 
@@ -327,11 +401,11 @@ export function sortIncomingProductsByPallet(
     if (!palA && palB) return 1;
 
     if (palA && palB && palA !== palB) {
-      const cmp = palA.localeCompare(palB, "tr-TR", { numeric: true, sensitivity: "base" });
+      const cmp = TR_NUMERIC_COLLATOR.compare(palA, palB);
       if (cmp !== 0) return cmp;
     }
 
-    return (a.name || "").localeCompare(b.name || "", "tr-TR", { sensitivity: "base" });
+    return TR_NAME_COLLATOR.compare(a.name || "", b.name || "");
   });
 }
 
@@ -370,7 +444,7 @@ export function groupIncomingProductsByPallet(
   }
 
   const sortedCodes = [...palletMap.keys()].sort((a, b) =>
-    a.localeCompare(b, "tr-TR", { numeric: true, sensitivity: "base" })
+    TR_NUMERIC_COLLATOR.compare(a, b)
   );
 
   const groups: IncomingPalletGroup[] = sortedCodes.map((code) => {

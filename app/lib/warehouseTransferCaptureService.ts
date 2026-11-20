@@ -1,6 +1,7 @@
 import { doc, getDoc, setDoc } from "firebase/firestore";
 import { db } from "./firebase";
 import { GETIR_TOKEN_COLLECTION } from "./types";
+import { DEFAULT_PANEL_WAREHOUSE_ID, SOGUKKUYU_WAREHOUSE_ID } from "./franchiseWarehouses";
 
 export const WAREHOUSE_TRANSFER_LIST_CAPTURE_DOC_ID =
   "warehouse_transfer_list_capture";
@@ -50,17 +51,27 @@ export function isInboundTransferListUrl(url: string): boolean {
   return classifyTransferRequestUrl(url) === "list";
 }
 
-function docIdForKind(kind: WarehouseTransferCaptureKind): string {
-  return kind === "detail"
-    ? WAREHOUSE_TRANSFER_DETAIL_CAPTURE_DOC_ID
-    : WAREHOUSE_TRANSFER_LIST_CAPTURE_DOC_ID;
+/**
+ * Yakalama dokümanı kimliği. Soğukkuyu eski kimlikleri korur; diğer depolar `{eski kimlik}_{depoId}`
+ * ile ayrı kayıt alır (Bostanlı asla Soğukkuyu'nun yakalamasını kullanmaz).
+ */
+export function transferCaptureDocId(
+  kind: WarehouseTransferCaptureKind,
+  warehouseId: string = DEFAULT_PANEL_WAREHOUSE_ID
+): string {
+  const base =
+    kind === "detail"
+      ? WAREHOUSE_TRANSFER_DETAIL_CAPTURE_DOC_ID
+      : WAREHOUSE_TRANSFER_LIST_CAPTURE_DOC_ID;
+  return warehouseId === SOGUKKUYU_WAREHOUSE_ID ? base : `${base}_${warehouseId}`;
 }
 
 export async function saveWarehouseTransferCapture(
-  capture: WarehouseTransferCapture
+  capture: WarehouseTransferCapture,
+  warehouseId: string = DEFAULT_PANEL_WAREHOUSE_ID
 ): Promise<void> {
   if (capture.kind === "detail") {
-    const existing = await getWarehouseTransferCapture("detail");
+    const existing = await getWarehouseTransferCapture("detail", warehouseId);
     const existingUrl = existing?.url || "";
     const nextUrl = capture.url.split("?")[0];
     const existingPath = existingUrl.split("?")[0];
@@ -75,7 +86,7 @@ export async function saveWarehouseTransferCapture(
       return;
     }
   }
-  const ref = doc(db, GETIR_TOKEN_COLLECTION, docIdForKind(capture.kind));
+  const ref = doc(db, GETIR_TOKEN_COLLECTION, transferCaptureDocId(capture.kind, warehouseId));
   await setDoc(
     ref,
     {
@@ -92,9 +103,10 @@ export async function saveWarehouseTransferCapture(
 }
 
 export async function getWarehouseTransferCapture(
-  kind: WarehouseTransferCaptureKind
+  kind: WarehouseTransferCaptureKind,
+  warehouseId: string = DEFAULT_PANEL_WAREHOUSE_ID
 ): Promise<WarehouseTransferCapture | null> {
-  const ref = doc(db, GETIR_TOKEN_COLLECTION, docIdForKind(kind));
+  const ref = doc(db, GETIR_TOKEN_COLLECTION, transferCaptureDocId(kind, warehouseId));
   const snap = await getDoc(ref);
   if (!snap.exists()) return null;
   const data = snap.data();

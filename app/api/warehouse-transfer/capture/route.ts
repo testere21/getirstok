@@ -4,6 +4,7 @@ import {
   getWarehouseTransferCapture,
   saveWarehouseTransferCapture,
 } from "@/app/lib/warehouseTransferCaptureService";
+import { resolvePanelWarehouseId } from "@/app/lib/franchiseWarehouses";
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
@@ -15,8 +16,8 @@ export async function OPTIONS() {
   return new NextResponse(null, { status: 204, headers: CORS_HEADERS });
 }
 
-async function capturePublic(kind: "list" | "detail") {
-  const c = await getWarehouseTransferCapture(kind);
+async function capturePublic(kind: "list" | "detail", warehouseId: string) {
+  const c = await getWarehouseTransferCapture(kind, warehouseId);
   if (!c) return null;
   return {
     kind: c.kind,
@@ -28,11 +29,20 @@ async function capturePublic(kind: "list" | "detail") {
 }
 
 /** Liste / detay yakalandı mı — Getir replay yok (1.2) */
-export async function GET() {
+export async function GET(request: Request) {
   try {
+    const warehouseId = resolvePanelWarehouseId(
+      new URL(request.url).searchParams.get("warehouseId")
+    );
+    if (!warehouseId) {
+      return NextResponse.json(
+        { success: false, error: "Geçersiz depo." },
+        { status: 400, headers: CORS_HEADERS }
+      );
+    }
     const [list, detail] = await Promise.all([
-      capturePublic("list"),
-      capturePublic("detail"),
+      capturePublic("list", warehouseId),
+      capturePublic("detail", warehouseId),
     ]);
     return NextResponse.json(
       { success: true, list, detail },
@@ -57,7 +67,17 @@ export async function POST(request: Request) {
       method?: unknown;
       requestBody?: unknown;
       summary?: { preview?: unknown; topKeys?: unknown };
+      warehouseId?: unknown;
     };
+
+    // Depo göndermeyen eski eklenti Soğukkuyu'dur; tanınmayan depo reddedilir
+    const warehouseId = resolvePanelWarehouseId(body.warehouseId);
+    if (!warehouseId) {
+      return NextResponse.json(
+        { error: "Geçersiz depo", success: false },
+        { status: 400, headers: CORS_HEADERS }
+      );
+    }
 
     const url = typeof body.url === "string" ? body.url.trim() : "";
     if (!url.startsWith("https://warehouse-panel-api-gateway.getirapi.com/")) {
@@ -86,15 +106,18 @@ export async function POST(request: Request) {
         { status: 200, headers: CORS_HEADERS }
       );
     }
-    await saveWarehouseTransferCapture({
-      kind,
-      url,
-      method,
-      requestBody,
-      responsePreview: preview,
-      responseTopKeys: topKeys,
-      capturedAt: new Date().toISOString(),
-    });
+    await saveWarehouseTransferCapture(
+      {
+        kind,
+        url,
+        method,
+        requestBody,
+        responsePreview: preview,
+        responseTopKeys: topKeys,
+        capturedAt: new Date().toISOString(),
+      },
+      warehouseId
+    );
 
     return NextResponse.json(
       { success: true, kind },

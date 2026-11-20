@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { dpsDateLimits, dpsDocId, dpsRetentionCutoff, subtractMonthsYmd, validateDpsRange } from "./dpsRange";
+import { BOSTANLI_WAREHOUSE_ID, SOGUKKUYU_WAREHOUSE_ID } from "./franchiseWarehouses";
 
 const TODAY = "2026-10-18";
 
@@ -26,6 +27,11 @@ test("validateDpsRange", () => {
   assert.match(validateDpsRange("2026-02-30", "2026-03-01", TODAY) ?? "", /biçiminde/);
 });
 
-test("dpsDocId", () => {
+test("dpsDocId: Soğukkuyu eski kimliği korur, diğer depolar ayrı kimlik alır", () => {
   assert.equal(dpsDocId("2026-09-17", "2026-10-17"), "2026-09-17_2026-10-17");
+  assert.equal(dpsDocId("2026-09-17", "2026-10-17", SOGUKKUYU_WAREHOUSE_ID), "2026-09-17_2026-10-17");
+  assert.equal(
+    dpsDocId("2026-09-17", "2026-10-17", BOSTANLI_WAREHOUSE_ID),
+    `${BOSTANLI_WAREHOUSE_ID}_2026-09-17_2026-10-17`
+  );
 });

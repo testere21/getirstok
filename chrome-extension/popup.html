@@ -81,6 +81,68 @@
       background: #e5e7eb;
       margin: 16px 0;
     }
+    select {
+      font-size: 12px;
+      padding: 4px 6px;
+      border: 1px solid #d1d5db;
+      border-radius: 6px;
+      background: #fff;
+      color: #111827;
+    }
+    .lock-row {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+    .lock-row input {
+      flex: 1;
+      min-width: 0;
+      padding: 6px 8px;
+      font-size: 13px;
+      border: 1px solid #d1d5db;
+      border-radius: 6px;
+    }
+    .lock-row button {
+      width: auto;
+      margin-top: 0;
+      white-space: nowrap;
+    }
+    select:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+    .feature-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      padding: 4px 0;
+      border-top: 1px solid #e5e7eb;
+      font-size: 12px;
+      color: #374151;
+    }
+    .feature-row select {
+      flex: 0 0 150px;
+    }
+    .feature-row.changed select {
+      border-color: #3b82f6;
+      background: #eff6ff;
+    }
+    .settings-note {
+      font-size: 12px;
+      margin-top: 8px;
+      color: #6b7280;
+    }
+    .settings-note.warn {
+      color: #92400e;
+    }
+    button.secondary {
+      background: #e5e7eb;
+      color: #374151;
+    }
+    button.secondary:hover {
+      background: #d1d5db;
+    }
   </style>
 </head>
 <body>
@@ -113,7 +175,28 @@
     <button id="warehouseTestButton" disabled>Token Test Et</button>
     <button id="warehouseRefreshButton" disabled>Token'ı Şimdi Yenile</button>
   </div>
+
+  <div class="divider"></div>
+
+  <!-- Depo özellikleri -->
+  <div class="panel-section">
+    <div class="panel-title">⚙ Depo Özellikleri</div>
+    <div id="settingsDetected" class="last-captured" style="margin: 0 0 8px;"></div>
+    <div class="last-captured" style="margin: 0 0 8px;">Aşağıdaki seçimler yalnızca <b>bu bilgisayardaki</b> tarayıcıya ve yukarıda görünen depoya uygulanır. Token gönderimi ve sevkiyat yakalama her zaman açıktır, değiştirilemez.</div>
+    <div id="settingsLock" class="lock-row">
+      <input type="password" id="settingsPassword" placeholder="Parola" autocomplete="off">
+      <button id="settingsUnlockButton">Kilidi aç</button>
+    </div>
+    <div id="settingsLockMsg" class="settings-note" style="margin: 0 0 8px;"></div>
+    <div id="settingsList"></div>
+    <div class="panel-title" style="margin: 14px 0 4px;">Sayfa Görünümleri</div>
+    <div class="last-captured" style="margin: 0 0 6px;">Yeni görünüm: eklentinin sadeleştirilmiş hali. Eski görünüm: Getir'in kendi hali. Gizli: sayfa içeriği gizlenir. "Sadeleştirilmiş görünüm" kapalıysa hepsi eski görünümdür.</div>
+    <div id="settingsViews"></div>
+    <div id="settingsNote" class="settings-note"></div>
+    <button id="settingsResetButton" class="secondary">Bu depoyu varsayılana döndür</button>
+  </div>
   
+  <script src="warehouses.js"></script>
   <script src="popup.js"></script>
 </body>
 </html>

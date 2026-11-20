@@ -12,10 +12,11 @@ const RETRY_MS = 30 * 60 * 1000;
 const SECTIONS: DpsSectionKey[] = ["bayi", "kurye", "depocu"];
 const SHORT_LABEL: Record<DpsSectionKey, string> = { bayi: "Bayi", kurye: "Kurye", depocu: "Depocu" };
 
+/** `key`: `${depo}|${gün}`; depo/gün değişince eski sonuç gösterilmez */
 type SummaryState =
-  | { day: string; kind: "ready"; score: StoredDpsScore }
-  | { day: string; kind: "empty" }
-  | { day: string; kind: "error"; message: string };
+  | { key: string; kind: "ready"; score: StoredDpsScore }
+  | { key: string; kind: "empty" }
+  | { key: string; kind: "error"; message: string };
 
 function yesterdayYmd(): string {
   return addDaysYmd(istanbulTodayYmd(), -1);
@@ -84,9 +85,10 @@ function RankBadge({ score }: { score: StoredDpsScore }) {
 }
 
 /** Ana ekran başlığının karşısında: dünün Bayi / Kurye / Depocu DPS puanı + sıra */
-export function DpsHeaderSummary() {
+export function DpsHeaderSummary({ warehouseId }: { warehouseId: string }) {
   const [day, setDay] = useState(yesterdayYmd);
   const [state, setState] = useState<SummaryState | null>(null);
+  const key = `${warehouseId}|${day}`;
   const [retryTick, setRetryTick] = useState(0);
 
   // Gece yarısı geçince "dün" kayar
@@ -97,23 +99,23 @@ export function DpsHeaderSummary() {
 
   useEffect(() => {
     let cancelled = false;
-    getDpsScore(day, day, { ranked: true })
+    getDpsScore(day, day, { ranked: true, warehouseId })
       .then((result) => {
         if (cancelled) return;
         setState(
-          result.empty || !result.score ? { day, kind: "empty" } : { day, kind: "ready", score: result.score }
+          result.empty || !result.score ? { key, kind: "empty" } : { key, kind: "ready", score: result.score }
         );
       })
       .catch((error: unknown) => {
         if (cancelled) return;
-        setState({ day, kind: "error", message: error instanceof Error ? error.message : "DPS alınamadı." });
+        setState({ key, kind: "error", message: error instanceof Error ? error.message : "DPS alınamadı." });
       });
     return () => {
       cancelled = true;
     };
-  }, [day, retryTick]);
+  }, [day, warehouseId, key, retryTick]);
 
-  const current = state?.day === day ? state : null;
+  const current = state?.key === key ? state : null;
   const needsRetry = current?.kind === "empty" || current?.kind === "error";
   useEffect(() => {
     if (!needsRetry) return;

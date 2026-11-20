@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createInventoryCheck } from "@/app/lib/getirInventoryCheckService";
+import { requireExplicitWarehouseId, warehouseLabelPrefix } from "@/app/lib/franchiseWarehouses";
 import { GetirWarehouseApiError } from "@/app/lib/getirWarehouseApiService";
 import { KASA_PALET_PRODUCTS } from "@/app/lib/kasaPaletProducts";
 import {
@@ -15,12 +16,21 @@ const KASA_PALET_BY_ID = new Map(KASA_PALET_PRODUCTS.map((p) => [p.productId, p]
  * üzerinden bu isteği tetikleyemesin.
  */
 export async function POST(request: Request) {
-  let body: { productIds?: unknown };
+  let body: { productIds?: unknown; warehouseId?: unknown };
   try {
-    body = (await request.json()) as { productIds?: unknown };
+    body = (await request.json()) as { productIds?: unknown; warehouseId?: unknown };
   } catch {
     return NextResponse.json(
       { success: false, error: "Geçersiz istek gövdesi." },
+      { status: 400 }
+    );
+  }
+
+  // Depo AÇIKÇA verilmeli: eksik/tanınmayan depo reddedilir, sessizce Soğukkuyu'ya düşmez
+  const warehouseId = requireExplicitWarehouseId(body.warehouseId);
+  if (!warehouseId) {
+    return NextResponse.json(
+      { success: false, error: "Depo belirtilmedi veya geçersiz." },
       { status: 400 }
     );
   }
@@ -57,7 +67,7 @@ export async function POST(request: Request) {
   });
 
   try {
-    const inventoryCheckId = await createInventoryCheck(productIds);
+    const inventoryCheckId = await createInventoryCheck(productIds, warehouseId);
     console.log(
       "[Kasa/Palet Sayım] Sayım açıldı:",
       inventoryCheckId,
@@ -65,10 +75,11 @@ export async function POST(request: Request) {
     );
     // sendTelegramMessage hata fırlatmaz; Telegram sorunu sayım sonucunu değiştirmez.
     await sendTelegramMessage(
-      buildInventoryCheckMessage({
-        inventoryCheckId,
-        productNames: products.map((p) => p.name),
-      })
+      warehouseLabelPrefix(warehouseId) +
+        buildInventoryCheckMessage({
+          inventoryCheckId,
+          productNames: products.map((p) => p.name),
+        })
     );
     return NextResponse.json({ success: true, inventoryCheckId, products });
   } catch (error) {

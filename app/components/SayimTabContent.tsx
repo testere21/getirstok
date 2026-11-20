@@ -21,6 +21,8 @@ const DEPTH_STORAGE_KEY = "getirstok.sayim.depth";
 type SayimDepth = "main" | "sub";
 
 interface SayimTabContentProps {
+  /** Seçili depo: güncel raf stoğu bu deponun stoğundan okunur */
+  warehouseId: string;
   missingItems: StockItemWithId[];
   extraItems: StockItemWithId[];
   /** Ana + alternatif barkodları içeren katalog haritası */
@@ -223,6 +225,7 @@ function PlainCandidateList({
 }
 
 export function SayimTabContent({
+  warehouseId,
   missingItems,
   extraItems,
   catalogByBarcode,
@@ -307,7 +310,7 @@ export function SayimTabContent({
   const hasAnyInput = missingItems.length > 0 || extraItems.length > 0;
 
   return (
-    <div className="flex max-h-[55vh] min-h-[8rem] flex-col overflow-hidden">
+    <div className="flex min-h-[8rem] flex-col sm:max-h-[55vh] sm:overflow-hidden">
       {/* Ayarlar */}
       <div className="flex shrink-0 flex-wrap items-center gap-x-4 gap-y-2 border-b border-zinc-200 bg-zinc-50 px-3 py-2 dark:border-zinc-700 dark:bg-zinc-800/50">
         <label className="flex items-center gap-1.5 text-xs font-medium text-zinc-700 dark:text-zinc-200">
@@ -364,7 +367,7 @@ export function SayimTabContent({
       </div>
 
       {/* Eşleşmeler */}
-      <div className="flex-1 overflow-auto">
+      <div className="sm:min-h-0 sm:flex-1 sm:overflow-auto">
         {withinLimitPairs.length === 0 ? (
           <EmptyState
             title={
@@ -458,6 +461,7 @@ export function SayimTabContent({
       </div>
 
       <SayimChangeModal
+        warehouseId={warehouseId}
         pair={confirmPair}
         applying={confirmPair !== null && applyingKey === pairKey(confirmPair)}
         onClose={() => setConfirmPair(null)}

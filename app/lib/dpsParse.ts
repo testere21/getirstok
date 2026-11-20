@@ -3,6 +3,8 @@
  * Getir'e ve Firestore'a bağımlı değil.
  */
 
+import { warehouseName } from "./franchiseWarehouses";
+
 export type DpsSectionKey = "bayi" | "kurye" | "depocu";
 
 export const DPS_SECTION_LABELS: Record<DpsSectionKey, string> = {
@@ -165,7 +167,7 @@ export function parseDpsCriteria(json: unknown, warehouseId: string): DpsParseRe
   const entries = json.map(asObj).filter((o): o is Obj => o != null);
   const ours = entries.find((e) => e.warehouseId === warehouseId);
   if (!ours) {
-    throw new DpsParseError("DPS cevabında Soğukkuyu deposu yok.");
+    throw new DpsParseError(`DPS cevabında ${warehouseName(warehouseId)} deposu yok.`);
   }
   if (!asObj(ours.warehouseDpsPoints) && !asObj(ours.pickerDpsPoints)) {
     throw new DpsParseError("DPS cevabında puan alanları yok. Getir biçimi değiştirmiş olabilir.");

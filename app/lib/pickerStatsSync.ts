@@ -3,7 +3,7 @@
  * Sadece sunucuda çalışır (exceljs + bayi token'ı).
  */
 import { parseDepoIciSure } from "./dpsReportParse";
-import { SOGUKKUYU_WAREHOUSE_ID } from "./franchiseWarehouses";
+import { SOGUKKUYU_WAREHOUSE_ID, isFranchiseWarehouseId } from "./franchiseWarehouses";
 import {
   DpsReportApiError,
   downloadDpsReport,
@@ -280,6 +280,8 @@ export async function syncNextDpsReport(): Promise<PickerStatsSyncResult> {
   let latestDay = state.latestDay;
   const dayJobs: { warehouseId: string; ymd: string; orders: typeof parsed.orders }[] = [];
   for (const [warehouseId, orders] of selection.byWarehouse) {
+    // Panelde olmayan depolar (Ulupark) için yeni kayıt yazılmaz; eski kayıtlar olduğu gibi durur
+    if (!isFranchiseWarehouseId(warehouseId)) continue;
     for (const [ymd, dayOrders] of groupByDay(orders)) {
       if (!latestDay || ymd > latestDay) latestDay = ymd;
       dayJobs.push({ warehouseId, ymd, orders: dayOrders });

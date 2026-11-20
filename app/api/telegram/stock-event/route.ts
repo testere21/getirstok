@@ -5,6 +5,7 @@ import {
   buildDeleteItemMessage,
   buildUpdateItemMessage,
 } from "@/app/lib/telegramService";
+import { warehouseLabelPrefix } from "@/app/lib/franchiseWarehouses";
 
 type StockItemType = "missing" | "extra";
 
@@ -22,6 +23,8 @@ interface StockEventBody {
   eventType: EventType;
   item: BasicItemPayload;
   beforeItem?: BasicItemPayload;
+  /** Kaydın deposu; yoksa/Soğukkuyu ise mesaj eskisi gibi, Bostanlı ise "Depo: Bostanlı" etiketiyle */
+  warehouseId?: string;
 }
 
 export async function POST(request: Request) {
@@ -89,7 +92,7 @@ export async function POST(request: Request) {
     }
 
     if (message) {
-      await sendTelegramMessage(message);
+      await sendTelegramMessage(warehouseLabelPrefix(body.warehouseId) + message);
     }
 
     return NextResponse.json({ success: true });

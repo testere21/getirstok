@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { X } from "lucide-react";
-import { Html5Qrcode } from "html5-qrcode";
+import { Html5QrcodeSupportedFormats } from "html5-qrcode";
+import { ZXingHtml5QrcodeDecoder } from "html5-qrcode/esm/zxing-html5-qrcode-decoder";
 import { ErrorMessage } from "./ErrorMessage";
 
 interface BarcodeScannerProps {
@@ -11,36 +12,273 @@ interface BarcodeScannerProps {
   onScanSuccess: (barcode: string) => void;
 }
 
-const SCANNER_START_TIMEOUT_MS = 15000; // Faz 3.4: kamera başlatma timeout (ms)
-const MODAL_OPEN_DELAY_MS = 450; // Faz 4.3: modal açıldıktan sonra scanner başlatma gecikmesi (yavaş cihazlarda layout için)
-const CLEANUP_BEFORE_START_DELAY_MS = 150; // Faz 5.2: eski instance stop+clear sonrası gecikme (100–200 ms)
+/**
+ * Barkod tarayıcı. Kamera görüntüsü kendi <video> öğemizde gösterilir (kutuyu dolduracak şekilde,
+ * oran bozulmaz); okuma, görüntünün ortadaki bölgesinin TAM ÇÖZÜNÜRLÜKLÜ kesitinden yapılır:
+ *   1) Tarayıcıda yerleşik BarcodeDetector varsa (Android Chrome vb.) o, yoksa
+ *   2) ZXing (html5-qrcode içindeki kod çözücü).
+ * Eski sürüm html5-qrcode'un kendi görüntü/kutu düzenini kullanıyordu: kare oran istendiği için bazı
+ * telefonlarda görüntü yarım kalıyor, kutu ekran boyutunda küçültülmüş kesit okuduğu için de bazı
+ * telefonlarda barkod okunmuyordu.
+ */
 
-export function BarcodeScanner({
-  isOpen,
-  onClose,
-  onScanSuccess,
-}: BarcodeScannerProps) {
+const CAMERA_START_TIMEOUT_MS = 15000;
+const SCAN_INTERVAL_MS = 110;
+/** Kesit genişliği (piksel) üst sınırı: okuma ayrıntısı korunur, yavaş telefonlar yorulmaz */
+const MAX_SCAN_WIDTH_PX = 1100;
+/** Hedef kutusu, görünen alanın oranları (barkodlar geniştir) */
+const BOX_WIDTH_RATIO = 0.9;
+const BOX_HEIGHT_RATIO = 0.42;
+
+const BARCODE_FORMATS = [
+  Html5QrcodeSupportedFormats.EAN_13,
+  Html5QrcodeSupportedFormats.EAN_8,
+  Html5QrcodeSupportedFormats.UPC_A,
+  Html5QrcodeSupportedFormats.UPC_E,
+  Html5QrcodeSupportedFormats.CODE_128,
+  Html5QrcodeSupportedFormats.CODE_39,
+  Html5QrcodeSupportedFormats.CODE_93,
+  Html5QrcodeSupportedFormats.ITF,
+  Html5QrcodeSupportedFormats.CODABAR,
+  Html5QrcodeSupportedFormats.QR_CODE,
+];
+
+/** Tarayıcıdaki BarcodeDetector için biçim adları (desteklenmeyenler çalışma anında elenir) */
+const NATIVE_FORMATS = [
+  "ean_13",
+  "ean_8",
+  "upc_a",
+  "upc_e",
+  "code_128",
+  "code_39",
+  "code_93",
+  "itf",
+  "codabar",
+  "qr_code",
+];
+
+interface NativeDetectedBarcode {
+  rawValue: string;
+  boundingBox: { width: number; height: number };
+}
+interface NativeBarcodeDetector {
+  detect(source: CanvasImageSource): Promise<NativeDetectedBarcode[]>;
+}
+interface NativeBarcodeDetectorConstructor {
+  new (options?: { formats?: string[] }): NativeBarcodeDetector;
+  getSupportedFormats?: () => Promise<string[]>;
+}
+
+const silentLogger = {
+  log() {},
+  warn() {},
+  logError() {},
+  logErrors() {},
+};
+
+/** Kod çözücü: önce yerleşik BarcodeDetector, olmazsa/başarısızsa ZXing. Okunan metin ya da null döner. */
+/**
+ * Görüntüyü Otsu eşiğiyle saf siyah-beyaza çevirir. ZXing, arka planı orta gri ya da gölgeli/yansımalı
+ * karelerde ham görüntüyü okuyamayabiliyor; eşiklenmiş kopya bu durumları çözer.
+ */
+function binarizeInto(src: HTMLCanvasElement, dst: HTMLCanvasElement, trim: boolean): boolean {
+  const w = src.width;
+  const h = src.height;
+  const sctx = src.getContext("2d");
+  const dctx = dst.getContext("2d");
+  if (!sctx || !dctx || w === 0 || h === 0) return false;
+  if (dst.width !== w) dst.width = w;
+  if (dst.height !== h) dst.height = h;
+  const img = sctx.getImageData(0, 0, w, h);
+  const d = img.data;
+  const lum = new Uint8Array(w * h);
+  const hist = new Uint32Array(256);
+  for (let i = 0, j = 0; i < lum.length; i++, j += 4) {
+    const l = (d[j] * 77 + d[j + 1] * 150 + d[j + 2] * 29) >> 8;
+    lum[i] = l;
+    hist[l]++;
+  }
+  const total = lum.length;
+  let sumAll = 0;
+  for (let t = 0; t < 256; t++) sumAll += t * hist[t];
+  let sumB = 0;
+  let wB = 0;
+  let best = 0;
+  let threshold = 128;
+  for (let t = 0; t < 256; t++) {
+    wB += hist[t];
+    if (wB === 0) continue;
+    const wF = total - wB;
+    if (wF === 0) break;
+    sumB += t * hist[t];
+    const mB = sumB / wB;
+    const mF = (sumAll - sumB) / wF;
+    const between = wB * wF * (mB - mF) * (mB - mF);
+    if (between > best) {
+      best = between;
+      threshold = t;
+    }
+  }
+  // 1 = siyah, 0 = beyaz
+  const bin = new Uint8Array(w * h);
+  for (let i = 0; i < bin.length; i++) bin[i] = lum[i] > threshold ? 0 : 1;
+  if (trim) for (let y = 0; y < h; y++) trimRowEdges(bin, y * w, w);
+  for (let i = 0, j = 0; i < bin.length; i++, j += 4) {
+    const v = bin[i] ? 0 : 255;
+    d[j] = d[j + 1] = d[j + 2] = v;
+    d[j + 3] = 255;
+  }
+  dctx.putImageData(img, 0, 0);
+  return true;
+}
+
+/**
+ * Satırın baş ve sonundaki "barkoda ait olamayacak kadar yalnız" siyah çizgileri (kenardaki gölge, masa,
+ * el, etiket kenarı) beyaza çevirir. ZXing, satır barkoddan önce siyahla başlıyorsa (5 px bile olsa)
+ * başlangıç kalıbını bulamıyor; bu temizlik o durumu çözer. Barkodun kendi başlangıç çizgisinin
+ * ardından hemen dar bir boşluk gelir, o yüzden korunur.
+ */
+function trimRowEdges(bin: Uint8Array, off: number, w: number) {
+  // Üç ardışık çizgi (siyah-beyaz-siyah) birbirine benziyorsa barkod başlangıcıdır.
+  const similar = (p: number, q: number, r: number) => Math.max(p, q, r) <= 4 * Math.min(p, q, r);
+  // soldan
+  let x = 0;
+  while (x < w) {
+    while (x < w && bin[off + x] === 0) x++;
+    if (x >= w) return;
+    const a = x;
+    while (x < w && bin[off + x] === 1) x++;
+    const b = x;
+    while (x < w && bin[off + x] === 0) x++;
+    if (x >= w) break;
+    const e = x;
+    while (x < w && bin[off + x] === 1) x++;
+    if (similar(b - a, e - b, x - e)) break;
+    bin.fill(0, off + a, off + b);
+    x = b;
+  }
+  // sağdan
+  x = w - 1;
+  while (x >= 0) {
+    while (x >= 0 && bin[off + x] === 0) x--;
+    if (x < 0) return;
+    const b = x + 1;
+    while (x >= 0 && bin[off + x] === 1) x--;
+    const a = x + 1;
+    while (x >= 0 && bin[off + x] === 0) x--;
+    if (x < 0) break;
+    const e = x + 1;
+    while (x >= 0 && bin[off + x] === 1) x--;
+    if (similar(b - a, a - e, e - (x + 1))) break;
+    bin.fill(0, off + a, off + b);
+    x = a - 1;
+  }
+}
+
+async function createDecoder(): Promise<(canvas: HTMLCanvasElement) => Promise<string | null>> {
+  const zxing = new ZXingHtml5QrcodeDecoder(BARCODE_FORMATS, false, silentLogger);
+  const binaryCanvas = document.createElement("canvas");
+  binaryCanvas.getContext("2d", { willReadFrequently: true });
+  let zxingFrame = 0;
+  const zxingTry = async (canvas: HTMLCanvasElement) => {
+    try {
+      const result = await zxing.decodeAsync(canvas);
+      return result?.text ?? null;
+    } catch {
+      return null; // bu karede barkod yok (normal durum)
+    }
+  };
+  // Kareler sırayla ham, eşiklenmiş ve kenarları temizlenmiş görüntüyle denenir
+  // (her kare tek deneme: yavaş telefonlar yorulmaz)
+  const zxingDecode = async (canvas: HTMLCanvasElement) => {
+    zxingFrame++;
+    const phase = zxingFrame % 3;
+    if (phase === 1) return zxingTry(canvas);
+    return binarizeInto(canvas, binaryCanvas, phase === 0) ? zxingTry(binaryCanvas) : null;
+  };
+
+  let nativeDetector: NativeBarcodeDetector | null = null;
+  try {
+    const Ctor = (window as unknown as { BarcodeDetector?: NativeBarcodeDetectorConstructor }).BarcodeDetector;
+    if (Ctor) {
+      const supported = Ctor.getSupportedFormats ? await Ctor.getSupportedFormats() : NATIVE_FORMATS;
+      const formats = NATIVE_FORMATS.filter((f) => supported.includes(f));
+      if (formats.length > 0) nativeDetector = new Ctor({ formats });
+    }
+  } catch {
+    nativeDetector = null;
+  }
+  if (!nativeDetector) return zxingDecode;
+
+  const detector = nativeDetector;
+  let nativeBroken = false;
+  return async (canvas) => {
+    if (!nativeBroken) {
+      try {
+        const found = await detector.detect(canvas);
+        if (found.length > 0) {
+          const largest = found.reduce((a, b) =>
+            b.boundingBox.width * b.boundingBox.height > a.boundingBox.width * a.boundingBox.height ? b : a
+          );
+          if (largest.rawValue) return largest.rawValue;
+        }
+        return null;
+      } catch {
+        nativeBroken = true; // yerleşik dedektör çalışmıyor: bundan sonra ZXing
+      }
+    }
+    return zxingDecode(canvas);
+  };
+}
+
+function cameraErrorMessage(err: unknown): { message: string; detail: string } {
+  const e = err as { name?: string; message?: string; isTimeout?: boolean } | null;
+  const name = e?.name ?? "Unknown";
+  const msg = e?.message ?? String(err);
+  const detail = `${name}${msg ? ` — ${msg}` : ""}`;
+  if (e?.isTimeout) {
+    return { message: "Kamera yanıt vermiyor. Tekrar denemek için aşağıdaki butonu kullanın.", detail };
+  }
+  if (name === "NotAllowedError" || name === "PermissionDeniedError" || name === "SecurityError") {
+    return {
+      message: "Kamera erişimi reddedildi. Lütfen tarayıcı ayarlarından kamera iznini verin.",
+      detail,
+    };
+  }
+  if (name === "NotFoundError" || name === "DevicesNotFoundError" || name === "OverconstrainedError") {
+    return { message: "Kamera bulunamadı. Lütfen cihazınızda bir kamera olduğundan emin olun.", detail };
+  }
+  if (name === "NotReadableError" || name === "TrackStartError" || name === "AbortError") {
+    return {
+      message: "Kamera açılamadı; başka bir uygulama kullanıyor olabilir. Diğer uygulamaları kapatıp tekrar deneyin.",
+      detail,
+    };
+  }
+  return { message: "Kamera başlatılamadı. Lütfen izinleri kontrol edin.", detail };
+}
+
+export function BarcodeScanner({ isOpen, onClose, onScanSuccess }: BarcodeScannerProps) {
   const previousActiveElementRef = useRef<HTMLElement | null>(null);
   const modalRef = useRef<HTMLDivElement>(null);
-  const scannerRef = useRef<HTMLDivElement>(null);
-  const html5QrcodeRef = useRef<Html5Qrcode | null>(null);
-  const resizeObserverRef = useRef<ResizeObserver | null>(null); // Faz 4.2
-  const isMountedRef = useRef(true); // Faz 5.3: modal açık mı; cleanup'ta false, callback'lerde kontrol
-  const isScanningRef = useRef(false); // Tekrar okumayı önlemek için
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const frameRef = useRef<HTMLDivElement>(null);
   const [error, setError] = useState<string | null>(null);
   const [errorDetail, setErrorDetail] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [retryTrigger, setRetryTrigger] = useState(0);
   const audioContextRef = useRef<AudioContext | null>(null);
+  // Callback'ler her çizimde değişebilir; kamera döngüsü yeniden başlamasın diye ref'te tutulur
+  const onCloseRef = useRef(onClose);
+  const onScanSuccessRef = useRef(onScanSuccess);
+  useEffect(() => {
+    onCloseRef.current = onClose;
+    onScanSuccessRef.current = onScanSuccess;
+  }, [onClose, onScanSuccess]);
 
   // Modal açıldığında focus yönetimi
   useEffect(() => {
     if (isOpen) {
-      // Önceki aktif elementi kaydet
-      previousActiveElementRef.current =
-        (document.activeElement as HTMLElement) || null;
-
-      // Modal içindeki ilk focusable elemente focus ver
+      previousActiveElementRef.current = (document.activeElement as HTMLElement) || null;
       const firstFocusable = modalRef.current?.querySelector(
         'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
       ) as HTMLElement | null;
@@ -59,480 +297,196 @@ export function BarcodeScanner({
   // Escape tuşu ile kapatma
   useEffect(() => {
     if (!isOpen) return;
-
     const handleEscape = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        onClose();
-      }
+      if (e.key === "Escape") onCloseRef.current();
     };
-
     document.addEventListener("keydown", handleEscape);
-    return () => {
-      document.removeEventListener("keydown", handleEscape);
-    };
-  }, [isOpen, onClose]);
+    return () => document.removeEventListener("keydown", handleEscape);
+  }, [isOpen]);
 
-  // Bip sesi çalma fonksiyonu (Web Audio API)
-  const playBeepSound = () => {
+  // Bip sesi (Web Audio API)
+  const playBeepSound = useCallback(() => {
     try {
-      // AudioContext oluştur (eğer yoksa)
       if (!audioContextRef.current) {
-        audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
+        const Ctx =
+          window.AudioContext ||
+          (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+        audioContextRef.current = new Ctx();
       }
-
       const audioContext = audioContextRef.current;
-
-      // Eğer suspended durumdaysa resume et (kullanıcı etkileşimi gerekebilir)
-      if (audioContext.state === "suspended") {
-        audioContext.resume();
-      }
-
-      // Oscillator ve GainNode oluştur
+      if (audioContext.state === "suspended") void audioContext.resume();
       const oscillator = audioContext.createOscillator();
       const gainNode = audioContext.createGain();
-
-      // Ses ayarları
-      oscillator.type = "sine"; // Sinüs dalgası (yumuşak bip)
-      oscillator.frequency.value = 800; // 800 Hz (orta ton)
-      
-      // Ses seviyesi (volume)
-      gainNode.gain.setValueAtTime(0.3, audioContext.currentTime); // %30 ses seviyesi
-      gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.1); // Hızlı fade-out
-
-      // Bağlantıları yap
+      oscillator.type = "sine";
+      oscillator.frequency.value = 800;
+      gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+      gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.1);
       oscillator.connect(gainNode);
       gainNode.connect(audioContext.destination);
-
-      // Ses çal (100ms süre)
       oscillator.start(audioContext.currentTime);
       oscillator.stop(audioContext.currentTime + 0.1);
-
-      // Cleanup
-      oscillator.onended = () => {
-        // Gerekirse AudioContext'i kapat (ama genelde açık tutmak daha iyi)
-      };
     } catch (err) {
-      // Ses çalma hatası sessizce görmezden gel
       console.warn("Bip sesi çalınamadı:", err);
     }
-  };
+  }, []);
 
-  // Kamera başlatma ve durdurma
+  // Kamera başlatma, okuma döngüsü ve temizlik
   useEffect(() => {
-    // Modal kapalıysa scanner'ı temizle
     if (!isOpen) {
-      isScanningRef.current = false; // Flag'i sıfırla
       setError(null);
       setErrorDetail(null);
       setIsLoading(false);
-      if (html5QrcodeRef.current) {
-        const scanner = html5QrcodeRef.current;
-        html5QrcodeRef.current = null;
-        scanner
-          .stop()
-          .then(() => {
-            scanner.clear();
-          })
-          .catch(() => {
-            // Stop hatası görmezden gel
-          });
-      }
       return;
     }
 
-    // Modal açıldığında flag'leri sıfırla (Faz 5.3: mounted işareti)
-    isScanningRef.current = false;
-    isMountedRef.current = true;
+    let cancelled = false;
+    let stream: MediaStream | null = null;
+    let scanTimer: ReturnType<typeof setTimeout> | null = null;
+    const video = videoRef.current;
+    if (!video) return;
 
-    // Modal açıldığında kamera başlat
-    if (!scannerRef.current) return;
+    const stopCamera = () => {
+      if (scanTimer) clearTimeout(scanTimer);
+      scanTimer = null;
+      stream?.getTracks().forEach((t) => t.stop());
+      stream = null;
+      video.pause();
+      video.srcObject = null;
+    };
 
-    // Hata mesajını temizle ve loading başlat
-    setError(null);
-    setIsLoading(true);
-
-    const startScanning = async () => {
+    const start = async () => {
+      setError(null);
+      setErrorDetail(null);
+      setIsLoading(true);
       try {
-        // Faz 5.1 / 5.2: Başlatmadan önce eski instance varsa stop → clear → ref=null, sonra kısa gecikme
-        if (html5QrcodeRef.current) {
-          const oldScanner = html5QrcodeRef.current;
-          html5QrcodeRef.current = null;
-          try {
-            await oldScanner.stop();
-            oldScanner.clear();
-          } catch {
-            // Eski instance stop/clear hatası görmezden gel
-          }
-          await new Promise((r) => setTimeout(r, CLEANUP_BEFORE_START_DELAY_MS));
-        }
-
-        // Faz 1.1: Tarayıcı ve cihaz bilgisini logla (sadece development)
-        if (typeof window !== "undefined" && process.env.NODE_ENV === "development") {
-          const hasMediaDevices = !!(navigator.mediaDevices);
-          const mediaDevicesKeys = hasMediaDevices
-            ? Object.keys(navigator.mediaDevices).join(", ")
-            : "yok";
-          let cameraPermission: string = "bilinmiyor";
-          try {
-            if (navigator.permissions?.query) {
-              const status = await navigator.permissions.query({ name: "camera" as PermissionName });
-              cameraPermission = status.state;
-            }
-          } catch {
-            cameraPermission = "query desteklenmiyor";
-          }
-          console.log("[BarcodeScanner Teşhis 1.1]", {
-            userAgent: navigator.userAgent,
-            mediaDevicesVar: hasMediaDevices,
-            mediaDevicesKeys,
-            cameraPermission,
-            isSecureContext: window.isSecureContext,
-            platform: navigator.platform,
+        if (!navigator.mediaDevices?.getUserMedia) {
+          throw Object.assign(new Error("Kamera API'si yok (sayfa HTTPS ile açılmalı)"), {
+            name: "NotFoundError",
           });
         }
 
-        // Faz 4.1: Container boyutu garanti – 0x0 ise kısa bekle, birkaç denemeden sonra hata ver
-        const CONTAINER_WAIT_MS = 200;
-        const CONTAINER_MAX_ATTEMPTS = 5;
-        let containerW = scannerRef.current?.clientWidth ?? 0;
-        let containerH = scannerRef.current?.clientHeight ?? 0;
-        for (let attempt = 1; attempt <= CONTAINER_MAX_ATTEMPTS; attempt++) {
-          if (containerW > 0 && containerH > 0) break;
-          if (attempt < CONTAINER_MAX_ATTEMPTS) {
-            await new Promise((r) => setTimeout(r, CONTAINER_WAIT_MS));
-            containerW = scannerRef.current?.clientWidth ?? 0;
-            containerH = scannerRef.current?.clientHeight ?? 0;
+        // Önce yüksek çözünürlük (küçük barkodlar için ayrıntı), olmazsa sırayla daha esnek istekler
+        const attempts: MediaTrackConstraints[] = [
+          { facingMode: { ideal: "environment" }, width: { ideal: 1920 }, height: { ideal: 1080 } },
+          { facingMode: { ideal: "environment" }, width: { ideal: 1280 }, height: { ideal: 720 } },
+          { facingMode: { ideal: "environment" } },
+          {},
+        ];
+        const open = async () => {
+          let lastErr: unknown = null;
+          for (const constraints of attempts) {
+            try {
+              return await navigator.mediaDevices.getUserMedia({ video: constraints, audio: false });
+            } catch (e) {
+              lastErr = e;
+              const name = (e as { name?: string })?.name;
+              // İzin reddi/güvenlik hatasında daha esnek istek denemenin anlamı yok
+              if (name === "NotAllowedError" || name === "PermissionDeniedError" || name === "SecurityError") {
+                throw e;
+              }
+            }
           }
-        }
-        if (containerW === 0 || containerH === 0) {
-          setIsLoading(false);
-          setError("Tarayıcı alanı henüz hazır değil. Lütfen sayfayı yenileyip tekrar deneyin.");
-          setErrorDetail("Container boyutu 0x0");
+          throw lastErr;
+        };
+        const timeout = new Promise<never>((_, reject) =>
+          setTimeout(
+            () => reject(Object.assign(new Error("Kamera yanıt vermiyor"), { isTimeout: true })),
+            CAMERA_START_TIMEOUT_MS
+          )
+        );
+        const opened = await Promise.race([open(), timeout]);
+        if (cancelled) {
+          opened.getTracks().forEach((t) => t.stop());
           return;
         }
-        if (process.env.NODE_ENV === "development") {
-          console.log("[BarcodeScanner Teşhis 1.4] Container boyutu", { width: containerW, height: containerH });
-        }
+        stream = opened;
 
-        // Container'a benzersiz ID ver
-        const elementId = `barcode-scanner-${Date.now()}`;
-        scannerRef.current!.id = elementId;
+        video.srcObject = stream;
+        video.setAttribute("playsinline", "true");
+        video.muted = true;
+        await video.play().catch(() => {
+          /* otomatik oynatma engellenirse görüntü yine de akar; döngü kareyi bekler */
+        });
 
-        // Html5Qrcode instance oluştur
-        const scanner = new Html5Qrcode(elementId);
-        html5QrcodeRef.current = scanner;
-
-        // Responsive qrbox boyutu hesapla
-        const containerWidth = scannerRef.current?.clientWidth || 300;
-        const containerHeight = scannerRef.current?.clientHeight || 300;
-        const qrboxSize = Math.min(
-          Math.max(200, Math.floor(Math.min(containerWidth, containerHeight) * 0.8)),
-          300
-        );
-
-        // Kamera ayarları - Faz 2.4: Varsayılan FPS 7 (yavaş cihazlarda daha stabil)
-        const config = {
-          fps: 7,
-          qrbox: { width: qrboxSize, height: qrboxSize },
-          aspectRatio: 1.0,
-        };
-
-        // Faz 2.1 / 2.3: Esnek config ve çözünürlük fallback zinciri
-        const configEsnek = {
-          ...config,
-          videoConstraints: { facingMode: "environment" as const },
-        };
-        // Faz 2.4: Fallback denemelerinde daha düşük FPS (5) - ilk start hatasında yükü azalt
-        const configDusukFps = { ...config, fps: 5 };
-        const config1280 = {
-          ...configDusukFps,
-          videoConstraints: {
-            facingMode: "environment" as const,
-            width: { ideal: 1280 },
-            height: { ideal: 720 },
-          },
-        };
-        const config640 = {
-          ...configDusukFps,
-          videoConstraints: {
-            facingMode: "environment" as const,
-            width: { ideal: 640 },
-            height: { ideal: 480 },
-          },
-        };
-        const configMin = {
-          ...configDusukFps,
-          videoConstraints: {
-            facingMode: "environment" as const,
-            width: { min: 320 },
-            height: { min: 240 },
-          },
-        };
-        const configFallbackZinciri = [configEsnek, config1280, config640, configMin];
-
-        // Önce mevcut kameraları listele ve arka kamerayı bul
-        let cameraId: string | { facingMode: "environment" } | null = null;
-        let selectedCameraLabel: string | null = null;
-
+        // Sürekli otomatik odak (destekleyen telefonlarda; olmazsa sessizce geçilir)
         try {
-          const cameras = await Html5Qrcode.getCameras();
-
-          // Faz 1.2: Kamera listesi loglama (sadece development)
-          if (process.env.NODE_ENV === "development") {
-            const list = cameras?.length
-              ? cameras.map((c) => ({ id: c.id, label: c.label || "(etiket yok)" }))
-              : [];
-            console.log("[BarcodeScanner Teşhis 1.2] Kamera listesi", {
-              kameraSayisi: cameras?.length ?? 0,
-              kameralar: list,
+          const track = stream.getVideoTracks()[0];
+          const caps = track?.getCapabilities?.() as { focusMode?: string[] } | undefined;
+          if (caps?.focusMode?.includes("continuous")) {
+            await track.applyConstraints({
+              advanced: [{ focusMode: "continuous" } as MediaTrackConstraintSet],
             });
           }
-
-          if (cameras && cameras.length > 0) {
-            // Faz 3.1: Arka kamera tespiti – çok dilli etiketler
-            const arkaKameraEtiketleri = [
-              "back",
-              "rear",
-              "environment",
-              "facing back",
-              "trasa",
-              "umgebung",
-              "rück",
-              "trasera",
-              "posterior",
-              "후면",   // Kore: arka
-              "后",    // Çince: arka
-              "背面",  // Çince: arka yüz
-              "env",
-              "rear camera",
-              "back camera",
-            ];
-            const isArkaKamera = (label: string) => {
-              const lower = label.toLowerCase();
-              return arkaKameraEtiketleri.some((k) => lower.includes(k.toLowerCase()));
-            };
-            const onKameraEtiketleri = [
-              "front",
-              "user",
-              "facing user",
-              "selfie",
-              "frontal",
-              "przednia",
-              "vorder",
-              "delanter",
-              "전면",
-              "前",
-              "前置",
-            ];
-            const isOnKamera = (label: string) => {
-              const lower = label.toLowerCase();
-              return onKameraEtiketleri.some((k) => lower.includes(k.toLowerCase()));
-            };
-
-            const backCamera = cameras.find((cam) => cam.label && isArkaKamera(cam.label));
-
-            if (backCamera) {
-              cameraId = backCamera.id;
-              selectedCameraLabel = backCamera.label;
-            } else {
-              // Arka kamera bulunamazsa, ön kamera olmayan ilk kamerayı dene
-              const nonFrontCamera = cameras.find(
-                (cam) => cam.label && !isOnKamera(cam.label)
-              );
-
-              if (nonFrontCamera) {
-                cameraId = nonFrontCamera.id;
-                selectedCameraLabel = nonFrontCamera.label;
-              } else if (cameras.length === 1) {
-                // Faz 3.3: Sadece tek kamera varsa ilk (ve tek) kamerayı kullan; çok kameralı cihazda ön kamerayı zorlama
-                cameraId = cameras[0].id;
-                selectedCameraLabel = cameras[0].label ?? null;
-              }
-              // Çok kameralı cihazda arka/arka adayı yoksa cameraId = null kalır; facingMode ile başlatılır
-            }
-          }
-        } catch (err) {
-          console.warn("Kamera listesi alınamadı, facingMode kullanılacak:", err);
+        } catch {
+          /* odak ayarı desteklenmiyor */
         }
 
-        // Faz 1.2: Seçilen kamerayı logla (sadece development)
-        if (process.env.NODE_ENV === "development") {
-          console.log("[BarcodeScanner Teşhis 1.2] Seçilen kamera", {
-            secim: cameraId
-              ? (typeof cameraId === "string" ? "kameraId" : "facingMode")
-              : "facingMode fallback",
-            kameraId: typeof cameraId === "string" ? cameraId : undefined,
-            label: selectedCameraLabel ?? undefined,
-          });
-        }
+        const decode = await createDecoder();
+        if (cancelled) return;
+        setIsLoading(false);
 
-        const onScanSuccessInner = (decodedText: string) => {
-            // Faz 5.3: Modal kapatıldıysa callback çalıştırma
-            if (!isMountedRef.current) return;
-            // Kamera başarıyla başlatıldı, loading'i kaldır
-            setIsLoading(false);
-            setError(null);
-            if (isScanningRef.current) return; // Zaten işleniyorsa atla
-            
-            // Barkod formatını kontrol et
-            if (!decodedText || decodedText.trim().length === 0) {
-              return; // Geçersiz barkod
-            }
+        const canvas = document.createElement("canvas");
+        const ctx = canvas.getContext("2d", { willReadFrequently: true });        let handled = false;
 
-            const barcode = decodedText.trim();
-            
-            // Minimum uzunluk kontrolü (barkodlar genellikle en az 8 karakter)
-            if (barcode.length < 3) {
-              return; // Çok kısa, muhtemelen hatalı okuma
-            }
+        const tick = async () => {
+          if (cancelled || handled) return;
+          try {
+            const frame = frameRef.current;
+            if (ctx && frame && video.readyState >= 2 && video.videoWidth > 0 && video.videoHeight > 0) {
+              const cw = frame.clientWidth;
+              const ch = frame.clientHeight;
+              const vw = video.videoWidth;
+              const vh = video.videoHeight;
+              if (cw > 0 && ch > 0) {
+                // <video> object-fit: cover ile gösteriliyor: görünen kısmı ve hedef kutusunu video pikseline çevir
+                const scale = Math.max(cw / vw, ch / vh);
+                const visibleW = cw / scale;
+                const visibleH = ch / scale;
+                const boxW = Math.min(visibleW * BOX_WIDTH_RATIO, vw);
+                const boxH = Math.min(visibleH * BOX_HEIGHT_RATIO, vh);
+                const sx = (vw - boxW) / 2;
+                const sy = (vh - boxH) / 2;
+                const outW = Math.round(Math.min(boxW, MAX_SCAN_WIDTH_PX));
+                const outH = Math.max(1, Math.round((boxH * outW) / boxW));
+                if (canvas.width !== outW) canvas.width = outW;
+                if (canvas.height !== outH) canvas.height = outH;
+                ctx.drawImage(video, sx, sy, boxW, boxH, 0, 0, outW, outH);
 
-            // Tekrar okumayı önle
-            isScanningRef.current = true;
-
-            // Bip sesi çal
-            playBeepSound();
-
-            // Scanner'ı durdur
-            scanner
-              .stop()
-              .then(() => {
-                if (!isMountedRef.current) return;
-                scanner.clear();
-                html5QrcodeRef.current = null;
-                onScanSuccess(barcode);
-                onClose();
-                setTimeout(() => {
-                  isScanningRef.current = false;
-                }, 1000);
-              })
-              .catch((err) => {
-                console.error("Scanner durdurma hatası:", err);
-                if (!isMountedRef.current) return;
-                onScanSuccess(barcode);
-                onClose();
-                setTimeout(() => {
-                  isScanningRef.current = false;
-                }, 1000);
-              });
-          };
-        const onScanError = () => {
-          // Tarama hataları için - sessizce devam et (normal durum)
-        };
-
-        // Faz 3.2: Önce facingMode ile dene, başarısız olursa kamera ID ile dene
-        const usingCameraId = typeof cameraId === "string";
-        const cameraConfigFacingMode = { facingMode: "environment" as const };
-
-        // Faz 3.4: Tüm başlatma denemeleri için tek timeout
-        const startAttempt = async () => {
-          let lastErr: any = null;
-          for (const configToTry of configFallbackZinciri) {
-            try {
-              await scanner.start(cameraConfigFacingMode, configToTry, onScanSuccessInner, onScanError);
-              lastErr = null;
-              return;
-            } catch (e: any) {
-              lastErr = e;
-              if (process.env.NODE_ENV === "development") {
-                console.log("[BarcodeScanner Faz 2.3] Deneme başarısız, sonraki çözünürlük deneniyor", e?.message);
+                const text = (await decode(canvas))?.trim();
+                if (text && text.length >= 3 && !cancelled && !handled) {
+                  handled = true;
+                  stopCamera();
+                  playBeepSound();
+                  onScanSuccessRef.current(text);
+                  onCloseRef.current();
+                  return;
+                }
               }
             }
+          } catch {
+            /* bu karede okunamadı; sonraki kareyle devam */
           }
-          if (lastErr && usingCameraId) {
-            if (process.env.NODE_ENV === "development") {
-              console.log("[BarcodeScanner Faz 3.2] facingMode başarısız, kamera ID ile deneniyor");
-            }
-            await scanner.start(cameraId as string, configEsnek, onScanSuccessInner, onScanError);
-            return;
-          }
-          if (lastErr) throw lastErr;
+          if (!cancelled && !handled) scanTimer = setTimeout(tick, SCAN_INTERVAL_MS);
         };
-        const timeoutPromise = new Promise<never>((_, reject) =>
-          setTimeout(() => reject(Object.assign(new Error("Kamera yanıt vermiyor"), { isTimeout: true })), SCANNER_START_TIMEOUT_MS)
-        );
-        await Promise.race([startAttempt(), timeoutPromise]);
-
-        // Faz 4.2: Container boyutu değişince (örn. yön değişimi) applyVideoConstraints çağır
-        const containerEl = scannerRef.current;
-        const scannerInstance = html5QrcodeRef.current;
-        if (containerEl && scannerInstance && typeof ResizeObserver !== "undefined") {
-          resizeObserverRef.current = new ResizeObserver((entries) => {
-            const entry = entries[0];
-            if (!entry || !html5QrcodeRef.current?.isScanning) return;
-            const w = Math.round(entry.contentRect.width);
-            const h = Math.round(entry.contentRect.height);
-            if (w > 0 && h > 0 && typeof html5QrcodeRef.current?.applyVideoConstraints === "function") {
-              html5QrcodeRef.current
-                .applyVideoConstraints({ width: { ideal: w }, height: { ideal: h } })
-                .catch(() => {});
-            }
-          });
-          resizeObserverRef.current.observe(containerEl);
-        }
-      } catch (err: any) {
-        html5QrcodeRef.current = null;
-        if (!isMountedRef.current) return; // Faz 5.3: Modal kapatıldıysa setState yapma
-
-        // Faz 1.3: getUserMedia / scanner hata detayı loglama
-        const errName = err?.name ?? "Unknown";
-        const errMessage = err?.message ?? String(err);
-        if (process.env.NODE_ENV === "development") {
-          console.log("[BarcodeScanner Teşhis 1.3] Kamera başlatma hatası", {
-            name: errName,
-            message: errMessage,
-            fullError: err,
-          });
-        } else {
-          console.error("Kamera başlatma hatası:", errName, errMessage);
-        }
-
-        // Kullanıcıya gelişmiş bilgi (hata kodu) göster
-        const detail = `${errName}${errMessage ? ` — ${errMessage}` : ""}`;
+        scanTimer = setTimeout(tick, SCAN_INTERVAL_MS);
+      } catch (err) {
+        stopCamera();
+        if (cancelled) return;
+        const { message, detail } = cameraErrorMessage(err);
+        console.error("Kamera başlatma hatası:", detail);
         setErrorDetail(detail);
-
-        // Hata mesajını belirle (Faz 3.4: timeout mesajı)
-        let errorMsg = "Kamera başlatılamadı. Lütfen izinleri kontrol edin.";
-        if (err?.isTimeout || err?.message === "Kamera yanıt vermiyor") {
-          errorMsg = "Kamera yanıt vermiyor. Tekrar denemek için aşağıdaki butonu kullanın.";
-        } else if (err?.message) {
-          const errMsg = err.message.toLowerCase();
-          if (errMsg.includes("permission") || errMsg.includes("izin")) {
-            errorMsg = "Kamera erişimi reddedildi. Lütfen tarayıcı ayarlarından kamera iznini verin.";
-          } else if (errMsg.includes("not found") || errMsg.includes("bulunamadı")) {
-            errorMsg = "Kamera bulunamadı. Lütfen cihazınızda bir kamera olduğundan emin olun.";
-          } else if (errMsg.includes("not allowed") || errMsg.includes("izin verilmedi")) {
-            errorMsg = "Kamera erişimi için izin gerekli. Lütfen tarayıcı ayarlarından izin verin.";
-          }
-        }
-
-        setError(errorMsg);
+        setError(message);
         setIsLoading(false);
       }
     };
 
-    // Faz 4.3: Modal açıldıktan sonra gecikme – container layout için (300→450 ms)
-    const timer = setTimeout(() => {
-      startScanning();
-    }, MODAL_OPEN_DELAY_MS);
+    void start();
 
-    // Cleanup (Faz 5.1 + Faz 5.3: isMounted false, sonra ResizeObserver/scanner temizliği)
     return () => {
-      isMountedRef.current = false;
-      clearTimeout(timer);
-      if (resizeObserverRef.current && scannerRef.current) {
-        resizeObserverRef.current.disconnect();
-        resizeObserverRef.current = null;
-      }
-      if (html5QrcodeRef.current) {
-        const scanner = html5QrcodeRef.current;
-        html5QrcodeRef.current = null;
-        scanner
-          .stop()
-          .then(() => scanner.clear())
-          .catch(() => {});
-      }
+      cancelled = true;
+      stopCamera();
     };
-  }, [isOpen, retryTrigger]);
+  }, [isOpen, retryTrigger, playBeepSound]);
 
   if (!isOpen) return null;
 
@@ -551,28 +505,25 @@ export function BarcodeScanner({
         aria-label="Modalı kapat"
       />
 
-      {/* İçerik kutusu — tıklama overlay'e gitmesin */}
-      {/* Mobilde tam ekran, desktop'ta merkezi modal */}
+      {/* İçerik kutusu — mobilde tam ekran, masaüstünde ortada pencere */}
       <div
         ref={modalRef}
-        className="relative w-full h-full max-h-screen overflow-y-auto bg-white shadow-lg dark:bg-zinc-900 sm:h-auto sm:max-w-lg sm:rounded-xl sm:p-6 p-4 transition-all duration-300 flex flex-col"
-        style={{
-          opacity: isOpen ? 1 : 0,
-          transform: isOpen ? "scale(1)" : "scale(0.95)",
-        }}
+        className="relative flex h-full max-h-[100dvh] w-full flex-col overflow-y-auto bg-white p-4 shadow-lg dark:bg-zinc-900 sm:h-auto sm:max-w-lg sm:rounded-xl sm:p-6"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-start justify-between gap-4 mb-4">
-          <h2
-            id="scanner-title"
-            className="text-lg font-semibold text-zinc-900 dark:text-zinc-50"
-          >
-            Barkod Tarayıcı
-          </h2>
+        <div className="mb-3 flex items-start justify-between gap-4">
+          <div>
+            <h2 id="scanner-title" className="text-lg font-semibold text-zinc-900 dark:text-zinc-50">
+              Barkod Tarayıcı
+            </h2>
+            <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
+              Barkodu çerçevenin içine getirin; otomatik okunur.
+            </p>
+          </div>
           <button
             type="button"
             onClick={onClose}
-            className="rounded-lg p-2 text-zinc-500 transition hover:bg-zinc-200 hover:text-zinc-700 dark:hover:bg-zinc-700 dark:hover:text-zinc-300 min-h-[44px] min-w-[44px] flex items-center justify-center"
+            className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-lg p-2 text-zinc-500 transition hover:bg-zinc-200 hover:text-zinc-700 dark:hover:bg-zinc-700 dark:hover:text-zinc-300"
             aria-label="Kapat"
             title="Kapat (Esc)"
           >
@@ -582,7 +533,7 @@ export function BarcodeScanner({
 
         {/* Hata mesajı */}
         {error && (
-          <div className="mb-4 space-y-2">
+          <div className="mb-3 space-y-2">
             <ErrorMessage
               message={error}
               onDismiss={() => {
@@ -596,52 +547,59 @@ export function BarcodeScanner({
                 Gelişmiş bilgi: {errorDetail}
               </p>
             )}
-            {/* Faz 3.4: Timeout'ta "Tekrar dene" butonu */}
-            {error.includes("Kamera yanıt vermiyor") && (
-              <button
-                type="button"
-                onClick={() => {
-                  setError(null);
-                  setErrorDetail(null);
-                  setRetryTrigger((prev) => prev + 1);
-                }}
-                className="w-full rounded-lg border border-zinc-300 bg-white px-4 py-2.5 text-sm font-medium text-zinc-700 shadow-sm transition hover:bg-zinc-50 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-200 dark:hover:bg-zinc-700"
-              >
-                Tekrar dene
-              </button>
-            )}
+            <button
+              type="button"
+              onClick={() => {
+                setError(null);
+                setErrorDetail(null);
+                setRetryTrigger((prev) => prev + 1);
+              }}
+              className="w-full rounded-lg border border-zinc-300 bg-white px-4 py-2.5 text-sm font-medium text-zinc-700 shadow-sm transition hover:bg-zinc-50 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-200 dark:hover:bg-zinc-700"
+            >
+              Tekrar dene
+            </button>
           </div>
         )}
 
-        {/* Kamera container */}
+        {/* Kamera alanı: sabit oranlı kutu, görüntü kutuyu doldurur (object-cover), cihaza göre değişmez */}
         <div
-          ref={scannerRef}
-          className="w-full flex-1 sm:flex-none aspect-video bg-zinc-100 dark:bg-zinc-800 rounded-lg overflow-hidden min-h-[200px] sm:min-h-[300px] max-h-[70vh] sm:max-h-none relative"
+          ref={frameRef}
+          data-testid="scanner-frame"
+          className="relative mx-auto aspect-[3/4] max-h-[62dvh] w-full overflow-hidden rounded-lg bg-black sm:aspect-[4/3] sm:max-h-none"
         >
-          {/* Loading göstergesi */}
+          <video
+            ref={videoRef}
+            playsInline
+            muted
+            autoPlay
+            className="absolute inset-0 h-full w-full object-cover"
+          />
+
+          {/* Hedef çerçevesi: dışı karartılır, içi okunan bölgedir */}
+          {!isLoading && !error && (
+            <div
+              className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-xl border-2 border-white/90 shadow-[0_0_0_9999px_rgba(0,0,0,0.45)]"
+              style={{ width: `${BOX_WIDTH_RATIO * 100}%`, height: `${BOX_HEIGHT_RATIO * 100}%` }}
+            >
+              <div className="absolute inset-x-3 top-1/2 h-0.5 -translate-y-1/2 animate-pulse rounded bg-red-500/80" />
+            </div>
+          )}
+
+          {/* Yükleniyor */}
           {isLoading && (
-            <div className="absolute inset-0 flex items-center justify-center bg-zinc-100/90 dark:bg-zinc-800/90 backdrop-blur-sm">
+            <div className="absolute inset-0 flex items-center justify-center bg-black/60 backdrop-blur-sm">
               <div className="flex flex-col items-center gap-3">
-                <div className="size-8 animate-spin rounded-full border-4 border-zinc-300 border-t-[var(--color-primary)] dark:border-zinc-600 dark:border-t-[var(--color-primary)]" />
-                <p className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
-                  Kamera açılıyor...
-                </p>
+                <div className="size-8 animate-spin rounded-full border-4 border-zinc-400 border-t-white" />
+                <p className="text-sm font-medium text-white">Kamera açılıyor...</p>
               </div>
             </div>
           )}
         </div>
 
-        {/* Kullanım talimatları */}
-        <div className="mt-4 space-y-2">
-          <p className="text-sm font-medium text-zinc-700 dark:text-zinc-300 text-center">
-            Barkodu kameraya gösterin
-          </p>
-          <p className="text-xs text-zinc-500 dark:text-zinc-400 text-center">
-            Barkod otomatik olarak okunacak ve arama yapılacaktır
-          </p>
-        </div>
+        <p className="mt-3 text-center text-xs text-zinc-500 dark:text-zinc-400">
+          Okumazsa telefonu biraz uzaklaştırıp barkodu ışıklı bir yerde tutun.
+        </p>
       </div>
     </div>
   );
 }
-

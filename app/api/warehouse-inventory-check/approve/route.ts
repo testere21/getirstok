@@ -4,6 +4,7 @@ import {
   isValidInventoryCheckId,
 } from "@/app/lib/getirInventoryCheckService";
 import { GetirWarehouseApiError } from "@/app/lib/getirWarehouseApiService";
+import { requireExplicitWarehouseId } from "@/app/lib/franchiseWarehouses";
 
 /**
  * Kasa/Palet sekmesinden açılan sayımı depo panelinde onaylar.
@@ -11,12 +12,21 @@ import { GetirWarehouseApiError } from "@/app/lib/getirWarehouseApiService";
  * üzerinden bu isteği tetikleyemesin.
  */
 export async function POST(request: Request) {
-  let body: { inventoryCheckId?: unknown };
+  let body: { inventoryCheckId?: unknown; warehouseId?: unknown };
   try {
-    body = (await request.json()) as { inventoryCheckId?: unknown };
+    body = (await request.json()) as { inventoryCheckId?: unknown; warehouseId?: unknown };
   } catch {
     return NextResponse.json(
       { success: false, error: "Geçersiz istek gövdesi." },
+      { status: 400 }
+    );
+  }
+
+  // Depo AÇIKÇA verilmeli: eksik/tanınmayan depo reddedilir, sessizce Soğukkuyu'ya düşmez
+  const warehouseId = requireExplicitWarehouseId(body.warehouseId);
+  if (!warehouseId) {
+    return NextResponse.json(
+      { success: false, error: "Depo belirtilmedi veya geçersiz." },
       { status: 400 }
     );
   }
@@ -31,7 +41,7 @@ export async function POST(request: Request) {
   }
 
   try {
-    await approveInventoryCheck(inventoryCheckId);
+    await approveInventoryCheck(inventoryCheckId, warehouseId);
     console.log("[Kasa/Palet Sayım] Sayım onaylandı:", inventoryCheckId);
     return NextResponse.json({ success: true, inventoryCheckId });
   } catch (error) {

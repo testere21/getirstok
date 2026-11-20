@@ -3,12 +3,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Check, ClipboardList, MapPin, Package, X } from "lucide-react";
 import { ConfirmModal } from "./ConfirmModal";
+import { SOGUKKUYU_WAREHOUSE_ID, warehouseName } from "@/app/lib/franchiseWarehouses";
 import {
   KASA_PALET_PRODUCTS,
   type KasaPaletProduct,
 } from "@/app/lib/kasaPaletProducts";
 
 interface KasaPaletSayimTabContentProps {
+  /** Sayımın açılacağı (ve onaylanacağı) depo */
+  warehouseId: string;
   onSuccess: (message: string) => void;
   onError: (message: string) => void;
 }
@@ -127,6 +130,7 @@ function LocationModal({ onClose }: { onClose: () => void }) {
 }
 
 export function KasaPaletSayimTabContent({
+  warehouseId,
   onSuccess,
   onError,
 }: KasaPaletSayimTabContentProps) {
@@ -138,6 +142,8 @@ export function KasaPaletSayimTabContent({
   /** Açılmış ama henüz depo panelinde onaylanmamış sayım */
   const [pendingCheck, setPendingCheck] = useState<{
     id: string;
+    /** Sayımın açıldığı depo: onay, depo sonradan değişse bile aynı depoya gider */
+    warehouseId: string;
     productNames: string[];
   } | null>(null);
   const [approveConfirmOpen, setApproveConfirmOpen] = useState(false);
@@ -171,7 +177,10 @@ export function KasaPaletSayimTabContent({
       const res = await fetch("/api/warehouse-inventory-check", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ productIds: products.map((p) => p.productId) }),
+        body: JSON.stringify({
+          productIds: products.map((p) => p.productId),
+          warehouseId,
+        }),
       });
       const data = (await res.json().catch(() => null)) as {
         success?: boolean;
@@ -183,6 +192,7 @@ export function KasaPaletSayimTabContent({
         setSelectedIds(new Set());
         setPendingCheck({
           id: data.inventoryCheckId,
+          warehouseId,
           productNames: products.map((p) => p.name),
         });
         setApproveConfirmOpen(true);
@@ -208,7 +218,10 @@ export function KasaPaletSayimTabContent({
       const res = await fetch("/api/warehouse-inventory-check/approve", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ inventoryCheckId: check.id }),
+        body: JSON.stringify({
+          inventoryCheckId: check.id,
+          warehouseId: check.warehouseId,
+        }),
       });
       const data = (await res.json().catch(() => null)) as {
         success?: boolean;
@@ -218,7 +231,7 @@ export function KasaPaletSayimTabContent({
       if (res.ok && data?.success) {
         setPendingCheck(null);
         onSuccess(
-          `Sayım açıldı ve onaylandı: ${check.productNames.length} ürün (${check.productNames.join(
+          `${warehouseName(check.warehouseId)} · Sayım açıldı ve onaylandı: ${check.productNames.length} ürün (${check.productNames.join(
             ", "
           )}). Sayım no: ${check.id}`
         );
@@ -240,7 +253,7 @@ export function KasaPaletSayimTabContent({
   };
 
   return (
-    <div className="flex max-h-[55vh] min-h-[8rem] flex-col overflow-hidden">
+    <div className="flex min-h-[8rem] flex-col sm:max-h-[55vh] sm:overflow-hidden">
       <div className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-2 border-b border-zinc-200 bg-zinc-50 px-3 py-2 dark:border-zinc-700 dark:bg-zinc-800/50">
         <button
           type="button"
@@ -266,15 +279,22 @@ export function KasaPaletSayimTabContent({
             Seçimi temizle
           </button>
         )}
-        <button
-          type="button"
-          onClick={() => setLocationOpen(true)}
-          className="ml-auto inline-flex items-center gap-1 rounded-lg border border-violet-300 bg-white px-2.5 py-1 text-xs font-medium text-violet-700 transition hover:bg-violet-50 dark:border-violet-700 dark:bg-zinc-900 dark:text-violet-300 dark:hover:bg-violet-950/40"
+        {/* Lokasyon QR görseli Soğukkuyu'ya ait; Bostanlı'da gösterilmez */}
+        {warehouseId === SOGUKKUYU_WAREHOUSE_ID && (
+          <button
+            type="button"
+            onClick={() => setLocationOpen(true)}
+            className="ml-auto inline-flex items-center gap-1 rounded-lg border border-violet-300 bg-white px-2.5 py-1 text-xs font-medium text-violet-700 transition hover:bg-violet-50 dark:border-violet-700 dark:bg-zinc-900 dark:text-violet-300 dark:hover:bg-violet-950/40"
+          >
+            <MapPin className="size-3.5" aria-hidden />
+            Lokasyon göster
+          </button>
+        )}
+        <span
+          className={`text-xs text-zinc-600 dark:text-zinc-300 ${
+            warehouseId === SOGUKKUYU_WAREHOUSE_ID ? "" : "ml-auto"
+          }`}
         >
-          <MapPin className="size-3.5" aria-hidden />
-          Lokasyon göster
-        </button>
-        <span className="text-xs text-zinc-600 dark:text-zinc-300">
           <strong className="tabular-nums">{selectedCount}</strong> /{" "}
           {KASA_PALET_PRODUCTS.length} seçili
         </span>
@@ -313,7 +333,11 @@ export function KasaPaletSayimTabContent({
         </div>
       )}
 
-      <div className="flex-1 overflow-auto">
+      <p className="px-3 pt-2 text-[11px] leading-snug text-zinc-500 sm:hidden dark:text-zinc-400">
+        Seçilen ürünler depo panelinde tek bir sayımda açılır · Kısmi · Stoklara dair şüphelerim var
+      </p>
+
+      <div className="sm:min-h-0 sm:flex-1 sm:overflow-auto">
         <ul className="grid gap-2 p-3 sm:grid-cols-2 lg:grid-cols-3">
           {KASA_PALET_PRODUCTS.map((product) => (
             <KasaPaletRow
@@ -327,8 +351,9 @@ export function KasaPaletSayimTabContent({
         </ul>
       </div>
 
-      <div className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-2 border-t border-zinc-200 bg-zinc-50 px-3 py-2.5 dark:border-zinc-700 dark:bg-zinc-800/50">
-        <p className="min-w-0 flex-1 text-[11px] leading-snug text-zinc-500 dark:text-zinc-400">
+      {/* Mobilde işlem düğmesi ekranın altında sabit kalır; geniş ekranda normal akışta */}
+      <div className="sticky bottom-0 z-10 flex shrink-0 flex-wrap items-center gap-x-3 gap-y-2 border-t border-zinc-200 bg-zinc-50/95 px-3 py-2.5 pb-[max(0.625rem,env(safe-area-inset-bottom))] backdrop-blur-sm sm:static sm:bg-zinc-50 sm:pb-2.5 sm:backdrop-blur-none dark:border-zinc-700 dark:bg-zinc-800/95 sm:dark:bg-zinc-800/50">
+        <p className="hidden min-w-0 flex-1 text-[11px] leading-snug text-zinc-500 sm:block dark:text-zinc-400">
           Seçilen ürünler depo panelinde tek bir sayımda açılır · Kısmi ·
           Stoklara dair şüphelerim var
         </p>
@@ -336,7 +361,7 @@ export function KasaPaletSayimTabContent({
           type="button"
           onClick={() => setConfirmOpen(true)}
           disabled={selectedCount === 0 || creating}
-          className="inline-flex min-h-[40px] items-center gap-2 rounded-lg bg-violet-600 px-4 py-2 text-sm font-semibold text-white shadow transition hover:bg-violet-700 disabled:cursor-not-allowed disabled:opacity-40"
+          className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-violet-600 px-4 py-2 text-sm font-semibold text-white shadow transition hover:bg-violet-700 disabled:cursor-not-allowed disabled:opacity-40 sm:min-h-[40px] sm:w-auto sm:rounded-lg"
         >
           <ClipboardList className="size-4" aria-hidden />
           {creating
@@ -350,8 +375,8 @@ export function KasaPaletSayimTabContent({
       <ConfirmModal
         isOpen={confirmOpen}
         onClose={() => setConfirmOpen(false)}
-        title="Sayım açılsın mı?"
-        message={`${selectedCount} ürünle depo panelinde sayım açılacak: ${selectedProducts
+        title={`Sayım açılsın mı? · ${warehouseName(warehouseId)}`}
+        message={`${selectedCount} ürünle ${warehouseName(warehouseId)} deposunun panelinde sayım açılacak: ${selectedProducts
           .map((p) => p.name)
           .join(", ")}. Emin misiniz?`}
         confirmLabel="Eminim"
@@ -365,10 +390,10 @@ export function KasaPaletSayimTabContent({
       <ConfirmModal
         isOpen={approveConfirmOpen && pendingCheck !== null}
         onClose={() => setApproveConfirmOpen(false)}
-        title="Sayım onaylansın mı?"
+        title={`Sayım onaylansın mı? · ${warehouseName(pendingCheck?.warehouseId ?? warehouseId)}`}
         message={`Sayım açıldı (${pendingCheck?.productNames.length ?? 0} ürün: ${
           pendingCheck?.productNames.join(", ") ?? ""
-        }). Depo panelinde onaylansın mı? Onaylanınca görevler el terminaline düşer.`}
+        }). ${warehouseName(pendingCheck?.warehouseId ?? warehouseId)} deposunun panelinde onaylansın mı? Onaylanınca görevler el terminaline düşer.`}
         confirmLabel="Evet"
         cancelLabel="Hayır"
         variant="neutral"

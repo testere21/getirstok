@@ -43,9 +43,9 @@ import {
   FRANCHISE_WAREHOUSES,
   FRANCHISE_WAREHOUSE_IDS,
   SOGUKKUYU_WAREHOUSE_ID,
-  isFranchiseWarehouseId,
   warehouseName,
 } from "@/app/lib/franchiseWarehouses";
+import { useSelectedWarehouseId } from "@/app/lib/selectedWarehouse";
 import { PickerManageModal } from "./PickerManageModal";
 import { PickerPrimReportModal } from "./PickerPrimReportModal";
 import { PickerDailyModal, type PickerDailyRow } from "./PickerDailyModal";
@@ -63,16 +63,9 @@ const SORT_KEYS: readonly PickerSortKey[] = [
 
 const RANGE_STORAGE_KEY = "getirstok.pickerStats.range";
 const SORT_STORAGE_KEY = "getirstok.pickerStats.sort";
-const WAREHOUSE_STORAGE_KEY = "getirstok.pickerStats.warehouse";
 
 /** "all" veya depo id */
 type WarehouseFilter = string;
-
-function readStoredWarehouseFilter(): WarehouseFilter {
-  if (typeof window === "undefined") return SOGUKKUYU_WAREHOUSE_ID;
-  const v = window.localStorage.getItem(WAREHOUSE_STORAGE_KEY);
-  return v === "all" || (v && isFranchiseWarehouseId(v)) ? v : SOGUKKUYU_WAREHOUSE_ID;
-}
 
 function dayCacheKey(warehouseId: string, ymd: string): string {
   return `${warehouseId}|${ymd}`;
@@ -244,7 +237,12 @@ function ToplayiciPerformansiPanel() {
   /** Senkron sürerken aralık değişirse / Güncelle'ye basılırsa bitince bir tur daha */
   const metricsPendingRef = useRef<{ range: YmdRange; refreshSince: string | null } | null>(null);
 
-  const [warehouseFilter, setWarehouseFilter] = useState<WarehouseFilter>(readStoredWarehouseFilter);
+  // Depo filtresi ana ekrandaki seçimi izler; "Tüm depolar" yalnızca bu sekmede geçici seçilebilir
+  const panelWarehouseId = useSelectedWarehouseId();
+  const [warehouseFilter, setWarehouseFilter] = useState<WarehouseFilter>(panelWarehouseId);
+  useEffect(() => {
+    setWarehouseFilter(panelWarehouseId);
+  }, [panelWarehouseId]);
   const selectedWarehouseIds = useMemo<readonly string[]>(
     () => (warehouseFilter === "all" ? FRANCHISE_WAREHOUSE_IDS : [warehouseFilter]),
     [warehouseFilter]
@@ -279,10 +277,6 @@ function ToplayiciPerformansiPanel() {
       setMetaError("Toplayıcı listesi okunamadı. Sayfayı yenileyip tekrar deneyin.")
     );
   }, [refreshMeta]);
-
-  useEffect(() => {
-    window.localStorage.setItem(WAREHOUSE_STORAGE_KEY, warehouseFilter);
-  }, [warehouseFilter]);
 
   // Sadece önbellekte olmayan depo-günler okunur (dönem/depo değiştirince aynı gün tekrar okunmaz)
   useEffect(() => {
@@ -958,6 +952,7 @@ function readStoredSubTab(): StatsSubTab {
 
 export function IstatistiklerTabContent() {
   const [subTab, setSubTab] = useState<StatsSubTab>(readStoredSubTab);
+  const panelWarehouseId = useSelectedWarehouseId();
 
   useEffect(() => {
     window.localStorage.setItem(SUB_TAB_STORAGE_KEY, subTab);
@@ -991,7 +986,12 @@ export function IstatistiklerTabContent() {
         ))}
       </div>
       <div role="tabpanel" id={`stats-subpanel-${subTab}`} aria-labelledby={`stats-subtab-${subTab}`}>
-        {subTab === "dps" ? <DpsPanel /> : <ToplayiciPerformansiPanel />}
+        {subTab === "dps" ? (
+          // key: depo değişince seçili depoya ait puanlar/grafik sıfırdan yüklenir
+          <DpsPanel key={panelWarehouseId} warehouseId={panelWarehouseId} />
+        ) : (
+          <ToplayiciPerformansiPanel />
+        )}
       </div>
     </div>
   );

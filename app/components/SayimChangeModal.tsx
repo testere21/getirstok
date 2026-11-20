@@ -7,6 +7,8 @@ import { formatTryPriceTRY } from "@/app/lib/utils";
 import type { SayimCandidate, SayimPair } from "@/app/lib/sayimMatch";
 
 interface SayimChangeModalProps {
+  /** Seçili depo: raf stoğu bu deponun stoğundan okunur */
+  warehouseId: string;
   /** null ise pencere kapalı */
   pair: SayimPair | null;
   applying: boolean;
@@ -110,6 +112,7 @@ function SayimChangeSide({
 }
 
 export function SayimChangeModal({
+  warehouseId,
   pair,
   applying,
   onClose,
@@ -151,6 +154,7 @@ export function SayimChangeModal({
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         barcodes: [extraBarcode, missingBarcode].filter(Boolean),
+        warehouseId,
       }),
       signal: controller.signal,
     })
@@ -167,7 +171,7 @@ export function SayimChangeModal({
       });
 
     return () => controller.abort();
-  }, [extraBarcode, missingBarcode]);
+  }, [extraBarcode, missingBarcode, warehouseId]);
 
   if (!pair) return null;
 

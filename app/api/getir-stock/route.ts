@@ -5,6 +5,7 @@ import {
   getGetirStock,
   getGetirStocksByBarcodes,
 } from "@/app/lib/getirApiService";
+import { resolvePanelWarehouseId } from "@/app/lib/franchiseWarehouses";
 
 /** CORS header'ları */
 const CORS_HEADERS = {
@@ -40,7 +41,15 @@ export async function GET(request: Request) {
     console.log("[Getir Stock API] Fetching stock for barcode:", barcode.trim());
     
     // Getir API'den stok bilgisini çek
-    const stock = await getGetirStock(barcode.trim());
+    // Depo verilmezse Soğukkuyu (eski istemciler); tanınmayan depo reddedilir
+    const warehouseId = resolvePanelWarehouseId(searchParams.get("warehouseId"));
+    if (!warehouseId) {
+      return NextResponse.json(
+        { stock: null, error: "Geçersiz depo." },
+        { status: 400, headers: CORS_HEADERS }
+      );
+    }
+    const stock = await getGetirStock(barcode.trim(), warehouseId);
     
     console.log("[Getir Stock API] Stock result:", stock);
 
@@ -84,7 +93,15 @@ export async function GET(request: Request) {
 /** Fırın toplu raf stoğu — tek Getir isteği */
 export async function POST(request: Request) {
   try {
-    const body = (await request.json()) as { barcodes?: unknown };
+    const body = (await request.json()) as { barcodes?: unknown; warehouseId?: unknown };
+    // Depo verilmezse Soğukkuyu (eski istemciler); tanınmayan depo reddedilir
+    const warehouseId = resolvePanelWarehouseId(body?.warehouseId);
+    if (!warehouseId) {
+      return NextResponse.json(
+        { stocks: {}, error: "Geçersiz depo.", success: false },
+        { status: 400, headers: CORS_HEADERS }
+      );
+    }
     const barcodes = Array.isArray(body?.barcodes)
       ? body.barcodes.filter((b): b is string => typeof b === "string")
       : [];
@@ -107,7 +124,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const stocks = await getGetirStocksByBarcodes(barcodes);
+    const stocks = await getGetirStocksByBarcodes(barcodes, warehouseId);
     return NextResponse.json(
       { stocks, success: true },
       { status: 200, headers: CORS_HEADERS }

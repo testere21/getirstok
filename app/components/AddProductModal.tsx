@@ -9,6 +9,7 @@ import { ExpiringProductModal } from "./ExpiringProductModal";
 import { ConfirmModal } from "./ConfirmModal";
 import type { StockItemWithId, ExpiringProductWithId } from "@/app/lib/types";
 import { catalogProductMatchesBarcode } from "@/app/lib/catalogBarcodeMatch";
+import { SOGUKKUYU_WAREHOUSE_ID } from "@/app/lib/franchiseWarehouses";
 import { formatDateTime } from "@/app/lib/utils";
 
 export type AddProductModalType = "missing" | "extra";
@@ -83,6 +84,8 @@ interface AddProductModalProps {
   catalogProduct?: CatalogProduct | null;
   /** Firestore kayıtları: catalogProduct için eksik/fazla bilgilerini göstermek için */
   stockItems?: StockItemWithId[];
+  /** Yeni eksik/fazla kaydın ekleneceği depo (panelde seçili depo) */
+  warehouseId: string;
   /** Katalog ürününden eksik/fazla ekleme için callback */
   onAddFromCatalog?: (product: CatalogProduct, type: AddProductModalType) => void;
   /** Kayıt düzenleme için callback */
@@ -91,11 +94,6 @@ interface AddProductModalProps {
   onDeleteItem?: (item: StockItemWithId) => void;
   /** Başarılı işlem sonrası çağrılır (toast göstermek için) */
   onSuccess?: (message: string) => void;
-  /**
-   * Fırın ürünleri sekmesinden açılan ürün kartı: fiyat, eksik/fazla ekle,
-   * tedarikçi iade günü ve yaklaşan SKT aksiyonları gösterilmez.
-   */
-  bakeryCatalogCard?: boolean;
 }
 
 const initialForm = { name: "", barcode: "", quantity: "", notes: "" };
@@ -118,11 +116,11 @@ export function AddProductModal({
   initialItem,
   catalogProduct,
   stockItems = [],
+  warehouseId,
   onAddFromCatalog,
   onEditItem,
   onDeleteItem,
   onSuccess,
-  bakeryCatalogCard = false,
 }: AddProductModalProps) {
   const [name, setName] = useState(initialForm.name);
   const [barcode, setBarcode] = useState(initialForm.barcode);
@@ -282,12 +280,12 @@ export function AddProductModal({
   useEffect(() => {
     if (!isOpen || isEditMode) return;
     setCatalogLoading(true);
-    fetch("/api/products")
+    fetch(`/api/products?warehouseId=${encodeURIComponent(warehouseId)}`)
       .then((res) => res.json())
       .then((data: CatalogProduct[]) => setCatalog(Array.isArray(data) ? data : []))
       .catch(() => setCatalog([]))
       .finally(() => setCatalogLoading(false));
-  }, [isOpen, isEditMode]);
+  }, [isOpen, isEditMode, warehouseId]);
 
   // Modal açıldığında formu doldur: düzenleme modunda initialItem, catalogProduct modunda catalogProduct, ekleme modunda sıfırla
   useEffect(() => {
@@ -356,7 +354,7 @@ export function AddProductModal({
 
   // Ürün kartı: önce katalog (products.json), yoksa Firestore cache; Getir eklentisi sadece butonla
   useEffect(() => {
-    if (!isOpen || bakeryCatalogCard) return;
+    if (!isOpen) return;
 
     if (
       typeof resolvedCatalogSupplierReturnDays === "number" &&
@@ -391,7 +389,6 @@ export function AddProductModal({
     void loadCachedSupplierReturnDate();
   }, [
     isOpen,
-    bakeryCatalogCard,
     resolvedCatalogSupplierReturnDays,
     catalogProduct?.barcode,
     initialItem?.barcode,
@@ -399,7 +396,7 @@ export function AddProductModal({
 
   // Ürün kartı açıldığında mevcut yaklaşan SKT kaydını kontrol et
   useEffect(() => {
-    if (!isOpen || bakeryCatalogCard) return;
+    if (!isOpen) return;
 
     const barcodeToCheck = catalogProduct?.barcode || initialItem?.barcode;
     if (!barcodeToCheck) return;
@@ -423,7 +420,7 @@ export function AddProductModal({
     };
 
     checkExistingExpiringProduct();
-  }, [isOpen, bakeryCatalogCard, catalogProduct?.barcode, initialItem?.barcode]);
+  }, [isOpen, catalogProduct?.barcode, initialItem?.barcode]);
 
   const filteredCatalog = useMemo(() => {
     const q = catalogSearch.trim().toLowerCase();
@@ -451,7 +448,7 @@ export function AddProductModal({
 
       try {
         const response = await fetch(
-          `/api/getir-stock?barcode=${encodeURIComponent(trimmed)}`,
+          `/api/getir-stock?barcode=${encodeURIComponent(trimmed)}&warehouseId=${encodeURIComponent(warehouseId)}`,
           { signal }
         );
         const data = await response.json();
@@ -464,7 +461,8 @@ export function AddProductModal({
           setGetirStock(data.stock);
           setGetirStockError(null);
           // Getir sayımdaki ürünün stoğunu gizliyor; SKT kaydı gizlenmiyor
-          if (data.stock == null) {
+          // (SKT kayıtları yalnızca Soğukkuyu'ya ait; Bostanlı'da başka deponun verisi gösterilmesin)
+          if (data.stock == null && warehouseId === SOGUKKUYU_WAREHOUSE_ID) {
             const sktRes = await fetch("/api/warehouse-expiry-stock", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
@@ -495,7 +493,7 @@ export function AddProductModal({
         }
       }
     },
-    []
+    [warehouseId]
   );
 
   /** Düzenleme modu: manuel "Getir Stoğunu Getir" */
@@ -652,6 +650,7 @@ export function AddProductModal({
           notes: notes.trim() || "",
           type: submitType,
           imageUrl: productImageUrl,
+          warehouseId,
         });
       }
       setSelectedProduct(null);
@@ -779,8 +778,7 @@ export function AddProductModal({
                   <h3 className="px-1 text-[14px] font-semibold leading-snug tracking-tight text-zinc-900 dark:text-zinc-50">
                     {catalogProduct.name}
                   </h3>
-                  {!bakeryCatalogCard &&
-                    typeof catalogProduct.price === "number" &&
+                  {typeof catalogProduct.price === "number" &&
                     !Number.isNaN(catalogProduct.price) && (
                       <CatalogProductPriceHighlight
                         price={catalogProduct.price}
@@ -898,9 +896,9 @@ export function AddProductModal({
                 </div>
               )}
 
-              {!bakeryCatalogCard && (
                 <>
-                  {displaySupplierReturnDays === null && (
+                  {/* Tedarikçi iade sorgusu ve SKT işaretleme yalnızca Soğukkuyu'da (Bostanlı'da gizli) */}
+                  {displaySupplierReturnDays === null && warehouseId === SOGUKKUYU_WAREHOUSE_ID && (
                     <button
                       type="button"
                       onClick={handleGetSupplierReturnDate}
@@ -934,7 +932,7 @@ export function AddProductModal({
                     </div>
                   )}
 
-                  {(catalogProduct || initialItem) && (
+                  {(catalogProduct || initialItem) && warehouseId === SOGUKKUYU_WAREHOUSE_ID && (
                     <button
                       type="button"
                       onClick={() => setExpiringProductModalOpen(true)}
@@ -949,7 +947,7 @@ export function AddProductModal({
                     </button>
                   )}
 
-                  {existingExpiringProduct && (
+                  {existingExpiringProduct && warehouseId === SOGUKKUYU_WAREHOUSE_ID && (
                     <div className="rounded-lg border border-orange-200/80 bg-orange-50/90 px-3 py-2 dark:border-orange-900/40 dark:bg-orange-950/40">
                       <p className="text-[10px] font-semibold uppercase tracking-wide text-orange-800/90 dark:text-orange-300/95">
                         Kayıtlı yaklaşan SKT
@@ -967,7 +965,6 @@ export function AddProductModal({
                     </div>
                   )}
                 </>
-              )}
             </div>
 
             {/* Eksik/Fazla bilgileri */}
@@ -1148,8 +1145,7 @@ export function AddProductModal({
             )}
 
             {/* Ekleme butonları - Sadece ürün hiç eklenmemişse göster */}
-            {!bakeryCatalogCard &&
-              !productStatus.hasMissing &&
+            {!productStatus.hasMissing &&
               !productStatus.hasExtra && (
                 <div className="grid grid-cols-2 gap-3">
                   <button
@@ -1237,8 +1233,7 @@ export function AddProductModal({
                   {catalogProduct.name}
                 </div>
               </div>
-              {!bakeryCatalogCard &&
-                typeof catalogProduct.price === "number" &&
+              {typeof catalogProduct.price === "number" &&
                 !Number.isNaN(catalogProduct.price) && (
                   <CatalogProductPriceHighlight
                     price={catalogProduct.price}

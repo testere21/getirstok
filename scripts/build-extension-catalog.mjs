@@ -69,6 +69,47 @@ for (const [base, variants] of byBase) {
 for (const [key, barcode] of Object.entries(aliases)) {
   if (!(key in names) && !(key in ambiguous)) names[key] = barcode;
 }
+
+// Bostanlı'ya özgü ürünler (data/products-bostanli.json): yalnızca Soğukkuyu kataloğunda olmayan adlar eklenir.
+// Soğukkuyu'dan gelen hiçbir kayıt değişmez (aynı ad/görsel/ürün kimliği zaten varsa dokunulmaz).
+let bostanliProducts = [];
+try {
+  bostanliProducts = JSON.parse(await readFile(join(root, "data", "products-bostanli.json"), "utf-8"));
+} catch {
+  /* dosya yoksa yalnızca Soğukkuyu */
+}
+const sogukkuyuNames = new Set(products.map((p) => nameKey(normalizeName(p.name))));
+const extraBase = new Map();
+const extraImages = new Map();
+let extraCount = 0;
+for (const p of bostanliProducts) {
+  const name = normalizeName(p.name);
+  const key = nameKey(name);
+  const barcode = String(p.barcode || p.barcodes?.[0] || "").trim();
+  if (!name || !barcode || sogukkuyuNames.has(key)) continue;
+  extraCount++;
+  if (!(key in names) && !(key in ambiguous)) names[key] = barcode;
+  const base = baseKey(name);
+  if (!extraBase.has(base)) extraBase.set(base, new Map());
+  extraBase.get(base).set(barcode, name);
+  const value = withSize(barcode, name);
+  const img = imageKeyOf(p.imageUrl);
+  if (img && !imageBarcodes.has(img)) {
+    extraImages.set(img, extraImages.has(img) && extraImages.get(img) !== value ? null : value);
+  }
+  const pid = String(p.productId || "").toLowerCase();
+  if (/^[a-f0-9]{24}$/.test(pid) && !(pid in productIds)) productIds[pid] = value;
+}
+for (const [img, value] of extraImages) imageBarcodes.set(img, value);
+for (const [base, variants] of extraBase) {
+  if (base in names || base in ambiguous) continue;
+  if (variants.size > 1) ambiguous[base] = [...variants].map(([barcode, name]) => [name, barcode]);
+  else {
+    const [[barcode, name]] = [...variants];
+    names[base] = withSize(barcode, name);
+  }
+}
+
 const images = Object.fromEntries([...imageBarcodes].filter(([, b]) => b));
 
 const out =

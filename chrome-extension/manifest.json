@@ -1,8 +1,8 @@
-{
+﻿{
   "manifest_version": 3,
   "name": "Getir Token Yakalayıcı",
-  "version": "1.8.8",
-  "description": "Getir Bayi Paneli ve Depo Paneli Authorization token'larını ayrı ayrı yakalayıp getirware.netlify.app'a gönderir",
+  "version": "2.2.9",
+  "description": "Getir Bayi ve Depo Paneli (Soğukkuyu, Bostanlı) için token yakalama, sadeleştirilmiş görünüm ve depo başına özellikler; getirware.netlify.app'a gönderir",
   "permissions": [
     "webRequest",
     "tabs",
@@ -31,7 +31,7 @@
         "https://franchise-v2.getir.com/*",
         "https://warehouse.getir.com/*"
       ],
-      "js": ["product-barcodes.js", "content.js"],
+      "js": ["warehouses.js", "product-barcodes.js", "content.js"],
       "run_at": "document_idle"
     },
     {
@@ -60,4 +60,3 @@
     "default_title": "Getir Token Yakalayıcı"
   }
 }
-

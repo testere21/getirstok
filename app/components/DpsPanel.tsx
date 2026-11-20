@@ -177,7 +177,7 @@ function SectionCard({
   );
 }
 
-export function DpsPanel() {
+export function DpsPanel({ warehouseId }: { warehouseId: string }) {
   const [today, setToday] = useState(() => istanbulTodayYmd());
   const limits = useMemo(() => dpsDateLimits(today), [today]);
   const [range, setRange] = useState<YmdRange>(() =>
@@ -216,7 +216,7 @@ export function DpsPanel() {
       slowHint = window.setTimeout(() => {
         if (!cancelled) setLoaded({ key, kind: "loading", fromGetir: true });
       }, 600);
-      getDpsScore(range.from, range.to, { ranked: range.from === range.to })
+      getDpsScore(range.from, range.to, { ranked: range.from === range.to, warehouseId })
         .then((result) => {
           if (cancelled) return;
           setLoaded(
@@ -240,7 +240,7 @@ export function DpsPanel() {
       window.clearTimeout(timer);
       window.clearTimeout(slowHint);
     };
-  }, [range.from, range.to, rangeError]);
+  }, [range.from, range.to, rangeError, warehouseId]);
 
   // ── Günlük grafik: aralıktaki her gün ayrı kayıt (yoksa Getir'den çekilip kaydedilir) ──
   const [daily, setDaily] = useState<Map<string, DailyEntry>>(() => new Map());
@@ -263,7 +263,7 @@ export function DpsPanel() {
         try {
           const results = await Promise.all(
             missing.slice(i, i + DAILY_CONCURRENCY).map(async (d) => {
-              const r = await getDpsScore(d, d);
+              const r = await getDpsScore(d, d, { warehouseId });
               return [d, r.empty || !r.score ? "empty" : r.score] as const;
             })
           );
@@ -284,7 +284,7 @@ export function DpsPanel() {
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [range.from, range.to, chartDays, showChart]);
+  }, [range.from, range.to, chartDays, showChart, warehouseId]);
 
   const dailyLoaded = chartDays.filter((d) => daily.has(d)).length;
   const dailyReady = showChart && dailyLoaded === chartDays.length;

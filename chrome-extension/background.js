@@ -1,13 +1,16 @@
 // Background Service Worker - Token yakalama ve API'ye gönderme
 // Hem Getir Bayi Paneli hem de Getir Depo Paneli token'larını yakalar
 
+// Depo tablosu ve özellik bayrakları (içerik betiğiyle aynı dosya)
+importScripts("warehouses.js");
+const WH = self.GETIRSTOK_WAREHOUSES;
+
 // Local test: true → localhost:3000 | Netlify deploy sonrası false yap
 const USE_LOCAL_API = false;
 const API_BASE = USE_LOCAL_API
   ? "http://localhost:3000"
   : "https://getirware.netlify.app";
 const API_ENDPOINT = `${API_BASE}/api/token/save`;
-const WAREHOUSE_ID_ENDPOINT = `${API_BASE}/api/warehouse-id/save`;
 const TRANSFER_CAPTURE_ENDPOINT = `${API_BASE}/api/warehouse-transfer/capture`;
 
 const PANEL_URL_PATTERNS = [
@@ -15,6 +18,41 @@ const PANEL_URL_PATTERNS = [
   "http://localhost:3000/*",
   "http://127.0.0.1:3000/*",
 ];
+
+// -----------------------------
+// Depo algılama ve özellik bayrakları
+// Depo, isteğin geldiği sekmenin adresindeki /r/{24 hane}/ kimliğinden (ya da API adresindeki
+// /warehouse/{24 hane}/ kısmından) bulunur. Hiçbiri yoksa bu bilgisayarda en son görülen depo
+// kullanılır. Tabloda olmayan ya da bilinmeyen depoda token/sevkiyat panele GÖNDERİLMEZ
+// (yanlış depoya yazılmasın).
+// -----------------------------
+
+async function loadFeatureOverrides() {
+  const { featureOverrides } = await chrome.storage.local.get("featureOverrides");
+  return featureOverrides && typeof featureOverrides === "object" ? featureOverrides : {};
+}
+
+async function lastKnownWarehouseId() {
+  const { lastWarehouseId } = await chrome.storage.local.get("lastWarehouseId");
+  const id = WH.normalizeId(lastWarehouseId);
+  return id && WH.isKnownWarehouse(id) ? id : null;
+}
+
+async function warehouseIdFromTab(tabId) {
+  if (typeof tabId !== "number" || tabId < 0) return null;
+  try {
+    const tab = await chrome.tabs.get(tabId);
+    return WH.warehouseIdFromPageUrl(tab?.url);
+  } catch {
+    return null;
+  }
+}
+
+/** Depo bilinen bir depoysa ve özellik açıksa true */
+async function warehouseFeatureOn(warehouseId, name) {
+  if (!warehouseId || !WH.isKnownWarehouse(warehouseId)) return false;
+  return WH.featureEnabled(warehouseId, name, await loadFeatureOverrides());
+}
 
 function buildPanelUrlWithQuery(query) {
   const base = "https://getirware.netlify.app/";
@@ -105,7 +143,7 @@ async function focusOrOpenPanelAndSearch(query) {
 let lastTransferCaptureKey = "";
 let lastTransferCaptureAt = 0;
 
-chrome.runtime.onMessage.addListener((msg) => {
+chrome.runtime.onMessage.addListener((msg, sender) => {
   if (!msg || msg.type !== "WAREHOUSE_TRANSFER_CAPTURE") return;
   const url = String(msg.url || "");
   if (!url.includes("warehouse-panel-api-gateway.getirapi.com")) return;
@@ -128,18 +166,23 @@ chrome.runtime.onMessage.addListener((msg) => {
   const fromUrl = extractWarehouseIdFromUrl(url);
   if (fromUrl) captureWarehouseId(fromUrl);
 
-  const payload = {
-    url,
-    method,
-    requestBody,
-    summary: msg.summary && typeof msg.summary === "object" ? msg.summary : null,
-  };
+  const summary = msg.summary && typeof msg.summary === "object" ? msg.summary : null;
   const endpoints = [TRANSFER_CAPTURE_ENDPOINT];
   if (!USE_LOCAL_API) {
     endpoints.push("http://localhost:3000/api/warehouse-transfer/capture");
   }
 
   (async () => {
+    // Hangi depoya ait: önce API adresindeki kimlik, sonra sayfanın bildirdiği, sonra sekme adresi.
+    // Bilinen bir depo değilse ya da sevkiyat yakalama kapalıysa hiçbir yere gönderilmez.
+    const warehouseId =
+      fromUrl ||
+      WH.normalizeId(msg.warehouseId) ||
+      (await warehouseIdFromTab(sender?.tab?.id)) ||
+      (await lastKnownWarehouseId());
+    if (!(await warehouseFeatureOn(warehouseId, "transferCapture"))) return;
+    const payload = { url, method, requestBody, summary, warehouseId };
+
     let anyOk = false;
     for (const endpoint of endpoints) {
       try {
@@ -186,47 +229,17 @@ chrome.runtime.onMessage.addListener((msg, _sender, _sendResponse) => {
   return true;
 });
 
-chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
-  if (!msg || msg.type !== "BAKERY_SUGGESTIONS_SAVE") return;
-  const items = Array.isArray(msg.items) ? msg.items : [];
-  if (items.length === 0) {
-    sendResponse({ ok: false, error: "empty" });
-    return true;
-  }
-  (async () => {
-    try {
-      const response = await fetch(`${API_BASE}/api/bakery-suggestions/save`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ items }),
-      });
-      const text = await response.text();
-      if (response.ok) {
-        console.log(
-          "[Getir Token Yakalayıcı] Pişirme önerileri kaydedildi:",
-          items.length,
-          API_BASE
-        );
-        sendResponse({ ok: true, count: items.length });
-      } else {
-        console.error(
-          "[Getir Token Yakalayıcı] Pişirme önerileri kaydedilemedi:",
-          response.status,
-          text
-        );
-        sendResponse({ ok: false, error: text, status: response.status });
-      }
-    } catch (e) {
-      console.error("[Getir Token Yakalayıcı] Pişirme önerileri API hatası:", e);
-      sendResponse({ ok: false, error: String(e && e.message ? e.message : e) });
-    }
-  })();
-  return true;
-});
-
 // Paneller her istekte aynı token'ı yolluyor (depo Kontrol Paneli birkaç saniyede bir);
-// aynı token'ı tekrar tekrar panele yazmamak için tip başına son gönderileni tutuyoruz.
-const lastSentTokenByType = { franchise: null, warehouse: null };
+// aynı token'ı tekrar tekrar panele yazmamak için (bayi / depo+depo kimliği) başına son gönderileni tutuyoruz.
+const lastSentTokenByKey = {};
+// Depo isteklerinde her seferinde depo aramamak için: sekme → o sekmede son işlenen token
+const lastHandledWarehouseTokenByTab = new Map();
+
+chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
+  // Sayfa adresi değişince (başka depoya geçilmiş olabilir) o sekme yeniden değerlendirilsin
+  if (changeInfo.url) lastHandledWarehouseTokenByTab.delete(tabId);
+});
+chrome.tabs.onRemoved.addListener((tabId) => lastHandledWarehouseTokenByTab.delete(tabId));
 
 // /auth/* isteklerinde Bearer access token değil (refresh-token, OTP ön token'ı)
 function isFranchiseDataRequest(url) {
@@ -235,82 +248,115 @@ function isFranchiseDataRequest(url) {
   return !/franchise-api-gateway\.getirapi\.com\/auth\//i.test(u);
 }
 
+/**
+ * Depo paneli isteğinin hangi depoya ait olduğu: önce API adresindeki kimlik, sonra isteği yapan
+ * sekmenin adresi, en son bu bilgisayarda son görülen depo. (Sekme adresi var ama bilinmeyen bir
+ * depoysa o kimlik döner; yedeğe düşülmez.)
+ */
+async function warehouseIdForRequest(details) {
+  const fromApiUrl = WH.warehouseIdFromGatewayUrl(details.url);
+  if (fromApiUrl) return fromApiUrl;
+  const fromTab = await warehouseIdFromTab(details.tabId);
+  if (fromTab) return fromTab;
+  return lastKnownWarehouseId();
+}
+
+async function handleCapturedToken(tokenType, bearerToken, details) {
+  let warehouseId = null;
+  if (tokenType === "warehouse") {
+    const alreadyHandled = lastHandledWarehouseTokenByTab.get(details.tabId) === bearerToken;
+    if (alreadyHandled) return;
+    warehouseId = await warehouseIdForRequest(details);
+    // Depo bilinmiyorsa, tabloda yoksa ya da token gönderimi kapalıysa panele hiçbir şey gitmez
+    // (token yanlış depoya yazılmasın). Durum değişmediği için sonraki istekte yeniden denenir.
+    if (!(await warehouseFeatureOn(warehouseId, "tokenSync"))) return;
+    captureWarehouseId(warehouseId);
+    if (typeof details.tabId === "number" && details.tabId >= 0) {
+      lastHandledWarehouseTokenByTab.set(details.tabId, bearerToken);
+    }
+  }
+
+  const key = tokenType === "warehouse" ? `warehouse:${warehouseId}` : "franchise";
+  const previousToken = lastSentTokenByKey[key];
+  if (bearerToken === previousToken) return;
+  lastSentTokenByKey[key] = bearerToken;
+  const panelName = tokenType === "franchise" ? "Bayi Paneli" : "Depo Paneli";
+  console.log(
+    `[Getir Token Yakalayıcı] ${panelName} token yakalandı${warehouseId ? ` (${WH.warehouseName(warehouseId)})` : ""}:`,
+    bearerToken.substring(0, 20) + "..."
+  );
+
+  // Depo token'ı ~15 dk'da bir yenileniyor; content.js lastCapturedAt değişince
+  // toast gösterdiği için sonraki yenilemeler ayrı damgaya yazılıyor
+  const stampKey =
+    tokenType === "warehouse" && previousToken
+      ? "lastRefreshedAt_warehouse"
+      : `lastCapturedAt_${tokenType}`;
+  chrome.storage.local.set(
+    {
+      [`lastToken_${tokenType}`]: bearerToken,
+      [stampKey]: new Date().toISOString(),
+    },
+    () => {
+      console.log(`[Getir Token Yakalayıcı] ${panelName} token storage'a kaydedildi`);
+    }
+  );
+
+  // Gönderilemezse 1 dk sonraki ilk istekte tekrar denensin (count her birkaç
+  // saniyede geldiği için hemen sıfırlamak API'ye istek yağdırırdı)
+  sendTokenToAPI(bearerToken, tokenType, warehouseId).then((ok) => {
+    if (ok) return;
+    setTimeout(() => {
+      if (lastSentTokenByKey[key] === bearerToken) {
+        lastSentTokenByKey[key] = null;
+        if (tokenType === "warehouse") lastHandledWarehouseTokenByTab.delete(details.tabId);
+      }
+    }, 60 * 1000);
+  });
+
+  // Gateway'in kullandığı Bearer gerçekten Keycloak access_token'ı mı?
+  if (tokenType === "warehouse") {
+    checkOidcBearerMatch(bearerToken);
+  }
+}
+
 // Token yakalama - webRequest API kullanarak
 chrome.webRequest.onBeforeSendHeaders.addListener(
-  function(details) {
+  function (details) {
     let tokenType = null;
-    let shouldCapture = false;
-    
+
     // Getir Bayi Paneli token'ı (franchise-api-gateway) — yeni panel /stocks'a
-    // her sayfada gitmediği için gateway'e giden tüm veri isteklerinden alınıyor
-    if (isFranchiseDataRequest(details.url)) {
-      tokenType = "franchise";
-      shouldCapture = true;
-    }
-    
+    // her sayfada gitmediği için gateway'e giden tüm veri isteklerinden alınıyor.
+    // Bayi token'ı bir depoya bağlı değil (iki depoyu da kapsıyor).
+    if (isFranchiseDataRequest(details.url)) tokenType = "franchise";
+
     // Getir Depo Paneli token'ı — panel token'ını kendisi yeniliyor; yeni token'ı
     // ilk taşıyan istek genelde Kontrol Paneli'nin count/orders sorgusu olduğu için
     // gateway'e giden tüm istekler dinleniyor
-    if (details.url.includes("warehouse-panel-api-gateway.getirapi.com")) {
-      tokenType = "warehouse";
-      shouldCapture = true;
+    if (details.url.includes("warehouse-panel-api-gateway.getirapi.com")) tokenType = "warehouse";
+
+    if (!tokenType) return;
+
+    // Authorization header'ını bul
+    const authHeader = details.requestHeaders?.find(
+      (header) => header.name.toLowerCase() === "authorization"
+    );
+    if (!authHeader || !authHeader.value) return;
+
+    // Bearer token formatını kontrol et
+    const token = authHeader.value;
+    if (!token.startsWith("Bearer ")) return;
+    const bearerToken = token.substring(7); // "Bearer " kısmını çıkar
+
+    // Token formatını kontrol et (eyJ ile başlamalı)
+    if (!(bearerToken.startsWith("eyJ") && bearerToken.length > 50)) {
+      console.warn(`[Getir Token Yakalayıcı] Geçersiz token formatı:`, bearerToken.substring(0, 20) + "...");
+      return;
     }
-    
-    if (shouldCapture && tokenType) {
-      // Authorization header'ını bul
-      const authHeader = details.requestHeaders?.find(
-        (header) => header.name.toLowerCase() === "authorization"
-      );
 
-      if (authHeader && authHeader.value) {
-        const token = authHeader.value;
-        
-        // Bearer token formatını kontrol et
-        if (token.startsWith("Bearer ")) {
-          const bearerToken = token.substring(7); // "Bearer " kısmını çıkar
-          
-          // Token formatını kontrol et (eyJ ile başlamalı)
-          if (bearerToken.startsWith("eyJ") && bearerToken.length > 50) {
-            const previousToken = lastSentTokenByType[tokenType];
-            if (bearerToken === previousToken) return;
-            lastSentTokenByType[tokenType] = bearerToken;
-            const panelName = tokenType === "franchise" ? "Bayi Paneli" : "Depo Paneli";
-            console.log(`[Getir Token Yakalayıcı] ${panelName} token yakalandı:`, bearerToken.substring(0, 20) + "...");
-
-            // Depo token'ı ~15 dk'da bir yenileniyor; content.js lastCapturedAt değişince
-            // toast gösterdiği için sonraki yenilemeler ayrı damgaya yazılıyor
-            const stampKey =
-              tokenType === "warehouse" && previousToken
-                ? "lastRefreshedAt_warehouse"
-                : `lastCapturedAt_${tokenType}`;
-            chrome.storage.local.set({
-              [`lastToken_${tokenType}`]: bearerToken,
-              [stampKey]: new Date().toISOString()
-            }, () => {
-              console.log(`[Getir Token Yakalayıcı] ${panelName} token storage'a kaydedildi`);
-            });
-
-            // Gönderilemezse 1 dk sonraki ilk istekte tekrar denensin (count her birkaç
-            // saniyede geldiği için hemen sıfırlamak API'ye istek yağdırırdı)
-            sendTokenToAPI(bearerToken, tokenType).then((ok) => {
-              if (ok) return;
-              setTimeout(() => {
-                if (lastSentTokenByType[tokenType] === bearerToken) {
-                  lastSentTokenByType[tokenType] = null;
-                }
-              }, 60 * 1000);
-            });
-
-            // Gateway'in kullandığı Bearer gerçekten Keycloak access_token'ı mı?
-            if (tokenType === "warehouse") {
-              checkOidcBearerMatch(bearerToken);
-            }
-          } else {
-            console.warn(`[Getir Token Yakalayıcı] Geçersiz token formatı:`, bearerToken.substring(0, 20) + "...");
-          }
-        }
-      }
-    }
+    handleCapturedToken(tokenType, bearerToken, details).catch((e) =>
+      console.warn("[Getir Token Yakalayıcı] Token işlenemedi:", e)
+    );
   },
   {
     urls: [
@@ -321,27 +367,25 @@ chrome.webRequest.onBeforeSendHeaders.addListener(
   ["requestHeaders"]
 );
 
-const OBJECT_ID_RE = /^[a-fA-F0-9]{24}$/;
-
 function extractWarehouseIdFromUrl(url) {
-  const match = String(url || "").match(/\/warehouse\/([a-fA-F0-9]{24})(?:\/|\?|$)/);
-  return match ? match[1] : null;
+  return WH.warehouseIdFromGatewayUrl(url);
 }
 
-let lastPostedWarehouseId = null;
+let lastCapturedWarehouseId = null;
 
+/** Bu bilgisayarda en son görülen (bilinen) depoyu saklar; token ve sevkiyat gönderiminde yedek olur */
 function captureWarehouseId(warehouseId) {
-  if (!warehouseId || !OBJECT_ID_RE.test(warehouseId)) return;
-  // Service worker yeniden başlayınca tekrar kaydet (local/prod API değişimi için)
-  if (lastPostedWarehouseId === warehouseId) return;
-  lastPostedWarehouseId = warehouseId;
+  const id = WH.normalizeId(warehouseId);
+  if (!id || !WH.isKnownWarehouse(id)) return;
+  // Service worker yeniden başlayınca tekrar yazılır (zararsız)
+  if (lastCapturedWarehouseId === id) return;
+  lastCapturedWarehouseId = id;
 
   chrome.storage.local.set({
-    lastWarehouseId: warehouseId,
+    lastWarehouseId: id,
     lastWarehouseIdCapturedAt: new Date().toISOString(),
   });
-  console.log("[Getir Token Yakalayıcı] Depo ID yakalandı:", warehouseId);
-  sendWarehouseIdToAPI(warehouseId);
+  console.log("[Getir Token Yakalayıcı] Depo algılandı:", WH.warehouseName(id));
 }
 
 chrome.webRequest.onBeforeRequest.addListener(
@@ -362,34 +406,19 @@ chrome.webRequest.onBeforeRequest.addListener(
   }
 );
 
-async function sendWarehouseIdToAPI(warehouseId) {
-  try {
-    const response = await fetch(WAREHOUSE_ID_ENDPOINT, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ warehouseId }),
-    });
-    if (response.ok) {
-      console.log("[Getir Token Yakalayıcı] Depo ID kaydedildi:", warehouseId);
-    } else {
-      const error = await response.text();
-      console.error("[Getir Token Yakalayıcı] Depo ID kaydedilemedi:", error);
-      lastPostedWarehouseId = null;
-    }
-  } catch (error) {
-    console.error("[Getir Token Yakalayıcı] Depo ID API hatası:", error);
-    lastPostedWarehouseId = null;
+// Token'ı Next.js API'ye gönderme (type bilgisi ile). Depo token'ı depo kimliğiyle gider:
+// panel her depo için ayrı kayıt tutar, böylece bir deponun token'ı öbürünü ezmez.
+async function sendTokenToAPI(token, type, warehouseId) {
+  if (type === "warehouse" && !(warehouseId && WH.isKnownWarehouse(warehouseId))) {
+    console.warn("[Getir Token Yakalayıcı] Depo bilinmiyor, depo token'ı panele gönderilmedi");
+    return false;
   }
-}
-
-// Token'ı Next.js API'ye gönderme (type bilgisi ile)
-async function sendTokenToAPI(token, type) {
   const endpoints = [API_ENDPOINT];
   if (!USE_LOCAL_API) {
     endpoints.push("http://localhost:3000/api/token/save");
   }
   const panelName = type === "franchise" ? "Bayi Paneli" : "Depo Paneli";
-  const body = JSON.stringify({ token, type });
+  const body = JSON.stringify(type === "warehouse" ? { token, type, warehouseId } : { token, type });
   let anyOk = false;
 
   for (const endpoint of endpoints) {
@@ -528,13 +557,22 @@ async function clearOidcSession(reason) {
 // Yenilenen access_token'ı panele yaz. Toast spam olmasın diye
 // lastCapturedAt_warehouse'a dokunmuyoruz, ayrı bir zaman damgası tutuyoruz.
 async function pushRefreshedWarehouseToken(accessToken) {
-  const { oidcBearerMismatch } = await chrome.storage.local.get("oidcBearerMismatch");
+  const { oidcBearerMismatch, oidcWarehouseId } = await chrome.storage.local.get([
+    "oidcBearerMismatch",
+    "oidcWarehouseId",
+  ]);
   if (oidcBearerMismatch === true) return;
+  // Hangi depoya yazılacak: oturumun açıldığı depo; bilinmiyorsa bu bilgisayarda son görülen.
+  // Depo bilinmiyorsa ya da token gönderimi kapalıysa panele gönderilmez.
+  const warehouseId =
+    (WH.isKnownWarehouse(oidcWarehouseId) ? WH.normalizeId(oidcWarehouseId) : null) ||
+    (await lastKnownWarehouseId());
+  if (!(await warehouseFeatureOn(warehouseId, "tokenSync"))) return;
   await chrome.storage.local.set({
     lastToken_warehouse: accessToken,
     lastRefreshedAt_warehouse: new Date().toISOString(),
   });
-  await sendTokenToAPI(accessToken, "warehouse");
+  await sendTokenToAPI(accessToken, "warehouse", warehouseId);
 }
 
 async function storeOidcTokens(data, source) {
@@ -755,10 +793,16 @@ async function refreshWarehouseToken(reason) {
 }
 
 // Sayfadan (content script üzerinden) gelen giriş/yenileme cevabı
-chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (!msg || msg.type !== "WAREHOUSE_OIDC_TOKEN") return;
   (async () => {
     const stored = await storeOidcTokens(msg.data, "panel");
+    // Oturumun hangi depoda açıldığını sakla: yenilenen token o depoya yazılır
+    const warehouseId =
+      WH.normalizeId(msg.warehouseId) || (await warehouseIdFromTab(sender?.tab?.id));
+    if (stored && warehouseId && WH.isKnownWarehouse(warehouseId)) {
+      await chrome.storage.local.set({ oidcWarehouseId: warehouseId });
+    }
     sendResponse({ ok: stored });
   })();
   return true;
@@ -849,6 +893,10 @@ async function fetchServerBarcodeOverrides() {
 
 /** Bekleyenleri göndermeyi dener, sunucu listesini alır, hâlâ bekleyenleri üstüne uygular. */
 async function refreshBarcodeOverrides() {
+  // Barkod özelliği kapalı depoda (Bostanlı) sunucuya hiç gidilmez
+  if (!(await warehouseFeatureOn(await lastKnownWarehouseId(), "barcodeSearch"))) {
+    return { ok: false, skipped: true, pending: 0 };
+  }
   const store = await chrome.storage.local.get(["orderBarcodeOverrides", "orderBarcodeOverridesPending"]);
   const pending = { ...(store.orderBarcodeOverridesPending || {}) };
   for (const [key, item] of Object.entries(pending)) {

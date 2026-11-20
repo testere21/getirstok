@@ -22,6 +22,161 @@
   }
 }
 
+/* Ana ekran SKT uyarısı (ExpiringAlertBanner): dikkat çekici animasyon */
+.skt-alert {
+  background-color: #ea580c;
+}
+.skt-alert-shine {
+  pointer-events: none;
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 35%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.38), transparent);
+  transform: translateX(-130%) skewX(-20deg);
+}
+.skt-alert-bell {
+  transform-origin: 50% 8%;
+}
+@keyframes skt-ring {
+  0% {
+    box-shadow: 0 0 0 0 rgba(249, 115, 22, 0.7), 0 10px 24px rgba(220, 38, 38, 0.35);
+  }
+  70%,
+  100% {
+    box-shadow: 0 0 0 14px rgba(249, 115, 22, 0), 0 10px 24px rgba(220, 38, 38, 0.35);
+  }
+}
+@keyframes skt-hue {
+  0%,
+  100% {
+    background-color: #ea580c;
+  }
+  50% {
+    background-color: #dc2626;
+  }
+}
+@keyframes skt-shine {
+  0% {
+    transform: translateX(-130%) skewX(-20deg);
+  }
+  55%,
+  100% {
+    transform: translateX(380%) skewX(-20deg);
+  }
+}
+@keyframes skt-bell {
+  0%,
+  55%,
+  100% {
+    transform: rotate(0deg);
+  }
+  10% {
+    transform: rotate(-20deg);
+  }
+  20% {
+    transform: rotate(18deg);
+  }
+  30% {
+    transform: rotate(-14deg);
+  }
+  40% {
+    transform: rotate(10deg);
+  }
+  48% {
+    transform: rotate(-5deg);
+  }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .skt-alert {
+    animation:
+      skt-ring 1.6s ease-out infinite,
+      skt-hue 1.6s ease-in-out infinite;
+  }
+  .skt-alert-shine {
+    animation: skt-shine 2.8s ease-in-out infinite;
+  }
+  .skt-alert-bell {
+    animation: skt-bell 2.8s ease-in-out infinite;
+  }
+}
+
+/* Ana ekran sekme simgeleri: seçilince zıplayarak belirir, sonra hafifçe süzülür; üstüne gelince oynar */
+.tab-icon-idle {
+  transition:
+    transform 0.2s ease,
+    opacity 0.2s ease;
+}
+.tab-underline {
+  transform-origin: center;
+}
+@keyframes tab-icon-pop {
+  0% {
+    transform: scale(0.4) rotate(-30deg);
+    opacity: 0.3;
+  }
+  55% {
+    transform: scale(1.4) rotate(12deg);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1) rotate(0deg);
+    opacity: 1;
+  }
+}
+@keyframes tab-icon-float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-1.5px);
+  }
+}
+@keyframes tab-underline-in {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .tab-icon-active {
+    animation:
+      tab-icon-pop 0.55s cubic-bezier(0.34, 1.56, 0.64, 1) both,
+      tab-icon-float 2.4s ease-in-out 0.6s infinite;
+  }
+  .tab-btn:hover .tab-icon-idle {
+    transform: scale(1.2) rotate(-8deg);
+    opacity: 1;
+  }
+  .tab-underline {
+    animation: tab-underline-in 0.25s ease-out both;
+  }
+}
+
+/* SKT uyarı penceresi açılışı: mobilde alttan yukarı kayar, geniş ekranda büyüyerek belirir */
+@keyframes expiring-sheet-up {
+  from {
+    opacity: 0;
+    transform: translateY(32px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@keyframes expiring-dialog-pop {
+  from {
+    opacity: 0;
+    transform: scale(0.95) translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
 /* Fırın — raf stoku 0 satır uyarısı */
 @keyframes bakery-cook-alert-text {
   0%,
@@ -114,6 +269,49 @@
   }
 }
 
+/*
+ * Depo teması: seçili depo <html data-warehouse="..."> olarak yazılır (app/layout.tsx + WarehouseThemeSync).
+ * Soğukkuyu mor (Tailwind varsayılanı, ek kural yok). Bostanlı mavi: panelin mor/indigo tonları
+ * (violet / purple / indigo) mavi tonlarla değiştirilir; kırmızı (eksik), yeşil (fazla), turuncu vb. anlamlı renkler aynı kalır.
+ */
+html[data-warehouse="bostanli"] {
+  /* violet + purple -> blue */
+  --color-violet-50: #eff6ff;
+  --color-violet-100: #dbeafe;
+  --color-violet-200: #bfdbfe;
+  --color-violet-300: #93c5fd;
+  --color-violet-400: #60a5fa;
+  --color-violet-500: #3b82f6;
+  --color-violet-600: #2563eb;
+  --color-violet-700: #1d4ed8;
+  --color-violet-800: #1e40af;
+  --color-violet-900: #1e3a8a;
+  --color-violet-950: #172554;
+  --color-purple-50: #eff6ff;
+  --color-purple-100: #dbeafe;
+  --color-purple-200: #bfdbfe;
+  --color-purple-300: #93c5fd;
+  --color-purple-400: #60a5fa;
+  --color-purple-500: #3b82f6;
+  --color-purple-600: #2563eb;
+  --color-purple-700: #1d4ed8;
+  --color-purple-800: #1e40af;
+  --color-purple-900: #1e3a8a;
+  --color-purple-950: #172554;
+  /* indigo -> sky (mavinin daha açık eşi; degradelerin ikinci ucu) */
+  --color-indigo-50: #f0f9ff;
+  --color-indigo-100: #e0f2fe;
+  --color-indigo-200: #bae6fd;
+  --color-indigo-300: #7dd3fc;
+  --color-indigo-400: #38bdf8;
+  --color-indigo-500: #0ea5e9;
+  --color-indigo-600: #0284c7;
+  --color-indigo-700: #0369a1;
+  --color-indigo-800: #075985;
+  --color-indigo-900: #0c4a6e;
+  --color-indigo-950: #082f49;
+}
+
 /* Varsayılan body ve box-sizing — responsive/mobil uyumlu temel */
 *,
 *::before,
@@ -126,12 +324,61 @@ html {
   overflow-x: hidden;
 }
 
+/*
+ * Arka plan: seçili depo temasının rengiyle yumuşak ışık lekeleri + ince nokta dokusu.
+ * Renkler :root'ta (Soğukkuyu mor) ve html[data-warehouse="bostanli"] altında (mavi) tanımlı.
+ */
+:root {
+  --bg-base: #faf9ff;
+  --bg-glow-a: rgba(167, 139, 250, 0.32);
+  --bg-glow-b: rgba(129, 140, 248, 0.24);
+  --bg-glow-c: rgba(196, 181, 253, 0.28);
+  --bg-dot: rgba(109, 40, 217, 0.1);
+}
+
+html[data-warehouse="bostanli"] {
+  --bg-base: #f5faff;
+  --bg-glow-a: rgba(96, 165, 250, 0.32);
+  --bg-glow-b: rgba(56, 189, 248, 0.24);
+  --bg-glow-c: rgba(147, 197, 253, 0.28);
+  --bg-dot: rgba(29, 78, 216, 0.1);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg-base: #0a0a0a;
+    --bg-glow-a: rgba(124, 58, 237, 0.2);
+    --bg-glow-b: rgba(99, 102, 241, 0.14);
+    --bg-glow-c: rgba(139, 92, 246, 0.14);
+    --bg-dot: rgba(167, 139, 250, 0.1);
+  }
+  html[data-warehouse="bostanli"] {
+    --bg-base: #0a0a0a;
+    --bg-glow-a: rgba(37, 99, 235, 0.22);
+    --bg-glow-b: rgba(14, 165, 233, 0.14);
+    --bg-glow-c: rgba(59, 130, 246, 0.14);
+    --bg-dot: rgba(96, 165, 250, 0.1);
+  }
+}
+
 body {
   margin: 0;
   min-height: 100vh;
-  background: var(--background);
+  background-color: var(--bg-base);
+  background-image:
+    radial-gradient(900px 520px at 6% -4%, var(--bg-glow-a), transparent 65%),
+    radial-gradient(800px 480px at 100% 2%, var(--bg-glow-b), transparent 62%),
+    radial-gradient(900px 600px at 50% 112%, var(--bg-glow-c), transparent 65%),
+    radial-gradient(var(--bg-dot) 1px, transparent 1.4px);
+  background-size: auto, auto, auto, 22px 22px;
+  background-attachment: fixed, fixed, fixed, scroll;
   color: var(--foreground);
   font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
   font-size: 16px; /* Mobilde zoom önleme için minimum 16px */
-  overflow-x: hidden; /* Horizontal scroll önleme */
+  /*
+   * Yatay kaydırmayı önler. `hidden` yerine `clip`: html'de de `hidden` olduğundan body ayrı bir
+   * kaydırma alanı olup `position: sticky` (arama çubuğu, sabit düğmeler) sayfa kaymasını görmüyordu.
+   */
+  overflow-x: clip;
 }
+

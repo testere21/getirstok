@@ -4,11 +4,14 @@ import {
   doc,
   getDoc,
   onSnapshot,
+  query,
   serverTimestamp,
   updateDoc,
+  where,
 } from "firebase/firestore";
 import type { Timestamp } from "firebase/firestore";
 import { db, stockItemsCollectionRef } from "./firebase";
+import { isFranchiseWarehouseId } from "./franchiseWarehouses";
 import { STOCK_ITEMS_COLLECTION } from "./types";
 import type { StockItemType, StockItemWithId } from "./types";
 
@@ -20,6 +23,8 @@ export interface AddStockItemParams {
   notes?: string;
   type: StockItemType;
   imageUrl?: string;
+  /** Kaydın ait olduğu depo (zorunlu: depoya göre listelenir) */
+  warehouseId: string;
 }
 
 /** Güncelleme için kısmi alanlar (gönderilen alanlar güncellenir) */
@@ -39,7 +44,11 @@ export interface UpdateStockItemParams {
 export async function addStockItem(
   params: AddStockItemParams
 ): Promise<string> {
-  const { name, barcode, quantity, notes, type, imageUrl } = params;
+  const { name, barcode, quantity, notes, type, imageUrl, warehouseId } = params;
+  // Depo olmayan/tanınmayan kayıt hiçbir listede görünmez; baştan engelle
+  if (!isFranchiseWarehouseId(warehouseId)) {
+    throw new Error("Geçersiz depo: kayıt eklenemedi.");
+  }
   try {
     const docRef = await addDoc(stockItemsCollectionRef, {
       name,
@@ -48,6 +57,7 @@ export async function addStockItem(
       notes: notes ?? "",
       type,
       imageUrl: imageUrl ?? "",
+      warehouseId,
       createdAt: serverTimestamp(),
     });
     console.log("✅ Ürün Firestore'a eklendi:", docRef.id);
@@ -59,6 +69,7 @@ export async function addStockItem(
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           eventType: "add",
+          warehouseId,
           item: {
             name,
             barcode,
@@ -108,6 +119,7 @@ export async function deleteStockItem(
           type: (data.type as StockItemType) === "extra" ? "extra" : "missing",
           createdAt: "", // Telegram mesajında kullanılmıyor
           imageUrl: (data.imageUrl as string) ?? "",
+          warehouseId: (data.warehouseId as string | undefined) ?? undefined,
         };
       }
     } catch (err) {
@@ -125,6 +137,7 @@ export async function deleteStockItem(
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           eventType: "delete",
+          warehouseId: itemBeforeDelete.warehouseId,
           item: {
             name: itemBeforeDelete.name,
             barcode: itemBeforeDelete.barcode,
@@ -170,6 +183,7 @@ export async function updateStockItem(
         createdAt: "", // Telegram mesajında kullanılmıyor
         updatedAt: undefined,
         imageUrl: (data.imageUrl as string) ?? "",
+        warehouseId: (data.warehouseId as string | undefined) ?? undefined,
       };
     }
   } catch (err) {
@@ -194,6 +208,7 @@ export async function updateStockItem(
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           eventType: "update",
+          warehouseId: beforeItem.warehouseId,
           beforeItem: {
             name: beforeItem.name,
             barcode: beforeItem.barcode,
@@ -225,18 +240,21 @@ function timestampToString(value: unknown): string {
 }
 
 /**
- * stock_items koleksiyonunu real-time dinler; değişiklikte callback'i liste ile çağırır.
+ * Bir deponun stock_items kayıtlarını real-time dinler (yalnızca o depo okunur);
+ * değişiklikte callback'i liste ile çağırır.
+ * @param warehouseId Dinlenecek depo (franchiseWarehouses.ts)
  * @param callback Veri geldiğinde çağrılır (items, isFromCache)
  * @param onError Hata durumunda çağrılır (opsiyonel)
  * @returns Unsubscribe fonksiyonu (useEffect cleanup için kullan)
  */
 export function subscribeStockItems(
+  warehouseId: string,
   callback: (items: StockItemWithId[], isFromCache?: boolean) => void,
   onError?: (error: Error) => void
 ): () => void {
-  console.log("📡 Firestore subscription başlatılıyor...");
+  console.log("📡 Firestore subscription başlatılıyor...", warehouseId);
   return onSnapshot(
-    stockItemsCollectionRef,
+    query(stockItemsCollectionRef, where("warehouseId", "==", warehouseId)),
     (snapshot) => {
       const items: StockItemWithId[] = snapshot.docs.map((d) => {
         const data = d.data();
@@ -250,6 +268,7 @@ export function subscribeStockItems(
         createdAt: timestampToString(data.createdAt),
         updatedAt: data.updatedAt ? timestampToString(data.updatedAt) : undefined,
         imageUrl: data.imageUrl ?? undefined,
+        warehouseId: typeof data.warehouseId === "string" ? data.warehouseId : undefined,
       };
       });
       // Metadata'dan cache durumunu kontrol et

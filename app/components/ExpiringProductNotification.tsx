@@ -1,8 +1,9 @@
 "use client";
 
-import { X, AlertTriangle, Calendar, Package } from "lucide-react";
-import type { ExpiringProductWithId } from "@/app/lib/types";
+import { useEffect } from "react";
 import Image from "next/image";
+import { AlertTriangle, Barcode, BellRing, Calendar, Package, X } from "lucide-react";
+import type { ExpiringProductWithId } from "@/app/lib/types";
 
 interface CatalogProduct {
   name: string;
@@ -18,181 +19,154 @@ interface ExpiringProductNotificationProps {
   catalogProducts?: CatalogProduct[];
 }
 
+/** "2026-12-03" → "3 Ara 2026"; tanınmayan biçim olduğu gibi gösterilir */
+function formatDate(value: string): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value.trim());
+  if (!m) return value;
+  const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+  if (Number.isNaN(d.getTime())) return value;
+  return d.toLocaleDateString("tr-TR", { day: "numeric", month: "short", year: "numeric" });
+}
+
+function normalizeImageUrl(url?: string): string | undefined {
+  if (!url) return undefined;
+  return url.startsWith("http://") ? url.replace("http://", "https://") : url;
+}
+
+/** Bugün çıkılması gereken ürünlerin penceresi: mobilde alttan açılan sayfa, geniş ekranda ortada pencere */
 export function ExpiringProductNotification({
   products,
   onClose,
   catalogProducts = [],
 }: ExpiringProductNotificationProps) {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
   if (products.length === 0) return null;
 
-  const normalizeImageUrl = (url?: string): string | undefined => {
-    if (!url) return undefined;
-    if (url.startsWith("http://")) {
-      return url.replace("http://", "https://");
-    }
-    return url;
-  };
-
-  // Barkod'a göre ürün resmini bulma helper fonksiyonu
   const getProductImage = (barcode: string): string | undefined => {
     const b = barcode.trim();
-    const catalogProduct = catalogProducts.find(
+    const found = catalogProducts.find(
       (p) => p.barcode === b || (p.barcodes ?? []).some((x) => x.trim() === b)
     );
-    return normalizeImageUrl(catalogProduct?.imageUrl);
+    return normalizeImageUrl(found?.imageUrl);
   };
 
   return (
-    <div className="fixed left-2 right-2 top-2 z-50 sm:left-auto sm:right-4 sm:top-4 sm:w-full sm:max-w-md motion-safe:animate-[expiring-pop_0.35s_ease-out]">
-      <div className="rounded-xl border border-orange-300 bg-gradient-to-br from-orange-50 to-orange-100/70 shadow-xl backdrop-blur-sm dark:border-orange-600/80 dark:from-orange-950/70 dark:to-orange-900/60">
-        {/* Header */}
-        <div className="flex items-center justify-between border-b border-orange-300/60 bg-orange-200/40 px-2.5 py-2 sm:px-4 sm:py-3 dark:border-orange-700/70 dark:bg-orange-900/40 rounded-t-xl">
-          <div className="flex items-center gap-1.5 sm:gap-2.5 min-w-0 flex-1">
-            <div className="flex shrink-0 items-center justify-center rounded-full bg-orange-500 p-1 sm:p-2 dark:bg-orange-600">
-              <AlertTriangle className="size-3 sm:size-4 text-white" />
+    <div
+      className="fixed inset-0 z-[70] flex items-end justify-center bg-zinc-950/55 backdrop-blur-[2px] sm:items-center sm:p-4"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="expiring-notification-title"
+      onClick={onClose}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className="flex max-h-[88dvh] w-full flex-col overflow-hidden rounded-t-3xl bg-white shadow-2xl motion-safe:animate-[expiring-sheet-up_0.3s_ease-out] sm:max-w-lg sm:rounded-3xl sm:motion-safe:animate-[expiring-dialog-pop_0.25s_ease-out] dark:bg-zinc-900"
+      >
+        {/* Üst bölüm */}
+        <div className="relative shrink-0 overflow-hidden bg-gradient-to-br from-orange-500 via-orange-600 to-red-600 px-5 pb-4 pt-3 text-white sm:pt-4">
+          <div
+            className="pointer-events-none absolute -right-10 -top-14 size-40 rounded-full bg-white/15 blur-2xl"
+            aria-hidden
+          />
+          <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-white/40 sm:hidden" aria-hidden />
+          <div className="relative flex items-center gap-3">
+            <span className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-white/20 ring-1 ring-white/30">
+              <BellRing className="skt-alert-bell size-6" aria-hidden />
+            </span>
+            <div className="min-w-0 flex-1">
+              <h3 id="expiring-notification-title" className="text-lg font-bold leading-tight">
+                Bugün çıkılacak ürünler
+              </h3>
+              <p className="mt-0.5 text-sm font-medium text-white/90">
+                {products.length === 1 ? "Raftan çıkarılması gereken 1 ürün" : `Raftan çıkarılması gereken ${products.length} ürün`}
+              </p>
             </div>
-            <h3 className="text-xs sm:text-base font-bold text-orange-900 dark:text-orange-50 truncate">
-              {products.length === 1
-                ? "Yaklaşan SKT Uyarısı"
-                : `${products.length} Ürün - Yaklaşan SKT Uyarısı`}
-            </h3>
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex size-10 shrink-0 items-center justify-center rounded-full bg-white/15 transition hover:bg-white/25 active:scale-95"
+              aria-label="Pencereyi kapat"
+            >
+              <X className="size-5" aria-hidden />
+            </button>
           </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="ml-1.5 sm:ml-2 shrink-0 rounded-lg p-1 text-orange-700 transition-all hover:bg-orange-300/50 hover:text-orange-900 active:scale-95 dark:text-orange-300 dark:hover:bg-orange-800/50 dark:hover:text-orange-100"
-            aria-label="Bildirimi kapat"
-          >
-            <X className="size-3.5 sm:size-5" />
-          </button>
         </div>
 
-        {/* Content */}
-        <div className="max-h-64 sm:max-h-80 overflow-y-auto p-2.5 sm:p-4">
-          {products.length === 1 ? (
-            // Tek ürün için detaylı gösterim
-            <div className="space-y-2.5 sm:space-y-3">
-              <div className="rounded-lg bg-white/90 p-2.5 sm:p-3 shadow-sm dark:bg-zinc-900/60">
-                <div className="flex items-start gap-3 mb-2">
-                  {/* Ürün Resmi */}
-                  {getProductImage(products[0].barcode) ? (
-                    <div className="shrink-0">
-                      <div className="relative size-14 sm:size-20 rounded-lg overflow-hidden border border-orange-200 dark:border-orange-700 bg-white">
+        {/* Ürün listesi */}
+        <div className="min-h-0 flex-1 overflow-y-auto bg-zinc-50 p-4 dark:bg-zinc-950/50">
+          <ul className="space-y-3">
+            {products.map((product) => {
+              const image = getProductImage(product.barcode);
+              return (
+                <li
+                  key={product.id}
+                  className="rounded-2xl border border-zinc-200 bg-white p-3.5 shadow-sm dark:border-zinc-700 dark:bg-zinc-800/60"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="relative size-16 shrink-0 overflow-hidden rounded-xl border border-zinc-200 bg-white dark:border-zinc-600">
+                      {image ? (
                         <Image
-                          src={getProductImage(products[0].barcode)!}
-                          alt={products[0].productName}
+                          src={image}
+                          alt={product.productName}
                           fill
                           className="object-contain p-1"
-                          sizes="(max-width: 640px) 64px, 80px"
+                          sizes="64px"
                         />
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="shrink-0 flex items-center justify-center size-16 sm:size-20 rounded-lg border-2 border-orange-200 dark:border-orange-700 bg-orange-50 dark:bg-orange-900/20">
-                      <Package className="size-6 sm:size-8 text-orange-400 dark:text-orange-500" />
-                    </div>
-                  )}
-                    <div className="min-w-0 flex-1">
-                      <p className="text-sm sm:text-base font-semibold sm:font-bold text-orange-900 dark:text-orange-50 break-words line-clamp-2">
-                      {products[0].productName}
-                    </p>
-                  </div>
-                </div>
-                <div className="space-y-1.5 text-[11px] sm:text-sm">
-                  <div className="flex items-center gap-2">
-                    <span className="font-semibold text-orange-800 dark:text-orange-300 min-w-[80px]">Barkod:</span>
-                    <span className="text-orange-700 dark:text-orange-200 font-mono break-all">{products[0].barcode}</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Calendar className="size-3.5 sm:size-4 text-orange-600 dark:text-orange-400 shrink-0" />
-                    <span className="font-semibold text-orange-800 dark:text-orange-300 min-w-[80px]">SKT:</span>
-                    <span className="text-orange-700 dark:text-orange-200 font-medium">{products[0].expiryDate}</span>
-                  </div>
-                </div>
-              </div>
-              
-              <div className="rounded-lg bg-gradient-to-r from-red-500 to-red-600 p-2.5 sm:p-3 shadow-md sm:shadow-lg">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-[11px] sm:text-sm font-semibold text-white/90 mb-0.5 sm:mb-1">
-                      Çıkılması Gereken Tarih
-                    </p>
-                    <p className="text-sm sm:text-base font-bold text-white tracking-wide">
-                      {products[0].removalDate}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-1 rounded-full bg-white/20 px-2.5 py-1.5 sm:px-3 backdrop-blur-sm">
-                    <AlertTriangle className="size-3.5 sm:size-4 text-white" />
-                    <span className="text-[11px] sm:text-sm font-bold text-white">Bugün çıkınız!</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-          ) : (
-            // Çoklu ürün için liste
-            <div className="space-y-2.5 sm:space-y-3">
-              <div className="rounded-lg bg-white/90 p-2.5 sm:p-3 shadow-sm dark:bg-zinc-900/60">
-                <p className="text-xs sm:text-base font-semibold sm:font-bold text-orange-900 dark:text-orange-50 mb-2 sm:mb-3">
-                  Bugün çıkılması gereken {products.length} ürün bulundu:
-                </p>
-              </div>
-              <ul className="space-y-1.5 sm:space-y-2">
-                {products.map((product) => (
-                  <li
-                    key={product.id}
-                    className="group rounded-lg border border-orange-200 bg-white/95 p-2.5 sm:p-3 shadow-sm transition-all hover:border-orange-300 hover:shadow-md dark:border-orange-700/60 dark:bg-zinc-900/60 dark:hover:border-orange-600"
-                  >
-                    <div className="flex items-start gap-2.5 mb-1.5 sm:mb-2">
-                      {/* Ürün Resmi */}
-                      {getProductImage(product.barcode) ? (
-                        <div className="shrink-0">
-                          <div className="relative size-10 sm:size-14 rounded-lg overflow-hidden border border-orange-200 dark:border-orange-700 bg-white">
-                            <Image
-                              src={getProductImage(product.barcode)!}
-                              alt={product.productName}
-                              fill
-                              className="object-contain p-0.5"
-                              sizes="(max-width: 640px) 48px, 56px"
-                            />
-                          </div>
-                        </div>
                       ) : (
-                        <div className="shrink-0 flex items-center justify-center size-10 sm:size-14 rounded-lg border border-orange-200 dark:border-orange-700 bg-orange-50 dark:bg-orange-900/20">
-                          <Package className="size-4 sm:size-6 text-orange-400 dark:text-orange-500" />
-                        </div>
+                        <span className="flex size-full items-center justify-center bg-zinc-100 text-zinc-400 dark:bg-zinc-700/50">
+                          <Package className="size-7" aria-hidden />
+                        </span>
                       )}
-                      <p className="text-xs sm:text-sm font-semibold sm:font-bold text-orange-900 dark:text-orange-50 break-words flex-1 line-clamp-2">
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="line-clamp-2 break-words text-[15px] font-bold leading-snug text-zinc-900 dark:text-zinc-50">
                         {product.productName}
                       </p>
+                      <p className="mt-1 inline-flex items-center gap-1.5 font-mono text-xs tracking-wide text-zinc-500 dark:text-zinc-400">
+                        <Barcode className="size-3.5 shrink-0" aria-hidden />
+                        <span className="break-all">{product.barcode}</span>
+                      </p>
                     </div>
-                    <div className="space-y-1 text-[10px] sm:text-xs text-orange-700 dark:text-orange-300">
-                      <div className="flex items-center gap-1.5">
-                        <span className="font-semibold min-w-[60px]">Barkod:</span>
-                        <span className="font-mono break-all">{product.barcode}</span>
-                      </div>
-                      <div className="flex items-center gap-1.5">
-                        <Calendar className="size-3 shrink-0" />
-                        <span className="font-semibold min-w-[60px]">SKT:</span>
-                        <span>{product.expiryDate}</span>
-                      </div>
-                      <div className="flex items-center gap-1.5">
-                        <span className="font-semibold min-w-[60px]">Çıkılması:</span>
-                        <span className="font-medium">{product.removalDate}</span>
-                      </div>
+                  </div>
+                  <dl className="mt-3 grid grid-cols-2 gap-2">
+                    <div className="rounded-xl bg-zinc-100 px-3 py-2 dark:bg-zinc-700/50">
+                      <dt className="flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
+                        <Calendar className="size-3 shrink-0" aria-hidden />
+                        SKT
+                      </dt>
+                      <dd className="mt-0.5 text-sm font-bold text-zinc-900 dark:text-zinc-50">
+                        {formatDate(product.expiryDate)}
+                      </dd>
                     </div>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
+                    <div className="rounded-xl bg-red-50 px-3 py-2 ring-1 ring-red-200 dark:bg-red-950/40 dark:ring-red-800/60">
+                      <dt className="flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wide text-red-600 dark:text-red-400">
+                        <AlertTriangle className="size-3 shrink-0" aria-hidden />
+                        Çıkılacak gün
+                      </dt>
+                      <dd className="mt-0.5 text-sm font-bold text-red-700 dark:text-red-300">
+                        {formatDate(product.removalDate)}
+                      </dd>
+                    </div>
+                  </dl>
+                </li>
+              );
+            })}
+          </ul>
         </div>
 
-        {/* Footer */}
-        <div className="border-t-2 border-orange-300/50 bg-orange-200/20 px-3 py-2.5 sm:px-4 sm:py-3 dark:border-orange-700/50 dark:bg-orange-900/10 rounded-b-xl">
+        {/* Alt bölüm */}
+        <div className="shrink-0 border-t border-zinc-200 bg-white p-4 pb-[max(1rem,env(safe-area-inset-bottom))] dark:border-zinc-700 dark:bg-zinc-900">
           <button
             type="button"
             onClick={onClose}
-            className="w-full rounded-lg bg-gradient-to-r from-orange-600 to-orange-500 px-4 py-2.5 text-sm sm:text-base font-bold text-white shadow-lg transition-all hover:from-orange-700 hover:to-orange-600 hover:shadow-xl active:scale-[0.98] dark:from-orange-500 dark:to-orange-600 dark:hover:from-orange-600 dark:hover:to-orange-700"
+            className="h-12 w-full rounded-xl bg-gradient-to-r from-orange-600 to-red-600 text-base font-bold text-white shadow-md shadow-orange-500/30 transition hover:from-orange-700 hover:to-red-700 active:scale-[0.98]"
           >
             Tamam
           </button>
@@ -201,4 +175,3 @@ export function ExpiringProductNotification({
     </div>
   );
 }
-
